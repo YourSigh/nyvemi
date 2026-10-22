@@ -48,3 +48,8 @@ yarn-error.*
 artifacts/
 coverage/
 *.tsbuildinfo
+
+# Native module outputs
+**/build/
+**/.gradle/
+**/.kotlin/
