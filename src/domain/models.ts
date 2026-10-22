@@ -32,7 +32,8 @@ export type ProviderConfig = z.infer<typeof ProviderConfigSchema>;
 export const NotificationSchema = z.object({ id: z.string(), characterId: z.string(), messageId: z.string(), title: z.string(), body: z.string(), createdAt: z.number(), openedAt: z.number().optional(), status: z.enum(['pending','delivered','error']) }).strict();
 export type NotificationRecord = z.infer<typeof NotificationSchema>;
 export interface Diagnostic { id: string; characterId: string; kind: 'heartbeat'|'api'|'retrieval'|'prompt'|'error'; createdAt: number; data: Record<string, unknown> }
-export interface Entities { characters: Character; memories: Memory; messages: Message; intentions: Intention; experiences: Experience; settings: Settings; provider: ProviderConfig; notifications: NotificationRecord; diagnostics: Diagnostic }
+export interface ExtractionJob {id:string;characterId:string;userMessageId:string;assistantMessageIds:string[];status:'pending'|'done'|'failed';attempts:number;nextAttemptAt:number;createdAt:number}
+export interface Entities { characters: Character; memories: Memory; messages: Message; intentions: Intention; experiences: Experience; settings: Settings; provider: ProviderConfig; notifications: NotificationRecord; diagnostics: Diagnostic; extractions: ExtractionJob }
 export type EntityKind = keyof Entities;
 export const id = (): string => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 export const defaultSettings = (characterId: string): Settings => ({ id:characterId, characterId, quietStart:23, quietEnd:8, dailyLimit:2, minIntervalMinutes:180, recentActiveMinutes:30, proactiveEnabled:false, rssUrls:[], developerMode:false, lastActiveAt:Date.now() });

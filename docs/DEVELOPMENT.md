@@ -30,3 +30,11 @@
 - 不同 Provider origin 不能静默沿用现有 Key。聊天上下文限制 16 条消息与 8 条检索记忆。
 - lint / typecheck / 13 项测试通过；Android JS/Hermes export 成功；增量 assembleDebug 成功（5s）。
 - 模型测试均为明确的测试 Fixture，尚无用户 BYOK 真实模型验收。
+
+## Memory 验证
+
+- 增加 MemoryRepository / 可替换 MemoryRetriever，中文二元词与英文词匹配、时间、重要性、类型与访问次数参与排名。
+- 持久化抽取队列、退避重试、近似合并、expiration、关系反馈和表达偏好适应；Open Loop 创建/完成/忘记会联动 Future Intention。
+- 抽取事务与任务完成标记保持幂等；失败不破坏已交付聊天。
+- 普通记忆预览页可查看/忘记/完成事件，不展示内部评分。
+- lint / typecheck / 18 项测试通过；assembleDebug 成功（3s）。
