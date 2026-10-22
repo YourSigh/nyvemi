@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Nyvemi",
+    "slug": "nyvemi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "app.nyvemi.android",
+      "allowBackup": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "nyvemi",
+    "platforms": [
+      "android"
+    ],
+    "plugins": [
+      "expo-dev-client",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-background-task",
+      "expo-document-picker",
+      "expo-image-picker"
+    ]
+  }
+}
