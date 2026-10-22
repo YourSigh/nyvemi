@@ -31,3 +31,13 @@ it('never transfers a saved key silently to another provider or puts it in SQLit
   await saveProviderSettings(store, secrets, { ...deepSeekPreset, model: 'custom' }, '');
   expect((await store.get('provider', 'provider'))?.model).toBe('custom');
 });
+
+it('trims pasted provider addresses and returns a readable validation error', async () => {
+  const { validateProviderConfig } = await import('../src/providers/provider');
+  expect(
+    validateProviderConfig({ ...deepSeekPreset, baseUrl: '  http://10.0.2.2:18978/v1 \n' }).baseUrl,
+  ).toBe('http://10.0.2.2:18978/v1');
+  expect(() => validateProviderConfig({ ...deepSeekPreset, baseUrl: 'wrong' })).toThrow(
+    '请检查 Base URL',
+  );
+});

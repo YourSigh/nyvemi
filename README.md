@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation, not a completed real-device field trial. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. Real BYOK model behavior, notification tapping, launcher confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
+This is an early MVP implementation, not a completed real-device field trial. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. Real BYOK model behavior, full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
 
 ## Local-first and BYOK
 

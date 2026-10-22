@@ -145,7 +145,7 @@ export const ProviderConfigSchema = z
   .object({
     id: z.literal('provider'),
     provider: z.literal('openai-compatible'),
-    baseUrl: z.string().url(),
+    baseUrl: z.string().trim().url(),
     model: z.string().trim().min(1).max(150),
     thinking: z.boolean().default(false),
   })

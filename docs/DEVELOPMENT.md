@@ -102,3 +102,12 @@
 - lint / typecheck / 54 项测试通过；Debug 构建成功（9s），Release 构建成功（24s）。
 - 已将 API 35 模拟器从本次 CLI 独立窗口重启到 Android Studio Running Devices（保留数据），解决原先无法通过桌面工具操作模拟器的问题。Release 安装启动成功，C​UA 实际点击了开发桶砸、角色设置、通知权限、开启常驻；通知栏显示角色名、真实状态与结束按钮。点击常驻通知进入对应角色聊天；退回桌面后系统 dumpsys 仍为 isForeground=true，foregroundId=73021，specialUse。
 - 开发人格验收时主动来信保持关闭，未使用真实模型 Key，不把此结果当成上下文主动来信的真实模型验收。
+
+## 0.2.0 收尾验证
+
+- 模型地址输入自动去掉首尾空白，格式错误以可读文案提示；没有放宽 URL 安全校验。新增回归测试。
+- format:check / lint / typecheck / 55 项测试（14 文件）全部通过，最终 Debug 构建 8s，Release 构建 25s。
+- 0.2.0（versionCode 2）ARM64 独立 APK：29 MB，内嵌 Hermes JS，v2 签名验证通过。开发签名供侧载，不是商店发行签名。
+- 文件：artifacts/Nyvemi-0.2.0-arm64-preview.apk，SHA-256：5257df902d07f74c08617c585ebbad7aa8cd49e2565f8b81d0668f3ad62a59e6。
+- 常驻通知点击/后台维持约 3 分钟/结束/重开不复活已实测；完整 12 轮 UI 与真实模型、数小时后台尚待验收，见 ACCEPTANCE.md。没有调用用户付费模型。
+- 临时本地模型测试服务已停止；不将测试配置或应用私有数据打入 APK。本批只本地 commit，未 push。

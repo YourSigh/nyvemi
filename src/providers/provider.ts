@@ -47,7 +47,12 @@ export const deepSeekPreset: ProviderConfig = {
   thinking: false,
 };
 export function validateProviderConfig(value: unknown): ProviderConfig {
-  const config = ProviderConfigSchema.parse(value);
+  const checked = ProviderConfigSchema.safeParse(value);
+  if (!checked.success)
+    throw new Error(
+      '请检查 Base URL 和模型名称：地址需包含 http:// 或 https://，模型名称不能为空。',
+    );
+  const config = checked.data;
   const url = new URL(config.baseUrl);
   if (url.username || url.password || url.search || url.hash)
     throw new Error('Base URL 不能包含凭据、查询参数或片段');
