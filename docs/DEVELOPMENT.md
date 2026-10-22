@@ -38,3 +38,11 @@
 - 抽取事务与任务完成标记保持幂等；失败不破坏已交付聊天。
 - 普通记忆预览页可查看/忘记/完成事件，不展示内部评分。
 - lint / typecheck / 18 项测试通过；assembleDebug 成功（3s）。
+
+## Experience + Proactive Core 验证
+
+- LocalTime / Conversation / RSS 来源、RSS/Atom 有界解析、去重、记忆关联 Appraisal、缓慢兴趣变化、Share Intention。
+- 安静时间、近期活跃、角色/全局每日上限、最短间隔、过期清理、可解释评分。大部分 Heartbeat 不调用模型。
+- 生成后重新检查用户状态；持久化 outbox、投递恢复、通知点击幂等入聊天。
+- 本阶段原生通知通过 Gateway 测试替身验证，下一阶段接入 Android 真正调度与通知。
+- lint / typecheck / 28 项测试通过；assembleDebug 成功（3s）。
