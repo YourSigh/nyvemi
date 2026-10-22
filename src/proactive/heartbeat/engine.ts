@@ -1,3 +1,4 @@
+import type { CompanionActivity } from '../../presence/activity';
 import { z } from 'zod';
 import { id, type Character, type NotificationRecord } from '../../domain/models';
 import type { LLMProvider } from '../../providers/provider';
@@ -21,6 +22,7 @@ export class HeartbeatEngine {
     private notifications: NotificationGateway,
     private diagnostics: Diagnostics,
     private clock: () => number = Date.now,
+    private activity: (stage: CompanionActivity, characterId: string) => void = () => {},
   ) {}
   async run(): Promise<void> {
     const now = this.clock();
@@ -91,6 +93,7 @@ export class HeartbeatEngine {
           });
           continue;
         }
+        this.activity('considering', cid);
         const i = candidate.intention;
         const experience = i.experienceId
           ? await this.store.get('experiences', i.experienceId)
@@ -115,6 +118,7 @@ export class HeartbeatEngine {
         if (settings.developerMode)
           await this.diagnostics.record('prompt', cid, { purpose: 'proactive', messages: prompt });
         try {
+          this.activity('writing', cid);
           const result = await (
             await this.provider()
           ).structuredOutput(
@@ -196,6 +200,7 @@ export class HeartbeatEngine {
   }
   private async deliver(record: NotificationRecord, character: Character): Promise<void> {
     await this.notifications.show(record, character);
+    this.activity('sent', character.id);
     await this.store.put('notifications', { ...record, status: 'delivered' });
   }
   async openNotification(notificationId: string): Promise<string | undefined> {

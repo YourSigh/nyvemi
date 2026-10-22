@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
+import { resumeCompanionPresence } from './src/native/presence';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
 import { InterviewScreen } from './src/ui/interview';
@@ -57,9 +58,15 @@ export default function App() {
       if (AppState.currentState === 'active')
         void markAppActive(runtime.store).catch(() => undefined);
     };
-    active();
+    const resume = () => {
+      active();
+      void resumeCompanionPresence()
+        .catch(() => runtime.diagnostics.error('', 'presence_resume'))
+        .catch(() => undefined);
+    };
+    resume();
     const timer = setInterval(active, 60000);
-    const subscription = AppState.addEventListener('change', active);
+    const subscription = AppState.addEventListener('change', resume);
     return () => {
       clearInterval(timer);
       subscription.remove();

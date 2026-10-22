@@ -11,7 +11,13 @@ export async function runBackgroundCycle(runtime: Runtime): Promise<void> {
   const now = Date.now();
   if (!(await runtime.store.lease('background-cycle', now, 540000))) return;
   try {
-    if (await runtime.store.get('provider', 'provider')) await runtime.extraction.drain(now, 1);
+    if (await runtime.store.get('provider', 'provider')) {
+      const pending = (await runtime.store.list('extractions', undefined, 10000)).find(
+        (j) => j.status === 'pending' && j.nextAttemptAt <= now,
+      );
+      if (pending) runtime.activity.report('remembering', pending.characterId);
+      await runtime.extraction.drain(now, 1);
+    }
     const engine = new ExperienceEngine(runtime.store);
     for (const character of await runtime.store.list('characters')) {
       if (Date.now() - now > 240000) break;
@@ -42,6 +48,7 @@ export async function runBackgroundCycle(runtime: Runtime): Promise<void> {
           if (fresh) await tx.put('settings', { ...fresh, lastRssAt: now });
         });
       }
+      runtime.activity.report('experiencing', character.id);
       await engine.ingest(character, sources, now, (source) =>
         runtime.diagnostics.error(
           character.id,

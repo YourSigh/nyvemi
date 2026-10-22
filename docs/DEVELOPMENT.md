@@ -92,3 +92,13 @@
 - SQLite 保留完整草稿、回答与有限轮次记录；中断后可恢复未提交回答。网络失败提供标明来源的本地引导，不阻塞设定流程。结束后可回看修改，再生成正式人格进入聊天。
 - 固定设备拥有的角色 ID 防止最终生成成功后重试产生重复角色，开发用桶砸入口保留。形象描述持久保存并参与后续人格上下文/Bundle。
 - lint / typecheck / 49 项测试通过；assembleDebug 成功。实际模拟器键盘和真实模型语气仍需设备走查。
+
+## 常驻陪伴与状态通知（后续需求三）
+
+- 阅读 countdown 的 BackgroundMessagingService.ts 和 withBackgroundMessagingService.js，仅参考，未修改 countdown。采用相同的可见前台服务 + Headless JS 生命周期，不引入其它项目的服务端与凭据。
+- Kotlin 常驻服务持有明确的前台会话，低优先级/私密通知、角色深链、结束按钮、START_STICKY 系统恢复。用户前台开启，手动结束会清除启用标记，不会自动复活；App 再次前台可恢复曾启用但被系统终止的会话。WorkManager 保留。
+- 因 Nyvemi 无跨设备转发短信用途，使用 specialUse 与说明声明，而非照搬 remoteMessaging；Play 发布需要平台审核该用途。没有静音音频、精确闹钟或设备管理员技巧。
+- 每分钟检查停止/网络状态，每 10 分钟最多一个本地周期。实际阶段驱动状态文本；无待办、安静时段、刚聊天、离线、主动来信关闭均有对应内容。不同于随机编造生活活动。
+- lint / typecheck / 54 项测试通过；Debug 构建成功（9s），Release 构建成功（24s）。
+- 已将 API 35 模拟器从本次 CLI 独立窗口重启到 Android Studio Running Devices（保留数据），解决原先无法通过桌面工具操作模拟器的问题。Release 安装启动成功，C​UA 实际点击了开发桶砸、角色设置、通知权限、开启常驻；通知栏显示角色名、真实状态与结束按钮。点击常驻通知进入对应角色聊天；退回桌面后系统 dumpsys 仍为 isForeground=true，foregroundId=73021，specialUse。
+- 开发人格验收时主动来信保持关闭，未使用真实模型 Key，不把此结果当成上下文主动来信的真实模型验收。

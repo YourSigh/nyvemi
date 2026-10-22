@@ -13,6 +13,9 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.drawable.Icon
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -65,6 +68,31 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    Function("presenceState") {
+      val prefs = NyvemiPresenceService.preferences(context())
+      mapOf("enabled" to prefs.getBoolean("enabled", false), "running" to (NyvemiPresenceService.instance != null), "characterId" to (prefs.getString("characterId", "") ?: ""))
+    }
+    Function("hasNetwork") {
+      val connectivity = context().getSystemService(ConnectivityManager::class.java)
+      val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+      capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+    }
+    AsyncFunction("startPresence") { characterId: String, name: String ->
+      val ctx = context()
+      if (appContext.currentActivity == null) throw IllegalStateException("Open the app to start a companion session")
+      if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) throw IllegalStateException("Notification permission missing")
+      val prefs = NyvemiPresenceService.preferences(ctx)
+      prefs.edit().putBoolean("enabled", true).putString("characterId", characterId).putString("name", name.take(80)).apply()
+      try { ContextCompat.startForegroundService(ctx, Intent(ctx, NyvemiPresenceService::class.java)) }
+      catch (error: Exception) { prefs.edit().putBoolean("enabled", false).apply(); throw error }
+    }.runOnQueue(Queues.MAIN)
+    Function("stopPresence") {
+      val ctx = context()
+      NyvemiPresenceService.preferences(ctx).edit().putBoolean("enabled", false).apply()
+      ctx.stopService(Intent(ctx, NyvemiPresenceService::class.java))
+    }
+    Function("updatePresence") { characterId: String, name: String, text: String -> NyvemiPresenceService.instance?.update(characterId, name, text) }
+
     Function("canNotify") {
       val ctx = context(); channel(ctx)
       NotificationManagerCompat.from(ctx).areNotificationsEnabled() &&

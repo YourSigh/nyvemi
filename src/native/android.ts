@@ -1,8 +1,14 @@
+import type { PresenceState } from '../presence/loop';
 import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  presenceState(): PresenceState;
+  hasNetwork(): boolean;
+  startPresence(characterId: string, name: string): Promise<void>;
+  stopPresence(): void;
+  updatePresence(characterId: string, name: string, text: string): void;
   canNotify(): boolean;
   notify(
     id: string,
@@ -14,7 +20,7 @@ interface AndroidBridge {
   cancelNotification(id: string): void;
   pinShortcut(cid: string, name: string, avatar: string | null): Promise<boolean>;
 }
-function bridge(): AndroidBridge {
+export function bridge(): AndroidBridge {
   return requireNativeModule<AndroidBridge>('NyvemiAndroid');
 }
 export const androidNotifications: NotificationGateway = {

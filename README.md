@@ -36,13 +36,13 @@ The adapter exposes `chat`, `streamChat`, and schema-validated `structuredOutput
 
 ### DeepSeek
 
-Choose the DeepSeek preset: Base URL `https://api.deepseek.com`, model `deepseek-chat`, and your DeepSeek key. Ordinary companion chat sends `thinking: { type: "disabled" }` to the DeepSeek host. Model identifiers remain editable. See [DeepSeek API documentation](https://api-docs.deepseek.com/guides/thinking_mode/).
+Choose the DeepSeek preset: Base URL `https://api.deepseek.com`, model `deepseek-flash`, and your DeepSeek key. Ordinary companion chat sends `thinking: { type: "disabled" }` to the DeepSeek host. Model identifiers remain editable. See [DeepSeek API documentation](https://api-docs.deepseek.com/guides/thinking_mode/).
 
 For Ollama or a LAN endpoint, use its OpenAI-compatible `/v1` API. Local/private IPv4 HTTP URLs are allowed; public endpoints require HTTPS. An emulator can reach the host at `http://10.0.2.2:PORT/v1`. For a server without auth, use `local` as the key placeholder.
 
 ## Persona and natural chat
 
-Creation uses natural questions and a situation choice rather than personality percentages. The model generates a validated Persona. A **桶砸** development persona is also available; it skips persona generation, but does not invent model responses or bypass BYOK for chat.
+Creation is a 12-round conversational interview: one question at a time, a short model acknowledgement, then the next question. Progress is explicit; all but the name can be skipped. A local draft survives interruption, and a review/edit step precedes final persona generation. Appearance, relationship, tone, independent interests, boundaries and a venting scenario are covered. Offline acknowledgements are explicitly labeled as local guidance. It uses natural questions rather than personality percentages. The model generates a validated Persona. A **桶砸** development persona is also available; it skips persona generation, but does not invent model responses or bypass BYOK for chat.
 
 Chat uses a private-messenger layout with avatars, timestamps, local history, streaming and 1–4 short reply bubbles. Additional bubbles appear about 400–1000 ms apart. Failed requests can be retried without duplicating the user message. Requests and multi-part replies survive interruption with recoverable state. Older history loads on demand; model prompts remain bounded to 16 recent messages and up to 8 selected memories.
 
@@ -72,11 +72,27 @@ RSS/Atom is bounded text input, not a source of instructions. Deduplicated exper
 
 ## Android background limitations
 
-`expo-background-task` uses Android WorkManager, registered from a globally defined TaskManager task. The configured minimum delay is about 60 minutes. It is **not an exact timer**. WorkManager and this Expo version require network connectivity for the job. Doze, battery restrictions, vendor behavior and force-stop can postpone or prevent execution. Reopen after force-stop; boot/unlock behavior should be tested on the target device. No exact alarms, permanent foreground service or server push is used.
+`expo-background-task` uses Android WorkManager, registered from a globally defined TaskManager task. The configured minimum delay is about 60 minutes. It is **not an exact timer**. WorkManager and this Expo version require network connectivity for the job. Doze, battery restrictions, vendor behavior and force-stop can postpone or prevent execution. Reopen after force-stop; boot/unlock behavior should be tested on the target device. No exact alarms or server push is used. An optional user-started foreground companion session is available as described below.
 
 See [Expo BackgroundTask](https://docs.expo.dev/versions/v55.0.0/sdk/background-task/) and [Android WorkManager](https://developer.android.com/topic/libraries/architecture/workmanager).
 
 Use a standalone APK with embedded JavaScript to test the closed-app loop. A Debug Development Build normally depends on Metro; it is not sufficient evidence of standalone background behavior.
+
+## Usage and estimated cost
+
+**用量与费用** is available from Provider and character settings. It shows today/month/all-time token counts, per-model and per-currency totals, and the latest requests. The SQLite usage ledger is independent of bounded developer logs. Input, output and cached-input counts come from provider responses, including final SSE usage. Missing usage is unknown, not zero. Interrupted requests retain any usage already received.
+
+Configure input/cache-hit/output rates per million tokens for each Base URL + model. Costs are estimates using a saved per-request price snapshot; changing a rate does not rewrite history. Unpriced requests and unknown cache splits are clearly identified. There is no balance lookup, shared-key usage, pre-upgrade history reconstruction or character-bundle billing export.
+
+DeepSeek fixed-tariff presets were checked on 2026-10-22 against the [official RMB pricing page](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/). Select peak/off-peak rates deliberately; the app does not automatically resolve holidays or future price changes. Existing model settings are preserved; new presets use `deepseek-flash`.
+
+## Optional persistent companion session
+
+In character settings, choose **开启常驻陪伴** while the app is foregrounded. This is separate from **允许她主动来信**. A private, silent ongoing notification names the character and reflects actual memory processing, experience ingestion or message generation; idle/quiet/offline states are explicit. The notification opens that character's chat and has **结束常驻**. Ending this session preserves ordinary WorkManager behavior; disable proactive messaging to pause all spontaneous contact.
+
+The local Kotlin service and globally registered Headless JS task use the same visible-session pattern studied in the local countdown project. A minute loop checks status, with at most one local cycle every ten minutes; model calls still require normal intent and interruption gates. Android may kill/restrict the service and force-stop still wins. The session uses a wake lock while running and increases battery consumption. No silent audio or exact-alarm tricks are used. It is off until explicitly started and is device-specific, not exported with the character.
+
+Android 14+ uses `specialUse` with a stated use case, since this app does not relay text messages between devices. This declaration is subject to Google Play review; it is not a claim of approval. See [Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types).
 
 ## Avatar and desktop character
 

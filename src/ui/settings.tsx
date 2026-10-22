@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Switch, Text, View } from 'react-native';
 import type { Character, Settings } from '../domain/models';
 import { Avatar, Button, Card, ErrorText, Field, Heading, Note, Page } from './components';
+import { useFocusEffect } from '@react-navigation/native';
+import { startCompanionPresence } from '../native/presence';
+import type { PresenceState } from '../presence/loop';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
 import { updateSettings } from '../application/settings';
-import { pinCharacter, requestNotifications } from '../native/android';
+import { bridge, pinCharacter, requestNotifications } from '../native/android';
 import { pickAvatar } from '../transfer/native';
 export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   const runtime = useRuntime();
@@ -20,6 +23,23 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [presence, setPresence] = useState<PresenceState>();
+  useFocusEffect(
+    useCallback(() => {
+      const update = () => setPresence(bridge().presenceState());
+      try {
+        update();
+      } catch {
+        setError('请安装包含常驻服务的新版本');
+      }
+      const timer = setInterval(() => {
+        try {
+          update();
+        } catch {}
+      }, 2000);
+      return () => clearInterval(timer);
+    }, []),
+  );
   useEffect(() => {
     void Promise.all([runtime.store.get('characters', cid), runtime.store.get('settings', cid)])
       .then(([c, s]) => {
@@ -109,6 +129,51 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
         secondary
         onPress={() => navigation.navigate('Experiences', { characterId: cid })}
       />
+      <Card>
+        <Text style={{ fontSize: 18, fontWeight: '600' }}>常驻陪伴</Text>
+        <Note>
+          {presence?.running
+            ? presence.characterId === cid
+              ? '她的常驻会话正在运行'
+              : '另一个角色的常驻会话正在运行'
+            : '未开启常驻，仍保留普通 WorkManager 后台任务'}
+        </Note>
+        <Note>
+          开启后通知栏显示实际的整理记忆、查看订阅、思考是否来信等状态。约每 10
+          分钟检查一次，绝大多数不会调用模型。保持后台运行会增加耗电；安静时间和来信限频仍然有效。
+        </Note>
+        <Button
+          title={presence?.running ? '切换常驻角色到她' : '开启常驻陪伴'}
+          disabled={busy || !character || (presence?.running && presence.characterId === cid)}
+          onPress={() => {
+            if (!character) return;
+            setBusy(true);
+            setError('');
+            void startCompanionPresence(character)
+              .then(() => {
+                setPresence(bridge().presenceState());
+                setNotice('常驻已开启，可在通知栏结束。是否主动来信仍由下方开关决定。');
+              })
+              .catch((e) => setError(e instanceof Error ? e.message : '开启失败'))
+              .finally(() => setBusy(false));
+          }}
+        />
+        {presence?.enabled || presence?.running ? (
+          <Button
+            title="结束常驻陪伴"
+            secondary
+            disabled={busy}
+            onPress={() => {
+              bridge().stopPresence();
+              setPresence(bridge().presenceState());
+              setNotice('已结束常驻；普通后台任务保留。关闭主动来信可暂停她主动联系你。');
+            }}
+          />
+        ) : null}
+        <Note>
+          系统强制停止、关闭通知或厂商省电策略仍可能中断会话。不会使用静音音频、精确闹钟或设备管理权限保活。
+        </Note>
+      </Card>
       <Card>
         <View
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}

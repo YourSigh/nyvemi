@@ -3,7 +3,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as BackgroundTask from 'expo-background-task';
 import { id, type NotificationRecord } from '../domain/models';
-import { androidNotifications } from '../native/android';
+import { androidNotifications, bridge } from '../native/android';
 import { runBackgroundCycle } from '../proactive/heartbeat/driver';
 import { HEARTBEAT_TASK } from '../native/background';
 import * as TaskManager from 'expo-task-manager';
@@ -42,6 +42,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       Error: diagnostics.filter((d) => d.kind === 'error'),
       抽取队列: await runtime.store.list('extractions', cid, 60),
       后台注册: await TaskManager.getRegisteredTasksAsync(),
+      常驻状态: bridge().presenceState(),
     });
   }, [runtime, cid]);
   useFocusEffect(

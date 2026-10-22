@@ -4,6 +4,7 @@ import { Diagnostics } from '../storage/diagnostics';
 import { OpenAICompatibleProvider } from '../providers/openai';
 import { type LLMProvider } from '../providers/provider';
 import type { ProviderConfig } from '../domain/models';
+import { ActivityMonitor } from '../presence/activity';
 import { PersonaInterview } from '../characters/interview';
 import { CharacterService } from '../characters/service';
 import { ChatService } from '../chat/service';
@@ -17,6 +18,7 @@ import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
 async function createRuntime() {
   const store = await openStore();
+  const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
   const diagnostics = new Diagnostics(store, async (json) => {
     const key = await secretStore.get();
@@ -66,13 +68,21 @@ async function createRuntime() {
   return {
     store,
     diagnostics,
+    activity,
     usage,
     provider,
     saveProvider,
     memories,
     retriever,
     extraction,
-    heartbeat: new HeartbeatEngine(store, provider, androidNotifications, diagnostics),
+    heartbeat: new HeartbeatEngine(
+      store,
+      provider,
+      androidNotifications,
+      diagnostics,
+      Date.now,
+      (stage, cid) => activity.report(stage, cid),
+    ),
     characters,
     interview: new PersonaInterview(store, provider, characters),
     chat,
