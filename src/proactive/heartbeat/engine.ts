@@ -23,7 +23,7 @@ export class HeartbeatEngine {
     if(!await this.notifications.enabled()){await report('notification_permission');continue;}
     // Recover a crash between persistence and OS delivery using the same native notification id.
     const pending=records.find(n=>n.characterId===cid&&n.status==='pending');
-    if(pending){if(now-pending.createdAt<30*60000){await this.deliver(pending,character);await this.diagnostics.record('heartbeat',cid,{decision:'send',reason:'outbox_recovered',score:1,threshold:0.58});return;}await this.store.put('notifications',{...pending,status:'error'});const m=await this.store.get('messages',pending.messageId);if(m?.status==='pending')await this.store.remove('messages',m.id);}
+    if(pending){if(now-pending.createdAt<30*60000){await this.deliver(pending,character);await this.diagnostics.record('heartbeat',cid,{decision:'send',reason:'outbox_recovered',score:1,threshold:0.58});return;}await this.store.put('notifications',{...pending,status:'error'});const m=await this.store.get('messages',pending.messageId);if(m?.status==='pending')await this.store.put('messages',{...m,status:'error'});}
     const intentions=(await this.store.list('intentions',cid,10000)).filter(i=>i.status==='pending'&&i.earliestAt<=now&&i.latestAt>now);
     if(!intentions.length){await report('no_due_intention');continue;}
     const ranked=intentions.map(intention=>({intention,...scoreIntention(intention,character,now,settings.lastActiveAt)})).sort((a,b)=>b.score-a.score);const candidate=ranked[0];

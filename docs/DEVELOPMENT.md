@@ -56,3 +56,11 @@
 - lint / typecheck / 29 项测试通过；Hermes bundle、Kotlin 编译、assembleDebug、模拟器安装成功。
 - `expo run:android` 启动成功，ReactNativeJS Running main，设备上创建 nyvemi.db；JobScheduler 中确认 Nyvemi WorkManager Job，minimum latency 约 60 分钟。
 - 当前桌面控制工具无法直接绑定独立 QEMU 窗口；通知点击/桌面确认及真实模型后台闭环仍待后续设备验收，不能仅凭安装成功认定完成。
+
+## Transfer + Developer Mode 验证
+
+- .nyvemi v1 ZIP：严格清单、白名单资产、尺寸/引用检查、已知密钥脱敏、不导出 Provider、重新映射 ID、事务导入、失败清理头像。
+- 导入后暂停主动来信；未送达 outbox 不会作为已收到的聊天出现。修复过期/忘记记忆导致的历史意图悬空引用。
+- 文件选择/导出分享/导入预览、头像上传；Developer Mode 覆盖人格/状态/兴趣/记忆/检索/意图/经历评估/心跳/通知/API/Prompt/Error/抽取队列/后台注册。
+- 提供开发用本地通知测试、完整周期执行、失败任务重试；系统 Worker 测试按钮仅 Debug 可见。
+- lint / typecheck / 33 项测试通过；Hermes export 成功；assembleDebug 成功（3s）。

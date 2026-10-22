@@ -21,7 +21,7 @@ export interface ChatHooks {
 const noHooks:ChatHooks={retrieve:async()=>[],afterRound:async()=>{}};
 export class ChatService {
  constructor(private store:Storage,private provider:()=>Promise<LLMProvider>,private diagnostics:Diagnostics,private hooks:ChatHooks=noHooks,private pause:(ms:number)=>Promise<void>=ms=>new Promise(resolve=>setTimeout(resolve,ms))){}
- async history(characterId:string):Promise<Message[]>{return (await this.store.list('messages',characterId,100)).filter(m=>m.status!=='pending').sort((a,b)=>a.createdAt-b.createdAt);}
+ async history(characterId:string):Promise<Message[]>{return (await this.store.list('messages',characterId,100)).filter(m=>m.status!=='pending'&&!(m.origin==='proactive'&&m.status==='error')).sort((a,b)=>a.createdAt-b.createdAt);}
  async send(characterId:string,text:string,onPreview:(text:string)=>void,onSaved:()=>void=()=>{},signal?:AbortSignal,retryId?:string):Promise<void>{
   const content=text.trim();if(!content || content.length>6000)throw new Error('请输入 1～6000 字消息');
   const lease=`chat:${characterId}`;if(!await this.store.lease(lease,Date.now(),180000))throw new Error('这一轮还没聊完，请稍候');
