@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import type { InterviewDraft } from '../characters/interview';
 
 export const PersonaSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1).max(80),
     identity: z.string(),
+    appearance: z.string().max(2000).optional(),
     corePersonality: z.array(z.string()),
     speechStyle: z.array(z.string()),
     relationshipStyle: z.array(z.string()),
@@ -181,6 +183,7 @@ export interface ExtractionJob {
 }
 export interface Entities {
   characters: Character;
+  interviews: InterviewDraft;
   memories: Memory;
   messages: Message;
   intentions: Intention;

@@ -4,6 +4,7 @@ import { Diagnostics } from '../storage/diagnostics';
 import { OpenAICompatibleProvider } from '../providers/openai';
 import { type LLMProvider } from '../providers/provider';
 import type { ProviderConfig } from '../domain/models';
+import { PersonaInterview } from '../characters/interview';
 import { CharacterService } from '../characters/service';
 import { ChatService } from '../chat/service';
 import { saveProviderSettings } from './provider-settings';
@@ -61,6 +62,7 @@ async function createRuntime() {
       void extraction.drain().catch(() => undefined);
     },
   });
+  const characters = new CharacterService(store, provider);
   return {
     store,
     diagnostics,
@@ -71,7 +73,8 @@ async function createRuntime() {
     retriever,
     extraction,
     heartbeat: new HeartbeatEngine(store, provider, androidNotifications, diagnostics),
-    characters: new CharacterService(store, provider),
+    characters,
+    interview: new PersonaInterview(store, provider, characters),
     chat,
   };
 }

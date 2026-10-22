@@ -14,6 +14,9 @@ export const AnswersSchema = z.object({
   ventResponse: z.string(),
   tone: z.string(),
   inspiration: z.string(),
+  appearance: z.string().default(''),
+  interests: z.string().default(''),
+  boundaries: z.string().default(''),
 });
 export type CharacterAnswers = z.infer<typeof AnswersSchema>;
 export const defaultAnswers: CharacterAnswers = {
@@ -28,15 +31,19 @@ export const defaultAnswers: CharacterAnswers = {
   ventResponse: '先跟我一起吐槽两句',
   tone: '随意、有一点幽默',
   inspiration: '',
+  appearance: '',
+  interests: '',
+  boundaries: '',
 };
 export class CharacterService {
   constructor(
     private store: Storage,
     private provider: () => Promise<LLMProvider>,
   ) {}
-  async create(input: CharacterAnswers, useDemo = false): Promise<Character> {
+  async create(input: CharacterAnswers, useDemo = false, characterId = id()): Promise<Character> {
     const answers = AnswersSchema.parse(input);
-    const characterId = id();
+    const existing = await this.store.get('characters', characterId);
+    if (existing) return existing;
     const persona = useDemo
       ? { ...demoPersona(characterId), name: answers.name }
       : await (
@@ -57,7 +64,12 @@ export class CharacterService {
     const now = Date.now();
     const character: Character = {
       id: characterId,
-      persona: { ...persona, id: characterId, name: answers.name },
+      persona: {
+        ...persona,
+        id: characterId,
+        name: answers.name,
+        appearance: answers.appearance || persona.appearance,
+      },
       state: { energy: 0.7, relationshipCloseness: 0.1, recentFocus: [], curiosityTopics: [] },
       interests: persona.likes.map((topic) => ({
         topic,

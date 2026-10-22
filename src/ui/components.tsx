@@ -1,6 +1,8 @@
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Image,
   Pressable,
   ScrollView,
@@ -22,9 +24,18 @@ export const palette = {
 };
 export function Page({ children }: PropsWithChildren) {
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>
-      {children}
-    </ScrollView>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        contentContainerStyle={styles.page}
+      >
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 export function Heading({ children }: PropsWithChildren) {

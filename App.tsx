@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
+import { InterviewScreen } from './src/ui/interview';
 import { UsageScreen } from './src/ui/usage';
 import { ExperiencesScreen } from './src/ui/experiences';
 import { DeveloperScreen } from './src/ui/developer';
@@ -13,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { getRuntime, type Runtime } from './src/application/runtime';
 import { RuntimeContext } from './src/ui/context';
 import { Busy, Button, ErrorText, Page, palette } from './src/ui/components';
-import { WelcomeScreen, ProviderScreen, CreateScreen, GenerateScreen } from './src/ui/onboarding';
+import { WelcomeScreen, ProviderScreen, GenerateScreen } from './src/ui/onboarding';
 import { ChatScreen } from './src/ui/chat';
 import { ScreenErrorBoundary } from './src/ui/error-boundary';
 import { MemoryScreen } from './src/ui/memory';
@@ -23,6 +24,7 @@ const Stack = createNativeStackNavigator<Routes>();
 export default function App() {
   const [runtime, setRuntime] = useState<Runtime>();
   const [initial, setInitial] = useState<string>();
+  const [resumeInterview, setResumeInterview] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -31,9 +33,11 @@ export default function App() {
     void getRuntime()
       .then(async (r) => {
         const chars = await r.store.list('characters');
+        const draft = await r.store.get('interviews', 'active');
         if (live) {
           setRuntime(r);
           setInitial(chars[0]?.id);
+          setResumeInterview(Boolean(draft && !draft.savedCharacterId));
           setReady(true);
         }
       })
@@ -103,7 +107,7 @@ export default function App() {
                 }}
               >
                 <Stack.Navigator
-                  initialRouteName={initial ? 'Chat' : 'Welcome'}
+                  initialRouteName={initial ? 'Chat' : resumeInterview ? 'Create' : 'Welcome'}
                   screenOptions={{
                     headerShadowVisible: false,
                     headerBackTitle: '返回',
@@ -127,7 +131,7 @@ export default function App() {
                   />
                   <Stack.Screen
                     name="Create"
-                    component={CreateScreen}
+                    component={InterviewScreen}
                     options={{ title: '创建角色' }}
                   />
                   <Stack.Screen

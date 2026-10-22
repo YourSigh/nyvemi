@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Switch, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { useRuntime } from './context';
 import { Avatar, Button, Card, ErrorText, Field, Heading, Note, Page, Busy } from './components';
 import { deepSeekPreset } from '../providers/provider';
-import { defaultAnswers, type CharacterAnswers } from '../characters/service';
 import type { ScreenProps } from './navigation';
 import { secretStore } from '../storage/native';
 export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
@@ -121,69 +120,6 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
     </Page>
   );
 }
-const questions: { key: keyof CharacterAnswers; label: string }[] = [
-  { key: 'name', label: '她叫什么？' },
-  { key: 'gender', label: '希望是什么性别感？' },
-  { key: 'ageFeeling', label: '希望是什么年龄感？' },
-  { key: 'relationship', label: '希望你们是什么关系？' },
-  { key: 'talkativeness', label: '她话多还是话少？' },
-  { key: 'initiative', label: '希望她多主动？' },
-  { key: 'quietTimes', label: '哪些时候最好别打扰？（如 23:00–08:00）' },
-  { key: 'dislikedAI', label: '你最讨厌 AI 怎么说话？' },
-  { key: 'ventResponse', label: '你说“今天上班烦死了”时，希望她怎么接？' },
-  { key: 'tone', label: '更毒舌、温柔、淡定、活泼，还是随意？' },
-  { key: 'inspiration', label: '有没有喜欢的角色风格？（可选）' },
-];
-export function CreateScreen({ navigation }: ScreenProps<'Create'>) {
-  const [answers, setAnswers] = useState<CharacterAnswers>(defaultAnswers);
-  const [demo, setDemo] = useState(false);
-  return (
-    <Page>
-      <Heading>让她有自己的样子</Heading>
-      <Note>不用设定一串百分比。你们相处以后，她还会慢慢学会你的习惯。</Note>
-      {questions.map((q) => (
-        <Field
-          key={q.key}
-          label={q.label}
-          value={answers[q.key]}
-          onChangeText={(v) => setAnswers({ ...answers, [q.key]: v })}
-          multiline={q.key === 'ventResponse' || q.key === 'dislikedAI'}
-        />
-      ))}
-      <Card>
-        <Text>当你只是吐槽时…</Text>
-        <Button
-          title="先一起吐槽，别急着给建议"
-          secondary
-          onPress={() =>
-            setAnswers({ ...answers, ventResponse: '先跟我吐槽两句，不要立刻提供解决方案' })
-          }
-        />
-        <Button
-          title="安静听我说，等我想听建议时再说"
-          secondary
-          onPress={() =>
-            setAnswers({ ...answers, ventResponse: '先安静听我讲完，明确寻求分析时才给建议' })
-          }
-        />
-      </Card>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Note>使用桶砸开发人格（跳过模型生成）</Note>
-        <Switch
-          trackColor={{ false: '#EADDE3', true: '#EFBBD0' }}
-          thumbColor="#D86B96"
-          value={demo}
-          onValueChange={setDemo}
-        />
-      </View>
-      <Button
-        title="认识这个人"
-        disabled={!answers.name.trim()}
-        onPress={() => navigation.navigate('Generate', { answers, demo })}
-      />
-    </Page>
-  );
-}
 export function GenerateScreen({ navigation, route }: ScreenProps<'Generate'>) {
   const runtime = useRuntime();
   const started = useRef(false);
@@ -192,8 +128,11 @@ export function GenerateScreen({ navigation, route }: ScreenProps<'Generate'>) {
   useEffect(() => {
     if (started.current) return;
     started.current = true;
-    void runtime.characters
-      .create(route.params.answers, route.params.demo)
+    void (
+      route.params.interview
+        ? runtime.interview.finish()
+        : runtime.characters.create(route.params.answers, route.params.demo)
+    )
       .then((c) =>
         navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] }),
       )

@@ -69,6 +69,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
       <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={70} />
       <Heading>{character?.persona.name}</Heading>
       <Note>{character?.persona.identity}</Note>
+      {character?.persona.appearance ? <Note>{character.persona.appearance}</Note> : null}
       <Card>
         <Text>{character?.persona.corePersonality.join(' · ')}</Text>
         <Note>{character?.persona.speechStyle.join('，')}</Note>
