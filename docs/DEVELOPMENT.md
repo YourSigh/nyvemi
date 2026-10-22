@@ -64,3 +64,15 @@
 - 文件选择/导出分享/导入预览、头像上传；Developer Mode 覆盖人格/状态/兴趣/记忆/检索/意图/经历评估/心跳/通知/API/Prompt/Error/抽取队列/后台注册。
 - 提供开发用本地通知测试、完整周期执行、失败任务重试；系统 Worker 测试按钮仅 Debug 可见。
 - lint / typecheck / 33 项测试通过；Hermes export 成功；assembleDebug 成功（3s）。
+
+## Polish + MVP 集成验证
+
+- 粉白页面/启动页/原生主色与新图标；错误边界、聊天历史分页、崩溃后恢复、旧消息重试修复。统一源码格式，补齐开发/构建/隐私/验收文档。
+- 抽取可读取有限的前文表达，Open Loop 上下文限定 20 条；用户明确要求别主动联系时暂停主动来信；近期关注与角色自身好奇话题逐步更新。
+- 已知密钥在诊断和导出边界脱敏；检索文本仅 Developer Mode 开启时记录；RSS 跨来源重复文章去重。
+- lint、typecheck、format:check、41 项测试（11 文件）通过；包含真实本地 HTTP/SSE Fixture + SQLite 的角色创建→对话→关系记忆/Open Loop→主动生成/outbox→经历分享→全新库迁移集成测试。Fixture 不等于真实 DeepSeek 回复质量。
+- 最终 Debug 构建通过（4s）；Release 构建通过，最终 Expo release 构建/安装耗时 1m19s。安装包含内嵌 Hermes JS，v2 签名校验通过。
+- 已关闭本次 Metro，Release 安装启动后日志确认 Running main，未见启动崩溃。最终 APK 包含 arm64-v8a/armeabi-v7a/x86/x86_64，约 74 MB，保存在忽略目录 artifacts/Nyvemi-0.1.0-preview.apk。使用开发签名，仅供侧载验收。
+- SHA-256：66b796104bdab5adf8704313c22d3e86d014261cf0a383b68f5a46c976bb216a。
+- 当前跟踪树无构建产物或凭据。前一阶段误跟踪原生缓存已通过独立修复提交移除，未改写历史。
+- 外部待验收：App 内 BYOK、真实对话质量、关 App 数小时的自然后台通知、通知点击、Pinned Shortcut 与系统文件选择。详见 ACCEPTANCE.md；未将这些项目伪报为通过。

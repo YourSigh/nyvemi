@@ -12,7 +12,11 @@
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test",
     "android:build": "cd android && NODE_ENV=development ./gradlew assembleDebug",
-    "android:release": "cd android && NODE_ENV=production ./gradlew assembleRelease"
+    "android:release": "cd android && NODE_ENV=production ./gradlew assembleRelease",
+    "format": "prettier --write App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
+    "format:check": "prettier --check App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
+    "verify": "bash scripts/verify.sh",
+    "prebuild:android": "expo prebuild --platform android"
   },
   "dependencies": {
     "@react-navigation/native": "^7.3.14",
@@ -43,8 +47,13 @@
     "@types/react": "~19.2.2",
     "eslint": "^9.39.0",
     "eslint-config-expo": "~55.0.0",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.6.2",
     "typescript": "~5.9.2",
     "vitest": "^5.0.5"
   },
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  }
 }

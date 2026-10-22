@@ -2,39 +2,27 @@
   "expo": {
     "name": "Nyvemi",
     "slug": "nyvemi",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/nyvemi-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/nyvemi-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "ios": {
-      "supportsTablet": true
+      "backgroundColor": "#FFF7FA"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#FFF7FA",
+        "foregroundImage": "./assets/nyvemi-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.nyvemi.android",
       "allowBackup": false,
-      "blockedPermissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
-    },
-    "web": {
-      "favicon": "./assets/favicon.png"
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"]
     },
     "scheme": "nyvemi",
-    "platforms": [
-      "android"
-    ],
+    "platforms": ["android"],
     "plugins": [
       "expo-dev-client",
       "expo-sqlite",
@@ -50,6 +38,7 @@
         }
       ],
       "./plugins/withNyvemiAndroid"
-    ]
+    ],
+    "primaryColor": "#B94776"
   }
 }

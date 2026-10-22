@@ -1,18 +1,221 @@
-import { useEffect,useRef,useState } from 'react';
-import { Switch,Text,View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Switch, Text, View } from 'react-native';
 import { useRuntime } from './context';
-import { Avatar,Button,Card,ErrorText,Field,Heading,Note,Page,Busy } from './components';
+import { Avatar, Button, Card, ErrorText, Field, Heading, Note, Page, Busy } from './components';
 import { deepSeekPreset } from '../providers/provider';
-import { defaultAnswers,type CharacterAnswers } from '../characters/service';
+import { defaultAnswers, type CharacterAnswers } from '../characters/service';
 import type { ScreenProps } from './navigation';
 import { secretStore } from '../storage/native';
-export function WelcomeScreen({navigation}:ScreenProps<'Welcome'>){return <Page><View style={{paddingTop:65,gap:22}}><Avatar name="Nyvemi" size={76}/><Heading>Nyvemi</Heading><Text style={{fontSize:20}}>A life that remembers you.</Text><Note>从一次认识开始。她会记住相处中的小事，也会在某个恰当的时刻想起你。</Note><Card><Note>人格与记忆留在这台设备。模型请求发送给你选择的 Provider，使用你自己的 API Key。这里的持续状态是行为模型，不代表意识。</Note></Card><Button title="开始认识她" onPress={()=>navigation.navigate('Provider',{onboarding:true})}/><Button title="从 Bundle 接她过来" secondary onPress={()=>navigation.navigate('Transfer')}/></View></Page>;}
-export function ProviderScreen({navigation,route}:ScreenProps<'Provider'>){
- const runtime=useRuntime();const [config,setConfig]=useState(deepSeekPreset);const [key,setKey]=useState('');const [hasKey,setHasKey]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [notice,setNotice]=useState('');
- useEffect(()=>{void Promise.all([runtime.store.get('provider','provider'),secretStore.get()]).then(([saved,secret])=>{if(saved)setConfig(saved);setHasKey(Boolean(secret));}).catch(()=>setError('无法读取 Provider 设置'));},[runtime]);
- const save=async(test:boolean)=>{setBusy(true);setError('');setNotice('');try{await runtime.saveProvider(config,key);setKey('');setHasKey(true);if(test){await (await runtime.provider()).chat([{role:'user',content:'Reply with OK.'}],'connection_test');setNotice('连接成功');}else if(route.params?.onboarding)navigation.replace('Create');else{setNotice('已保存');}}catch(e){setError(e instanceof Error?e.message:'保存失败');}finally{setBusy(false);}};
- return <Page><Heading>连接你的模型</Heading><Note>BYOK · 密钥保存在 Android 安全存储中。普通陪伴聊天默认关闭 thinking。</Note><Button title="使用 DeepSeek 预设" secondary onPress={()=>setConfig(deepSeekPreset)}/><Field label="Base URL" value={config.baseUrl} onChangeText={baseUrl=>setConfig({...config,baseUrl})} autoCapitalize="none" autoCorrect={false}/><Field label="Model Name" value={config.model} onChangeText={model=>setConfig({...config,model})} autoCapitalize="none" autoCorrect={false}/><Field label="API Key" value={key} onChangeText={setKey} secureTextEntry autoCapitalize="none" autoCorrect={false} placeholder={hasKey?'已保存，留空保留现有密钥':'输入你的 API Key'}/><Note>DeepSeek 默认地址 https://api.deepseek.com，模型可自行修改。兼容接口填写服务商给出的 Base URL（通常以 /v1 结尾）。本地服务可填 local 作为占位密钥。</Note><ErrorText text={error}/>{notice?<Note>{notice}</Note>:null}<Button title={busy?'连接中…':route.params?.onboarding?'保存并创建角色':'保存设置'} disabled={busy} onPress={()=>void save(false)}/><Button title="测试连接（会发起一次模型请求）" disabled={busy} secondary onPress={()=>void save(true)}/></Page>;
+export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
+  return (
+    <Page>
+      <View style={{ paddingTop: 65, gap: 22 }}>
+        <Avatar name="Nyvemi" size={76} />
+        <Heading>Nyvemi</Heading>
+        <Text style={{ fontSize: 20 }}>A life that remembers you.</Text>
+        <Note>从一次认识开始。她会记住相处中的小事，也会在某个恰当的时刻想起你。</Note>
+        <Card>
+          <Note>
+            人格与记忆留在这台设备。模型请求发送给你选择的 Provider，使用你自己的 API
+            Key。这里的持续状态是行为模型，不代表意识。
+          </Note>
+        </Card>
+        <Button
+          title="开始认识她"
+          onPress={() => navigation.navigate('Provider', { onboarding: true })}
+        />
+        <Button
+          title="从 Bundle 接她过来"
+          secondary
+          onPress={() => navigation.navigate('Transfer')}
+        />
+      </View>
+    </Page>
+  );
 }
-const questions:{key:keyof CharacterAnswers;label:string}[]=[{key:'name',label:'她叫什么？'},{key:'gender',label:'希望是什么性别感？'},{key:'ageFeeling',label:'希望是什么年龄感？'},{key:'relationship',label:'希望你们是什么关系？'},{key:'talkativeness',label:'她话多还是话少？'},{key:'initiative',label:'希望她多主动？'},{key:'quietTimes',label:'哪些时候最好别打扰？'},{key:'dislikedAI',label:'你最讨厌 AI 怎么说话？'},{key:'ventResponse',label:'你说“今天上班烦死了”时，希望她怎么接？'},{key:'tone',label:'更毒舌、温柔、淡定、活泼，还是随意？'},{key:'inspiration',label:'有没有喜欢的角色风格？（可选）'}];
-export function CreateScreen({navigation}:ScreenProps<'Create'>){const [answers,setAnswers]=useState<CharacterAnswers>(defaultAnswers);const [demo,setDemo]=useState(false);return <Page><Heading>让她有自己的样子</Heading><Note>不用设定一串百分比。你们相处以后，她还会慢慢学会你的习惯。</Note>{questions.map(q=><Field key={q.key} label={q.label} value={answers[q.key]} onChangeText={v=>setAnswers({...answers,[q.key]:v})} multiline={q.key==='ventResponse'||q.key==='dislikedAI'}/>) }<Card><Text>当你只是吐槽时…</Text><Button title="先一起吐槽，别急着给建议" secondary onPress={()=>setAnswers({...answers,ventResponse:'先跟我吐槽两句，不要立刻提供解决方案'})}/><Button title="安静听我说，等我想听建议时再说" secondary onPress={()=>setAnswers({...answers,ventResponse:'先安静听我讲完，明确寻求分析时才给建议'})}/></Card><View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Note>使用桶砸开发人格（跳过模型生成）</Note><Switch trackColor={{false:'#EADDE3',true:'#EFBBD0'}} thumbColor="#D86B96" value={demo} onValueChange={setDemo}/></View><Button title="认识这个人" disabled={!answers.name.trim()} onPress={()=>navigation.navigate('Generate',{answers,demo})}/></Page>;}
-export function GenerateScreen({navigation,route}:ScreenProps<'Generate'>){const runtime=useRuntime();const started=useRef(false);const [error,setError]=useState('');const [attempt,setAttempt]=useState(0);useEffect(()=>{if(started.current)return;started.current=true;void runtime.characters.create(route.params.answers,route.params.demo).then(c=>navigation.reset({index:0,routes:[{name:'Chat',params:{characterId:c.id}}]})).catch(e=>setError(e instanceof Error?e.message:'角色生成失败'));},[runtime,navigation,route.params,attempt]);return <Page><Heading>一次新的相遇</Heading>{error?<><ErrorText text={error}/><Button title="重新生成" onPress={()=>{started.current=false;setError('');setAttempt(n=>n+1);}}/></>:<Busy label="正在形成她的人格，稍等一会儿…"/>}</Page>;}
+export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
+  const runtime = useRuntime();
+  const [config, setConfig] = useState(deepSeekPreset);
+  const [key, setKey] = useState('');
+  const [hasKey, setHasKey] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    void Promise.all([runtime.store.get('provider', 'provider'), secretStore.get()])
+      .then(([saved, secret]) => {
+        if (saved) setConfig(saved);
+        setHasKey(Boolean(secret));
+      })
+      .catch(() => setError('无法读取 Provider 设置'));
+  }, [runtime]);
+  const save = async (test: boolean) => {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await runtime.saveProvider(config, key);
+      setKey('');
+      setHasKey(true);
+      if (test) {
+        await (
+          await runtime.provider()
+        ).chat([{ role: 'user', content: 'Reply with OK.' }], 'connection_test');
+        setNotice('连接成功');
+      } else if (route.params?.onboarding) navigation.replace('Create');
+      else {
+        setNotice('已保存');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Page>
+      <Heading>连接你的模型</Heading>
+      <Note>BYOK · 密钥保存在 Android 安全存储中。普通陪伴聊天默认关闭 thinking。</Note>
+      <Button title="使用 DeepSeek 预设" secondary onPress={() => setConfig(deepSeekPreset)} />
+      <Field
+        label="Base URL"
+        value={config.baseUrl}
+        onChangeText={(baseUrl) => setConfig({ ...config, baseUrl })}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Field
+        label="Model Name"
+        value={config.model}
+        onChangeText={(model) => setConfig({ ...config, model })}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Field
+        label="API Key"
+        value={key}
+        onChangeText={setKey}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        placeholder={hasKey ? '已保存，留空保留现有密钥' : '输入你的 API Key'}
+      />
+      <Note>
+        DeepSeek 默认地址 https://api.deepseek.com，模型可自行修改。兼容接口填写服务商给出的 Base
+        URL（通常以 /v1 结尾）。本地服务可填 local 作为占位密钥。
+      </Note>
+      <ErrorText text={error} />
+      {notice ? <Note>{notice}</Note> : null}
+      <Button
+        title={busy ? '连接中…' : route.params?.onboarding ? '保存并创建角色' : '保存设置'}
+        disabled={busy}
+        onPress={() => void save(false)}
+      />
+      <Button
+        title="测试连接（会发起一次模型请求）"
+        disabled={busy}
+        secondary
+        onPress={() => void save(true)}
+      />
+    </Page>
+  );
+}
+const questions: { key: keyof CharacterAnswers; label: string }[] = [
+  { key: 'name', label: '她叫什么？' },
+  { key: 'gender', label: '希望是什么性别感？' },
+  { key: 'ageFeeling', label: '希望是什么年龄感？' },
+  { key: 'relationship', label: '希望你们是什么关系？' },
+  { key: 'talkativeness', label: '她话多还是话少？' },
+  { key: 'initiative', label: '希望她多主动？' },
+  { key: 'quietTimes', label: '哪些时候最好别打扰？（如 23:00–08:00）' },
+  { key: 'dislikedAI', label: '你最讨厌 AI 怎么说话？' },
+  { key: 'ventResponse', label: '你说“今天上班烦死了”时，希望她怎么接？' },
+  { key: 'tone', label: '更毒舌、温柔、淡定、活泼，还是随意？' },
+  { key: 'inspiration', label: '有没有喜欢的角色风格？（可选）' },
+];
+export function CreateScreen({ navigation }: ScreenProps<'Create'>) {
+  const [answers, setAnswers] = useState<CharacterAnswers>(defaultAnswers);
+  const [demo, setDemo] = useState(false);
+  return (
+    <Page>
+      <Heading>让她有自己的样子</Heading>
+      <Note>不用设定一串百分比。你们相处以后，她还会慢慢学会你的习惯。</Note>
+      {questions.map((q) => (
+        <Field
+          key={q.key}
+          label={q.label}
+          value={answers[q.key]}
+          onChangeText={(v) => setAnswers({ ...answers, [q.key]: v })}
+          multiline={q.key === 'ventResponse' || q.key === 'dislikedAI'}
+        />
+      ))}
+      <Card>
+        <Text>当你只是吐槽时…</Text>
+        <Button
+          title="先一起吐槽，别急着给建议"
+          secondary
+          onPress={() =>
+            setAnswers({ ...answers, ventResponse: '先跟我吐槽两句，不要立刻提供解决方案' })
+          }
+        />
+        <Button
+          title="安静听我说，等我想听建议时再说"
+          secondary
+          onPress={() =>
+            setAnswers({ ...answers, ventResponse: '先安静听我讲完，明确寻求分析时才给建议' })
+          }
+        />
+      </Card>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Note>使用桶砸开发人格（跳过模型生成）</Note>
+        <Switch
+          trackColor={{ false: '#EADDE3', true: '#EFBBD0' }}
+          thumbColor="#D86B96"
+          value={demo}
+          onValueChange={setDemo}
+        />
+      </View>
+      <Button
+        title="认识这个人"
+        disabled={!answers.name.trim()}
+        onPress={() => navigation.navigate('Generate', { answers, demo })}
+      />
+    </Page>
+  );
+}
+export function GenerateScreen({ navigation, route }: ScreenProps<'Generate'>) {
+  const runtime = useRuntime();
+  const started = useRef(false);
+  const [error, setError] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    void runtime.characters
+      .create(route.params.answers, route.params.demo)
+      .then((c) =>
+        navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] }),
+      )
+      .catch((e) => setError(e instanceof Error ? e.message : '角色生成失败'));
+  }, [runtime, navigation, route.params, attempt]);
+  return (
+    <Page>
+      <Heading>一次新的相遇</Heading>
+      {error ? (
+        <>
+          <ErrorText text={error} />
+          <Button
+            title="重新生成"
+            onPress={() => {
+              started.current = false;
+              setError('');
+              setAttempt((n) => n + 1);
+            }}
+          />
+        </>
+      ) : (
+        <Busy label="正在形成她的人格，稍等一会儿…" />
+      )}
+    </Page>
+  );
+}
