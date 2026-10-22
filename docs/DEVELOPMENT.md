@@ -23,3 +23,10 @@
 - Expo prebuild Android 成功；SDK 55 依赖版本检查通过。
 - `assembleDebug -PreactNativeArchitectures=arm64-v8a` 成功，首次耗时 21m41s（Gradle 与 236 MB React Native 原生包下载占主要时间）。
 - npm audit：已升级 Vitest 至 5.0.5，消除 critical；仍有 Expo/RN 开发工具链传递依赖的 21 high / 5 moderate 告警，不能用强制降级 Expo 的自动建议修复。未启动 Vitest UI 或公网开发服务。
+
+## Persona + Chat 验证
+
+- 自然问题与场景选择、人格生成/开发 Demo、Provider 配置/连接测试、聊天/历史/多段流式显示/失败重试、角色切换页面已接入。
+- 不同 Provider origin 不能静默沿用现有 Key。聊天上下文限制 16 条消息与 8 条检索记忆。
+- lint / typecheck / 13 项测试通过；Android JS/Hermes export 成功；增量 assembleDebug 成功（5s）。
+- 模型测试均为明确的测试 Fixture，尚无用户 BYOK 真实模型验收。
