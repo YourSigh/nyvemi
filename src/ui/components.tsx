@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from 'react';
 import { ActivityIndicator,Image,Pressable,ScrollView,StyleSheet,Text,TextInput,View,type TextInputProps } from 'react-native';
-export const palette={background:'#F6F4EF',paper:'#FFFEFB',ink:'#292C35',muted:'#7C7E88',accent:'#7163A1',tint:'#EAE4F4',line:'#E6E2DB',error:'#A54242'};
+export const palette={background:'#FFF7FA',paper:'#FFFFFF',ink:'#49353F',muted:'#957482',accent:'#D86B96',tint:'#FCE4EE',line:'#F2DCE6',error:'#AA405D'};
 export function Page({children}:PropsWithChildren){return <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.page}>{children}</ScrollView>;}
 export function Heading({children}:PropsWithChildren){return <Text style={styles.heading}>{children}</Text>;}
 export function Note({children}:PropsWithChildren){return <Text style={styles.note}>{children}</Text>;}

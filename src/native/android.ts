@@ -1,0 +1,9 @@
+import { requireNativeModule } from 'expo';
+import * as Notifications from 'expo-notifications';
+import type { Character,NotificationRecord } from '../domain/models';
+import type { NotificationGateway } from '../proactive/heartbeat/engine';
+interface AndroidBridge {canNotify():boolean;notify(id:string,cid:string,name:string,body:string,avatar:string|null):Promise<boolean>;cancelNotification(id:string):void;pinShortcut(cid:string,name:string,avatar:string|null):Promise<boolean>}
+function bridge():AndroidBridge{return requireNativeModule<AndroidBridge>('NyvemiAndroid');}
+export const androidNotifications:NotificationGateway={enabled:async()=>bridge().canNotify(),show:async(n:NotificationRecord,c:Character)=>{await bridge().notify(n.id,c.id,c.persona.name,n.body,c.avatar??null);},cancel:async id=>{bridge().cancelNotification(id);}};
+export async function requestNotifications():Promise<boolean>{await Notifications.setNotificationChannelAsync('nyvemi-companions-v1',{name:'角色来信',importance:Notifications.AndroidImportance.DEFAULT});const permission=await Notifications.requestPermissionsAsync();return permission.granted;}
+export function pinCharacter(character:Character):Promise<boolean>{return bridge().pinShortcut(character.id,character.persona.name,character.avatar??null);}

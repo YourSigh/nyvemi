@@ -23,7 +23,10 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.nyvemi.android",
-      "allowBackup": false
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -39,7 +42,14 @@
       "expo-notifications",
       "expo-background-task",
       "expo-document-picker",
-      "expo-image-picker"
+      [
+        "expo-image-picker",
+        {
+          "microphonePermission": false,
+          "cameraPermission": false
+        }
+      ],
+      "./plugins/withNyvemiAndroid"
     ]
   }
 }

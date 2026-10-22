@@ -46,3 +46,13 @@
 - 生成后重新检查用户状态；持久化 outbox、投递恢复、通知点击幂等入聊天。
 - 本阶段原生通知通过 Gateway 测试替身验证，下一阶段接入 Android 真正调度与通知。
 - lint / typecheck / 28 项测试通过；assembleDebug 成功（3s）。
+
+## Android Integration 验证
+
+- Expo TaskManager 全局注册 WorkManager 心跳（最小约 60 分钟）；低频 RSS、到期抽取恢复与主动决策已接实际 runtime。
+- Kotlin Module：角色头像通知、稳定通知 tag、消息深链、Pinned Shortcut；新增可再生成的 config plugin。
+- 角色设置可配置主动开关、Quiet Hours、每日上限、间隔、RSS；经历时间线已接入。
+- 根据用户追加要求，界面与原生头像占位统一粉白主题。
+- lint / typecheck / 29 项测试通过；Hermes bundle、Kotlin 编译、assembleDebug、模拟器安装成功。
+- `expo run:android` 启动成功，ReactNativeJS Running main，设备上创建 nyvemi.db；JobScheduler 中确认 Nyvemi WorkManager Job，minimum latency 约 60 分钟。
+- 当前桌面控制工具无法直接绑定独立 QEMU 窗口；通知点击/桌面确认及真实模型后台闭环仍待后续设备验收，不能仅凭安装成功认定完成。
