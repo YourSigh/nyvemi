@@ -1,4 +1,6 @@
 import type { z } from 'zod';
+import { id } from '../domain/models';
+import { normalizeUsage } from '../usage/ledger';
 import type { ProviderConfig } from '../domain/models';
 import {
   validateProviderConfig,
@@ -10,7 +12,7 @@ import {
 } from './provider';
 interface ResponseBody {
   choices?: { message?: { content?: string }; delta?: { content?: string } }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number };
+  usage?: unknown;
 }
 export class OpenAICompatibleProvider implements LLMProvider {
   private config: ProviderConfig;
@@ -30,6 +32,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     signal?: AbortSignal,
   ): Promise<LLMResult> {
     const start = Date.now();
+    const requestId = id();
+    let success = false;
+    let safeError: string | undefined;
     const key = await this.secrets.get();
     if (!key) throw new Error('请先在 Provider 设置中填写 API Key');
     const controller = new AbortController();
@@ -67,11 +72,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           const delta = chunk.choices?.[0]?.delta?.content ?? '';
           result.content += delta;
           if (delta) onDelta?.(delta);
-          if (chunk.usage)
-            result.usage = {
-              inputTokens: chunk.usage.prompt_tokens,
-              outputTokens: chunk.usage.completion_tokens,
-            };
+          if (chunk.usage) result.usage = { ...result.usage, ...normalizeUsage(chunk.usage) };
         };
         try {
           for (;;) {
@@ -91,23 +92,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
         const body = (await response.json()) as ResponseBody;
         result = {
           content: body.choices?.[0]?.message?.content ?? '',
-          usage: {
-            inputTokens: body.usage?.prompt_tokens,
-            outputTokens: body.usage?.completion_tokens,
-          },
+          usage: normalizeUsage(body.usage),
         };
         if (stream && !result.content)
           throw new Error('Provider 未提供可读取的流，请使用支持流式响应的 Development Build');
         if (stream) onDelta?.(result.content);
       }
       if (!result.content.trim()) throw new Error('模型返回了空回复');
-      await this.metric({
-        model: this.config.model,
-        duration: Date.now() - start,
-        purpose,
-        success: true,
-        ...result.usage,
-      });
+      success = true;
       return result;
     } catch (error) {
       const safe =
@@ -116,17 +108,23 @@ export class OpenAICompatibleProvider implements LLMProvider {
           : controller.signal.aborted
             ? '请求已取消或超时'
             : '模型连接或响应解析失败';
-      await this.metric({
-        model: this.config.model,
-        duration: Date.now() - start,
-        purpose,
-        success: false,
-        error: safe,
-      });
+      safeError = safe;
       throw new Error(safe);
     } finally {
       clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
+      // Record once, including usage already received before a truncated stream or cancellation.
+      await this.metric({
+        requestId,
+        startedAt: start,
+        endpoint: this.config.baseUrl,
+        model: this.config.model,
+        duration: Date.now() - start,
+        purpose,
+        success,
+        error: safeError,
+        ...result.usage,
+      }).catch(() => undefined);
     }
   }
   chat(messages: ChatTurn[], purpose: string, signal?: AbortSignal): Promise<LLMResult> {

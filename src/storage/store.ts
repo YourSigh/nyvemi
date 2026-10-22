@@ -10,6 +10,9 @@ export const migrations = [
   `CREATE TABLE IF NOT EXISTS entities (kind TEXT NOT NULL, id TEXT NOT NULL, character_id TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(kind,id));
    CREATE INDEX IF NOT EXISTS entities_character ON entities(kind,character_id,created_at);
    CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, until_at INTEGER NOT NULL);`,
+  `CREATE TABLE IF NOT EXISTS api_usage (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, endpoint TEXT NOT NULL, model TEXT NOT NULL, purpose TEXT NOT NULL, payload TEXT NOT NULL);
+   CREATE INDEX IF NOT EXISTS api_usage_time ON api_usage(created_at);
+   CREATE TABLE IF NOT EXISTS token_prices (endpoint TEXT NOT NULL, model TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(endpoint,model));`,
 ];
 export async function migrate(db: Database): Promise<void> {
   await db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');

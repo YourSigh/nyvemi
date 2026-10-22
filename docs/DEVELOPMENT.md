@@ -76,3 +76,11 @@
 - SHA-256：66b796104bdab5adf8704313c22d3e86d014261cf0a383b68f5a46c976bb216a。
 - 当前跟踪树无构建产物或凭据。前一阶段误跟踪原生缓存已通过独立修复提交移除，未改写历史。
 - 外部待验收：App 内 BYOK、真实对话质量、关 App 数小时的自然后台通知、通知点击、Pinned Shortcut 与系统文件选择。详见 ACCEPTANCE.md；未将这些项目伪报为通过。
+
+## 用量与费用（后续需求一）
+
+- 独立 SQLite v2 迁移建立 api_usage / token_prices；不依赖会轮转的诊断日志，不导出到角色 Bundle。
+- 输入/输出/cache-hit token 来自响应，包括 SSE 结束 usage；中断保留已收到 usage，只记一次。缺失 usage、缓存拆分或单价均标注未知，不以零费用代替。
+- 普通用户用量页面提供今天/本月/累计、模型与币种分组、最近请求、每百万 token 手动单价及 DeepSeek 固定档位预设。单价随请求保存快照，后续修改不重算历史。
+- 官方价格核对日期 2026-10-22：https://api-docs.deepseek.com/zh-cn/quick_start/pricing/ 。默认新配置模型更新到 deepseek-flash，保留已保存的模型选择；旧 deepseek-chat 不套用未知价格。固定档位不能自动匹配时段/节假日，UI 明示估算与覆盖范围，不读取余额。
+- lint / typecheck / 45 项测试通过；assembleDebug 成功（12s）。

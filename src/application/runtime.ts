@@ -1,5 +1,5 @@
 import { fetch as nativeFetch } from 'expo/fetch';
-import { openStore, secretStore } from '../storage/native';
+import { openStore, openDatabase, secretStore } from '../storage/native';
 import { Diagnostics } from '../storage/diagnostics';
 import { OpenAICompatibleProvider } from '../providers/openai';
 import { type LLMProvider } from '../providers/provider';
@@ -12,9 +12,11 @@ import { KeywordMemoryRetriever } from '../memory/retrieval';
 import { MemoryExtractionService } from '../memory/extraction';
 import { HeartbeatEngine } from '../proactive/heartbeat/engine';
 import { androidNotifications } from '../native/android';
+import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
 async function createRuntime() {
   const store = await openStore();
+  const usage = new UsageLedger(await openDatabase());
   const diagnostics = new Diagnostics(store, async (json) => {
     const key = await secretStore.get();
     return JSON.stringify(redactKnownSecret(JSON.parse(json), key ?? undefined));
@@ -22,10 +24,14 @@ async function createRuntime() {
   const provider = async (): Promise<LLMProvider> => {
     const config = await store.get('provider', 'provider');
     if (!config) throw new Error('请先配置 Provider');
+    const price = await usage.price(config.baseUrl, config.model);
     return new OpenAICompatibleProvider(
       config,
       secretStore,
-      (metric) => diagnostics.record('api', '', { ...metric }),
+      async (metric) => {
+        await usage.record(metric, price).catch(() => diagnostics.error('', 'usage_ledger'));
+        await diagnostics.record('api', '', { ...metric });
+      },
       nativeFetch as unknown as typeof fetch,
     );
   };
@@ -58,6 +64,7 @@ async function createRuntime() {
   return {
     store,
     diagnostics,
+    usage,
     provider,
     saveProvider,
     memories,

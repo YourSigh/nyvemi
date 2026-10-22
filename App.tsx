@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
+import { UsageScreen } from './src/ui/usage';
 import { ExperiencesScreen } from './src/ui/experiences';
 import { DeveloperScreen } from './src/ui/developer';
 import { TransferScreen } from './src/ui/transfer';
@@ -109,6 +110,11 @@ export default function App() {
                     contentStyle: { backgroundColor: palette.background },
                   }}
                 >
+                  <Stack.Screen
+                    name="Usage"
+                    component={UsageScreen}
+                    options={{ title: '用量与费用' }}
+                  />
                   <Stack.Screen
                     name="Welcome"
                     component={WelcomeScreen}

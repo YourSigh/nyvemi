@@ -193,6 +193,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           onPress={() => navigation.navigate('Developer', { characterId: cid })}
         />
       ) : null}
+      <Button title="用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
       <Button title="模型与 API Key" secondary onPress={() => navigation.navigate('Provider')} />
       <Button title="切换或创建角色" secondary onPress={() => navigation.navigate('Characters')} />
     </Page>

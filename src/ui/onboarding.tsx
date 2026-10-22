@@ -104,6 +104,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         DeepSeek 默认地址 https://api.deepseek.com，模型可自行修改。兼容接口填写服务商给出的 Base
         URL（通常以 /v1 结尾）。本地服务可填 local 作为占位密钥。
       </Note>
+      <Button title="查看用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
       <ErrorText text={error} />
       {notice ? <Note>{notice}</Note> : null}
       <Button

@@ -34,7 +34,7 @@ describe('foundation', () => {
       expect(() => validateProviderConfig({ ...deepSeekPreset, baseUrl })).toThrow();
     expect(
       validateProviderConfig({ ...deepSeekPreset, baseUrl: 'http://192.168.1.2:11434/v1' }).model,
-    ).toBe('deepseek-chat');
+    ).toBe('deepseek-flash');
   });
   it('redacts server responses and keys from errors', async () => {
     const metrics: unknown[] = [];

@@ -19,12 +19,21 @@ function adapt(db: SQLite.SQLiteDatabase): Database {
     },
   };
 }
+let databasePending: Promise<Database> | undefined;
+export function openDatabase(): Promise<Database> {
+  return (databasePending ??= (async () => {
+    const db = adapt(await SQLite.openDatabaseAsync('nyvemi.db'));
+    await migrate(db);
+    return db;
+  })().catch((error) => {
+    databasePending = undefined;
+    throw error;
+  }));
+}
 let pending: Promise<SQLiteStore> | undefined;
 export function openStore(): Promise<SQLiteStore> {
   pending ??= (async () => {
-    const db = adapt(await SQLite.openDatabaseAsync('nyvemi.db'));
-    await migrate(db);
-    return new SQLiteStore(db);
+    return new SQLiteStore(await openDatabase());
   })().catch((error) => {
     pending = undefined;
     throw error;

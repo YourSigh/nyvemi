@@ -7,6 +7,7 @@ export interface ChatTurn {
 export interface Usage {
   inputTokens?: number;
   outputTokens?: number;
+  cachedInputTokens?: number;
 }
 export interface LLMResult {
   content: string;
@@ -26,7 +27,10 @@ export interface SecretStore {
   set(key: string): Promise<void>;
   remove(): Promise<void>;
 }
-export interface ApiMetric {
+export interface ApiMetric extends Usage {
+  requestId: string;
+  startedAt: number;
+  endpoint: string;
   model: string;
   duration: number;
   inputTokens?: number;
@@ -39,7 +43,7 @@ export const deepSeekPreset: ProviderConfig = {
   id: 'provider',
   provider: 'openai-compatible',
   baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-chat',
+  model: 'deepseek-flash',
   thinking: false,
 };
 export function validateProviderConfig(value: unknown): ProviderConfig {
