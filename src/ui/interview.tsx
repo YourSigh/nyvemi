@@ -1,14 +1,18 @@
+import { usePalette } from '../theme/context';
+import type { Palette } from '../theme/model';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { interviewQuestions, type InterviewDraft } from '../characters/interview';
 import { defaultAnswers, type CharacterAnswers } from '../characters/service';
 import { useRuntime } from './context';
-import { Avatar, Button, Card, ErrorText, Field, Note, palette, Busy } from './components';
+import { Avatar, Button, Card, ErrorText, Field, Note, Busy } from './components';
 import type { ScreenProps } from './navigation';
 export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
+  const palette = usePalette();
+  const s = useMemo(() => createStyles(palette), [palette]);
   const runtime = useRuntime();
   const headerHeight = useHeaderHeight();
   const [draft, setDraft] = useState<InterviewDraft>();
@@ -234,41 +238,42 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
     </SafeAreaView>
   );
 }
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.background },
-  header: { padding: 18, gap: 8, borderBottomWidth: 1, borderColor: palette.line },
-  title: { fontSize: 22, fontWeight: '600', color: palette.ink },
-  track: { height: 5, borderRadius: 3, backgroundColor: palette.line, overflow: 'hidden' },
-  fill: { height: 5, backgroundColor: palette.accent },
-  thread: { padding: 18, gap: 18, paddingBottom: 28 },
-  row: { flexDirection: 'row', gap: 8 },
-  mine: { justifyContent: 'flex-end' },
-  bubble: {
-    maxWidth: '86%',
-    backgroundColor: palette.paper,
-    padding: 14,
-    borderRadius: 16,
-    gap: 8,
-  },
-  message: { fontSize: 16, color: palette.ink, lineHeight: 25 },
-  fallback: { fontSize: 11, color: palette.muted },
-  composer: { padding: 12, gap: 10, borderTopWidth: 1, borderColor: palette.line },
-  input: {
-    minHeight: 48,
-    maxHeight: 110,
-    backgroundColor: palette.paper,
-    borderRadius: 12,
-    padding: 12,
-    color: palette.ink,
-    fontSize: 16,
-    textAlignVertical: 'top',
-  },
-  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    maxWidth: '100%',
-    flexShrink: 1,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: palette.tint,
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: palette.background },
+    header: { padding: 18, gap: 8, borderBottomWidth: 1, borderColor: palette.line },
+    title: { fontSize: 22, fontWeight: '600', color: palette.ink },
+    track: { height: 5, borderRadius: 3, backgroundColor: palette.line, overflow: 'hidden' },
+    fill: { height: 5, backgroundColor: palette.accent },
+    thread: { padding: 18, gap: 18, paddingBottom: 28 },
+    row: { flexDirection: 'row', gap: 8 },
+    mine: { justifyContent: 'flex-end' },
+    bubble: {
+      maxWidth: '86%',
+      backgroundColor: palette.paper,
+      padding: 14,
+      borderRadius: 16,
+      gap: 8,
+    },
+    message: { fontSize: 16, color: palette.ink, lineHeight: 25 },
+    fallback: { fontSize: 11, color: palette.muted },
+    composer: { padding: 12, gap: 10, borderTopWidth: 1, borderColor: palette.line },
+    input: {
+      minHeight: 48,
+      maxHeight: 110,
+      backgroundColor: palette.paper,
+      borderRadius: 12,
+      padding: 12,
+      color: palette.ink,
+      fontSize: 16,
+      textAlignVertical: 'top',
+    },
+    choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    chip: {
+      maxWidth: '100%',
+      flexShrink: 1,
+      padding: 10,
+      borderRadius: 12,
+      backgroundColor: palette.tint,
+    },
+  });

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ThemeRecord } from '../theme/model';
+import type { ThemeRecord, ThemeOpening } from '../theme/model';
 import type { InterviewDraft } from '../characters/interview';
 
 export const PersonaSchema = z
@@ -185,6 +185,7 @@ export interface ExtractionJob {
 }
 export interface Entities {
   themes: ThemeRecord;
+  themeOpenings: ThemeOpening;
   characters: Character;
   interviews: InterviewDraft;
   memories: Memory;

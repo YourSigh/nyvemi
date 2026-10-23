@@ -1,3 +1,5 @@
+import { ThemeProvider, useTheme } from './src/theme/context';
+import { ThemeScreen } from './src/ui/theme';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
 import { AppState, View } from 'react-native';
@@ -16,7 +18,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getRuntime, type Runtime } from './src/application/runtime';
 import { RuntimeContext } from './src/ui/context';
-import { Busy, Button, ErrorText, Page, palette } from './src/ui/components';
+import { Busy, Button, ErrorText, Page } from './src/ui/components';
 import { WelcomeScreen, ProviderScreen, GenerateScreen } from './src/ui/onboarding';
 import { ChatScreen } from './src/ui/chat';
 import { ScreenErrorBoundary } from './src/ui/error-boundary';
@@ -25,6 +27,15 @@ import { SettingsScreen } from './src/ui/settings';
 import type { Routes } from './src/ui/navigation';
 const Stack = createNativeStackNavigator<Routes>();
 export default function App() {
+  return (
+    <ThemeProvider>
+      <Application />
+    </ThemeProvider>
+  );
+}
+function Application() {
+  const { palette, hydrate, record } = useTheme();
+  const [resumeTheme, setResumeTheme] = useState(false);
   const [runtime, setRuntime] = useState<Runtime>();
   const [initial, setInitial] = useState<string>();
   const [resumeInterview, setResumeInterview] = useState(false);
@@ -37,10 +48,15 @@ export default function App() {
       .then(async (r) => {
         const chars = await r.store.list('characters');
         const draft = await r.store.get('interviews', 'active');
+        const savedTheme = await r.themes.load();
+        hydrate(savedTheme);
+        setResumeTheme(
+          Boolean(await r.themes.opening()) && Boolean(await r.store.get('provider', 'provider')),
+        );
         if (live) {
           setRuntime(r);
           setInitial(chars[0]?.id);
-          setResumeInterview(Boolean(draft && !draft.savedCharacterId));
+          setResumeInterview(Boolean((draft && !draft.savedCharacterId) || savedTheme));
           setReady(true);
         }
       })
@@ -50,7 +66,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [attempt]);
+  }, [attempt, hydrate]);
   useEffect(() => {
     if (!runtime) return;
     void registerHeartbeat()
@@ -77,7 +93,7 @@ export default function App() {
   }, [runtime]);
   return (
     <SafeAreaProvider>
-      <StatusBar style="dark" />
+      <StatusBar style={record?.preference.brightness === 'dark' ? 'light' : 'dark'} />
       <KeyboardProvider>
         <View style={{ flex: 1, backgroundColor: palette.background }}>
           {error ? (
@@ -103,6 +119,7 @@ export default function App() {
                 <NavigationContainer
                   theme={{
                     ...DefaultTheme,
+                    dark: record?.preference.brightness === 'dark',
                     colors: {
                       ...DefaultTheme.colors,
                       background: palette.background,
@@ -118,7 +135,15 @@ export default function App() {
                   }}
                 >
                   <Stack.Navigator
-                    initialRouteName={initial ? 'Chat' : resumeInterview ? 'Create' : 'Welcome'}
+                    initialRouteName={
+                      initial
+                        ? 'Chat'
+                        : resumeTheme
+                          ? 'Theme'
+                          : resumeInterview
+                            ? 'Create'
+                            : 'Welcome'
+                    }
                     screenOptions={{
                       headerShadowVisible: false,
                       headerBackTitle: '返回',
@@ -139,6 +164,12 @@ export default function App() {
                       name="Provider"
                       component={ProviderScreen}
                       options={{ title: '模型连接' }}
+                    />
+                    <Stack.Screen
+                      name="Theme"
+                      component={ThemeScreen}
+                      initialParams={{ onboarding: true }}
+                      options={{ title: '先从你的颜色开始' }}
                     />
                     <Stack.Screen
                       name="Create"

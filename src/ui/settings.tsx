@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { NotificationSetup } from './notification-setup';
 import { useEffect, useState, useCallback } from 'react';
 import { Switch, Text, View } from 'react-native';
@@ -13,6 +14,7 @@ import { bridge, pinCharacter, requestNotifications } from '../native/android';
 import { resetCharacter } from '../characters/reset';
 import { bundleAssets, pickAvatar } from '../transfer/native';
 export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [character, setCharacter] = useState<Character>();
@@ -90,6 +92,11 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   };
   return (
     <Page>
+      <Button
+        title="换成我喜欢的颜色"
+        secondary
+        onPress={() => navigation.navigate('Theme', { onboarding: false })}
+      />
       <NotificationSetup
         characterId={cid}
         onEnabled={() => setSettings((s) => (s ? { ...s, proactiveEnabled: true } : s))}
@@ -99,7 +106,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
       <Note>{character?.persona.identity}</Note>
       {character?.persona.appearance ? <Note>{character.persona.appearance}</Note> : null}
       <Card>
-        <Text>{character?.persona.corePersonality.join(' · ')}</Text>
+        <Text style={{ color: palette.ink }}>{character?.persona.corePersonality.join(' · ')}</Text>
         <Note>{character?.persona.speechStyle.join('，')}</Note>
       </Card>
       <Button
@@ -138,7 +145,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
         onPress={() => navigation.navigate('Experiences', { characterId: cid })}
       />
       <Card>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>常驻陪伴</Text>
+        <Text style={{ color: palette.ink, fontSize: 18, fontWeight: '600' }}>常驻陪伴</Text>
         <Note>
           {presence?.running
             ? presence.characterId === cid
@@ -186,10 +193,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
         <View
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          <Text>允许她主动来信</Text>
+          <Text style={{ color: palette.ink }}>允许她主动来信</Text>
           <Switch
-            trackColor={{ false: '#EADDE3', true: '#EFBBD0' }}
-            thumbColor="#D86B96"
+            trackColor={{ false: palette.line, true: palette.tint }}
+            thumbColor={palette.accent}
             disabled={busy}
             value={settings?.proactiveEnabled ?? false}
             onValueChange={(v) => {
@@ -255,10 +262,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
         <View
           style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
         >
-          <Text>开发者模式</Text>
+          <Text style={{ color: palette.ink }}>开发者模式</Text>
           <Switch
-            trackColor={{ false: '#EADDE3', true: '#EFBBD0' }}
-            thumbColor="#D86B96"
+            trackColor={{ false: palette.line, true: palette.tint }}
+            thumbColor={palette.accent}
             value={settings?.developerMode ?? false}
             onValueChange={(v) => {
               if (settings) setSettings({ ...settings, developerMode: v });
@@ -288,7 +295,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
       <Button title="用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
       <Button title="模型与 API Key" secondary onPress={() => navigation.navigate('Provider')} />
       <Card>
-        <Text style={{ fontSize: 18, fontWeight: '600' }}>清空并重新创建</Text>
+        <Text style={{ color: palette.ink, fontSize: 18, fontWeight: '600' }}>清空并重新创建</Text>
         <Note>
           这会永久删除当前角色的人格、全部聊天、记忆、经历和待办，并停用她的通知和桌面入口。模型密钥与费用账本保留。建议先导出备份。
         </Note>

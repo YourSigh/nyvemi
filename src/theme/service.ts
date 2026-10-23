@@ -3,6 +3,7 @@ import type { Storage } from '../storage/store';
 import {
   defaultPreference,
   ThemePreferenceSchema,
+  ThemeOpeningSchema,
   ThemeRecordSchema,
   type ThemePreference,
   type ThemeRecord,
@@ -48,6 +49,19 @@ export class ThemeService {
     private store: Storage,
     private provider: () => Promise<LLMProvider>,
   ) {}
+  async opening(): Promise<string | undefined> {
+    const result = ThemeOpeningSchema.safeParse(await this.store.get('themeOpenings', 'opening'));
+    return result.success ? result.data.description : undefined;
+  }
+  async rememberOpening(description: string): Promise<void> {
+    await this.store.put(
+      'themeOpenings',
+      ThemeOpeningSchema.parse({ id: 'opening', description, createdAt: Date.now() }),
+    );
+  }
+  async clearOpening(): Promise<void> {
+    await this.store.remove('themeOpenings', 'opening');
+  }
   async load(): Promise<ThemeRecord | undefined> {
     const result = ThemeRecordSchema.safeParse(await this.store.get('themes', 'app'));
     return result.success ? result.data : undefined;

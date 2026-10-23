@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Linking, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +14,7 @@ const timeLabels: Record<string, string> = {
   weekend: '周末的空气',
 };
 export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const [items, setItems] = useState<Experience[]>([]);
   const [error, setError] = useState('');
@@ -40,7 +42,7 @@ export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
                   ? '你们聊过'
                   : '此时此地'}
             </Note>
-            <Text style={{ fontSize: 17, fontWeight: '500' }}>
+            <Text style={{ color: palette.ink, fontSize: 17, fontWeight: '500' }}>
               {timeLabels[e.title] ?? e.title}
             </Text>
             {e.source !== 'local-time' ? <Note>{e.content.slice(0, 240)}</Note> : null}

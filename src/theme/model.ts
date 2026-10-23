@@ -40,3 +40,12 @@ export const defaultPreference: ThemePreference = {
   temperature: 'warm',
   confidence: 1,
 };
+
+export const ThemeOpeningSchema = z
+  .object({
+    id: z.literal('opening'),
+    description: z.string().trim().min(1).max(500),
+    createdAt: z.number(),
+  })
+  .strict();
+export type ThemeOpening = z.infer<typeof ThemeOpeningSchema>;

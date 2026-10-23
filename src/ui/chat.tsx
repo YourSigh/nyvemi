@@ -1,5 +1,7 @@
+import { usePalette } from '../theme/context';
+import type { Palette } from '../theme/model';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   AppState,
@@ -14,7 +16,7 @@ import type { PropsWithChildren } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Character, Message } from '../domain/models';
-import { Avatar, Button, ErrorText, palette } from './components';
+import { Avatar, Button, ErrorText } from './components';
 import { bridge } from '../native/android';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
@@ -50,6 +52,8 @@ function Arrival({
   );
 }
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
+  const palette = usePalette();
+  const s = useMemo(() => createStyles(palette), [palette]);
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -305,44 +309,45 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     </SafeAreaView>
   );
 }
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: palette.background },
-  header: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderColor: palette.line,
-  },
-  name: { fontSize: 19, fontWeight: '600', color: palette.ink },
-  sub: { fontSize: 12, color: palette.muted, marginTop: 4 },
-  more: { fontSize: 26, padding: 8, color: palette.accent },
-  messages: { padding: 18, gap: 20, flexGrow: 1 },
-  row: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
-  mine: { justifyContent: 'flex-end' },
-  bubble: {
-    padding: 13,
-    backgroundColor: palette.paper,
-    borderRadius: 16,
-    borderTopLeftRadius: 5,
-    flexShrink: 1,
-  },
-  userBubble: { backgroundColor: palette.tint, borderTopLeftRadius: 16, borderTopRightRadius: 5 },
-  message: { fontSize: 16, lineHeight: 25, color: palette.ink },
-  time: { fontSize: 10, color: palette.muted, marginHorizontal: 3 },
-  empty: { textAlign: 'center', color: palette.muted, marginTop: 70 },
-  footer: { padding: 12, gap: 8, borderTopWidth: 1, borderColor: palette.line },
-  composer: { flexDirection: 'row', gap: 9, alignItems: 'flex-end' },
-  input: {
-    flex: 1,
-    maxHeight: 120,
-    minHeight: 48,
-    padding: 12,
-    backgroundColor: palette.paper,
-    borderRadius: 14,
-    fontSize: 16,
-    color: palette.ink,
-  },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    root: { flex: 1, backgroundColor: palette.background },
+    header: {
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      gap: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderBottomWidth: 1,
+      borderColor: palette.line,
+    },
+    name: { fontSize: 19, fontWeight: '600', color: palette.ink },
+    sub: { fontSize: 12, color: palette.muted, marginTop: 4 },
+    more: { fontSize: 26, padding: 8, color: palette.accent },
+    messages: { padding: 18, gap: 20, flexGrow: 1 },
+    row: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
+    mine: { justifyContent: 'flex-end' },
+    bubble: {
+      padding: 13,
+      backgroundColor: palette.paper,
+      borderRadius: 16,
+      borderTopLeftRadius: 5,
+      flexShrink: 1,
+    },
+    userBubble: { backgroundColor: palette.tint, borderTopLeftRadius: 16, borderTopRightRadius: 5 },
+    message: { fontSize: 16, lineHeight: 25, color: palette.ink },
+    time: { fontSize: 10, color: palette.muted, marginHorizontal: 3 },
+    empty: { textAlign: 'center', color: palette.muted, marginTop: 70 },
+    footer: { padding: 12, gap: 8, borderTopWidth: 1, borderColor: palette.line },
+    composer: { flexDirection: 'row', gap: 9, alignItems: 'flex-end' },
+    input: {
+      flex: 1,
+      maxHeight: 120,
+      minHeight: 48,
+      padding: 12,
+      backgroundColor: palette.paper,
+      borderRadius: 14,
+      fontSize: 16,
+      color: palette.ink,
+    },
+  });

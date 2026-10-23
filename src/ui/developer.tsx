@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -8,9 +9,10 @@ import { runBackgroundCycle } from '../proactive/heartbeat/driver';
 import { HEARTBEAT_TASK } from '../native/background';
 import * as TaskManager from 'expo-task-manager';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Heading, Note, Page, palette } from './components';
+import { Button, Card, ErrorText, Heading, Note, Page } from './components';
 import type { ScreenProps } from './navigation';
 export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [allowed, setAllowed] = useState(false);

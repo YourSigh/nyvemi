@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Alert, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +14,7 @@ const labels: Record<Memory['type'], string> = {
   experience: '她的经历',
 };
 export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [memories, setMemories] = useState<Memory[]>([]);
@@ -55,7 +57,7 @@ export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
             <Note>
               {labels[m.type]} · {new Date(m.createdAt).toLocaleDateString()}
             </Note>
-            <Text style={{ fontSize: 16, lineHeight: 25 }}>{m.content}</Text>
+            <Text style={{ color: palette.ink, fontSize: 16, lineHeight: 25 }}>{m.content}</Text>
             {m.type === 'open_loop' ? (
               <Button
                 title="这件事已经结束"

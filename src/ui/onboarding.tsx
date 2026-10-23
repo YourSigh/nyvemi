@@ -1,28 +1,89 @@
+import { usePalette } from '../theme/context';
 import { startCompanionPresence } from '../native/presence';
 import { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useRuntime } from './context';
 import { Avatar, Button, Card, ErrorText, Field, Heading, Note, Page, Busy } from './components';
 import { deepSeekPreset } from '../providers/provider';
 import type { ScreenProps } from './navigation';
 import { secretStore } from '../storage/native';
 export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
+  const palette = usePalette();
+  const runtime = useRuntime();
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void runtime.themes
+      .opening()
+      .then((text) => {
+        if (text) setDescription(text);
+      })
+      .catch(() => setError('读取开场偏好失败'));
+  }, [runtime]);
+  const continueOpening = async (skip = false) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      if (skip) await runtime.themes.clearOpening();
+      else await runtime.themes.rememberOpening(description);
+      navigation.navigate('Provider', { onboarding: true, skipTheme: skip });
+    } catch {
+      setError('没能保存这点小偏好，请再试一次');
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Page>
-      <View style={{ paddingTop: 65, gap: 22 }}>
-        <Avatar name="Nyvemi" size={76} />
+      <View style={{ paddingTop: 28, gap: 18 }}>
+        <Avatar name="Nyvemi" size={68} />
         <Heading>Nyvemi</Heading>
-        <Text style={{ fontSize: 20 }}>A life that remembers you.</Text>
-        <Note>从一次认识开始。她会记住相处中的小事，也会在某个恰当的时刻想起你。</Note>
+        <Note>A life that remembers you.</Note>
         <Card>
+          <Text style={{ color: palette.ink, fontSize: 23, lineHeight: 33 }}>
+            你喜欢什么颜色呀？
+          </Text>
           <Note>
-            人格与记忆留在这台设备。模型请求发送给你选择的 Provider，使用你自己的 API
-            Key。这里的持续状态是行为模型，不代表意识。
+            一种颜色，或者一种感觉都可以。温柔、清爽、安静、梦幻……我想让这里更像你喜欢的样子。
           </Note>
         </Card>
+        <Field
+          label="你喜欢的颜色和感觉"
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          maxLength={500}
+          placeholder="淡淡的粉色，柔和一点，别太艳"
+        />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {['淡粉色，柔和、不太艳', '蓝灰色，安静一点', '黑白灰，但是别太冷', '紫色，梦幻一点'].map(
+            (text) => (
+              <Pressable
+                key={text}
+                accessibilityRole="button"
+                onPress={() => setDescription(text)}
+                style={{ padding: 10, backgroundColor: palette.tint, borderRadius: 14 }}
+              >
+                <Text style={{ color: palette.accent }}>{text}</Text>
+              </Pressable>
+            ),
+          )}
+        </View>
+        <Note>
+          先记下这一小点。下一步连接你自己的模型，它会理解你的偏好；颜色选好后，再一起创造她。人格与记忆保存在本机。
+        </Note>
+        <ErrorText text={error} />
         <Button
-          title="开始认识她"
-          onPress={() => navigation.navigate('Provider', { onboarding: true })}
+          title="就这个感觉"
+          disabled={busy || !description.trim()}
+          onPress={() => void continueOpening()}
+        />
+        <Button
+          title="先用现在的粉白色"
+          secondary
+          disabled={busy}
+          onPress={() => void continueOpening(true)}
         />
         <Button
           title="从 Bundle 接她过来"
@@ -62,8 +123,10 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
           await runtime.provider()
         ).chat([{ role: 'user', content: 'Reply with OK.' }], 'connection_test');
         setNotice('连接成功');
-      } else if (route.params?.onboarding) navigation.replace('Create');
-      else {
+      } else if (route.params?.onboarding) {
+        if (route.params.skipTheme) navigation.replace('Create');
+        else navigation.replace('Theme', { onboarding: true, autoGenerate: true });
+      } else {
         setNotice('已保存');
       }
     } catch (e) {

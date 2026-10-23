@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -10,6 +11,7 @@ import { useRuntime } from './context';
 import { Button, Card, ErrorText, Heading, Note, Page } from './components';
 import type { ScreenProps } from './navigation';
 export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const [bytes, setBytes] = useState<Uint8Array>();
   const [preview, setPreview] = useState<BundleManifest>();
@@ -100,7 +102,9 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
       {notice ? <Note>{notice}</Note> : null}
       {preview ? (
         <Card>
-          <Text style={{ fontSize: 20, fontWeight: '600' }}>{preview.character.persona.name}</Text>
+          <Text style={{ color: palette.ink, fontSize: 20, fontWeight: '600' }}>
+            {preview.character.persona.name}
+          </Text>
           <Note>{preview.character.persona.identity}</Note>
           <Note>
             {preview.messages.length} 条对话 · {preview.memories.length} 条记忆 ·{' '}

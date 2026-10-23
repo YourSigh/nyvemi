@@ -111,3 +111,18 @@ it('does not overwrite the current theme for uncertain or invalid answers', asyn
   await expect(service.interpret('x'.repeat(501))).rejects.toThrow();
   expect(await service.load()).toEqual(current);
 });
+
+it('remembers the opening color answer before BYOK setup without making any API request', async () => {
+  const { store, service, calls } = await fixture(defaultPreference);
+  await service.rememberOpening('  淡蓝色，安静一点  ');
+  expect(
+    await new ThemeService(store, async () => {
+      throw new Error('no key');
+    }).opening(),
+  ).toBe('淡蓝色，安静一点');
+  await expect(service.rememberOpening(' ')).rejects.toThrow();
+  expect(await service.opening()).toBe('淡蓝色，安静一点');
+  expect(calls).toHaveLength(0);
+  await service.clearOpening();
+  expect(await service.opening()).toBeUndefined();
+});

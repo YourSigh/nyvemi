@@ -1,3 +1,4 @@
+import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { AppState, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,6 +14,7 @@ export function NotificationSetup({
   characterId: string;
   onEnabled?: () => void;
 }) {
+  const palette = usePalette();
   const runtime = useRuntime();
   const [allowed, setAllowed] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -60,7 +62,7 @@ export function NotificationSetup({
   );
   return (
     <Card>
-      <Text style={{ fontSize: 18, fontWeight: '600' }}>通知与主动来信</Text>
+      <Text style={{ color: palette.ink, fontSize: 18, fontWeight: '600' }}>通知与主动来信</Text>
       <Note>{allowed ? '系统与角色来信通知：已开启' : '系统通知或角色来信渠道：未开启'}</Note>
       <Note>{reason}</Note>
       <Note>{latest}</Note>

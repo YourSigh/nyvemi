@@ -1,5 +1,5 @@
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useEffect, useState, type PropsWithChildren } from 'react';
+import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -10,17 +10,11 @@ import {
   View,
   type TextInputProps,
 } from 'react-native';
-export const palette = {
-  background: '#FFF7FA',
-  paper: '#FFFFFF',
-  ink: '#49353F',
-  muted: '#957482',
-  accent: '#B94776',
-  tint: '#FCE4EE',
-  line: '#F2DCE6',
-  error: '#AA405D',
-};
+import { usePalette } from '../theme/context';
+import type { Palette } from '../theme/model';
 export function Page({ children }: PropsWithChildren) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <KeyboardAwareScrollView
       bottomOffset={24}
@@ -33,12 +27,18 @@ export function Page({ children }: PropsWithChildren) {
   );
 }
 export function Heading({ children }: PropsWithChildren) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return <Text style={styles.heading}>{children}</Text>;
 }
 export function Note({ children }: PropsWithChildren) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return <Text style={styles.note}>{children}</Text>;
 }
 export function Card({ children }: PropsWithChildren) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return <View style={styles.card}>{children}</View>;
 }
 export function Button({
@@ -52,6 +52,8 @@ export function Button({
   disabled?: boolean;
   secondary?: boolean;
 }) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <Pressable
       accessibilityRole="button"
@@ -65,6 +67,8 @@ export function Button({
   );
 }
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -78,6 +82,8 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
   );
 }
 export function ErrorText({ text }: { text: string }) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return text ? (
     <Text accessibilityRole="alert" style={styles.error}>
       {text}
@@ -85,6 +91,8 @@ export function ErrorText({ text }: { text: string }) {
   ) : null;
 }
 export function Busy({ label = '正在准备…' }: { label?: string }) {
+  const palette = usePalette();
+  const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <View style={styles.busy}>
       <ActivityIndicator color={palette.accent} />
@@ -93,6 +101,7 @@ export function Busy({ label = '正在准备…' }: { label?: string }) {
   );
 }
 export function Avatar({ name, uri, size = 42 }: { name: string; uri?: string; size?: number }) {
+  const palette = usePalette();
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [uri]);
   return uri && !failed ? (
@@ -119,45 +128,46 @@ export function Avatar({ name, uri, size = 42 }: { name: string; uri?: string; s
     </View>
   );
 }
-const styles = StyleSheet.create({
-  page: {
-    padding: 22,
-    gap: 16,
-    paddingBottom: 48,
-    backgroundColor: palette.background,
-    flexGrow: 1,
-  },
-  heading: { fontSize: 27, fontWeight: '700', color: palette.ink, marginTop: 12 },
-  note: { fontSize: 14, lineHeight: 23, color: palette.muted },
-  card: {
-    padding: 18,
-    gap: 12,
-    backgroundColor: palette.paper,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: palette.line,
-  },
-  button: {
-    paddingVertical: 15,
-    paddingHorizontal: 18,
-    borderRadius: 14,
-    backgroundColor: palette.accent,
-    alignItems: 'center',
-    minHeight: 48,
-  },
-  secondary: { backgroundColor: palette.tint },
-  buttonText: { color: 'white', fontSize: 15, fontWeight: '600' },
-  field: { gap: 8 },
-  label: { fontSize: 14, color: palette.ink, fontWeight: '500' },
-  input: {
-    backgroundColor: palette.paper,
-    borderWidth: 1,
-    borderColor: palette.line,
-    borderRadius: 12,
-    padding: 13,
-    fontSize: 16,
-    color: palette.ink,
-  },
-  error: { color: palette.error, lineHeight: 22 },
-  busy: { padding: 24, gap: 12, alignItems: 'center' },
-});
+const createStyles = (palette: Palette) =>
+  StyleSheet.create({
+    page: {
+      padding: 22,
+      gap: 16,
+      paddingBottom: 48,
+      backgroundColor: palette.background,
+      flexGrow: 1,
+    },
+    heading: { fontSize: 27, fontWeight: '700', color: palette.ink, marginTop: 12 },
+    note: { fontSize: 14, lineHeight: 23, color: palette.muted },
+    card: {
+      padding: 18,
+      gap: 12,
+      backgroundColor: palette.paper,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: palette.line,
+    },
+    button: {
+      paddingVertical: 15,
+      paddingHorizontal: 18,
+      borderRadius: 14,
+      backgroundColor: palette.accent,
+      alignItems: 'center',
+      minHeight: 48,
+    },
+    secondary: { backgroundColor: palette.tint },
+    buttonText: { color: palette.onAccent, fontSize: 15, fontWeight: '600' },
+    field: { gap: 8 },
+    label: { fontSize: 14, color: palette.ink, fontWeight: '500' },
+    input: {
+      backgroundColor: palette.paper,
+      borderWidth: 1,
+      borderColor: palette.line,
+      borderRadius: 12,
+      padding: 13,
+      fontSize: 16,
+      color: palette.ink,
+    },
+    error: { color: palette.error, lineHeight: 22 },
+    busy: { padding: 24, gap: 12, alignItems: 'center' },
+  });

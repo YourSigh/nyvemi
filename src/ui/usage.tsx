@@ -1,8 +1,9 @@
+import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Field, Heading, Note, Page, palette } from './components';
+import { Button, Card, ErrorText, Field, Heading, Note, Page } from './components';
 import {
   deepSeekPrices,
   type TokenPrice,
@@ -10,6 +11,7 @@ import {
   type UsageSummary,
 } from '../usage/ledger';
 export function UsageScreen() {
+  const palette = usePalette();
   const runtime = useRuntime();
   const [period, setPeriod] = useState<'today' | 'month' | 'all'>('month');
   const [summary, setSummary] = useState<UsageSummary[]>([]);
@@ -109,14 +111,14 @@ export function UsageScreen() {
       ) : null}
       {summary.map((s) => (
         <Card key={`${s.endpoint}:${s.model}:${s.currency}`}>
-          <Text style={{ fontSize: 17, color: palette.ink, fontWeight: '600' }}>{s.model}</Text>
+          <Text style={{ color: palette.ink, fontSize: 17, fontWeight: '600' }}>{s.model}</Text>
           <Note>{s.endpoint}</Note>
-          <Text style={{ fontSize: 28, color: palette.accent }}>
+          <Text style={{ color: palette.accent, fontSize: 28 }}>
             {s.currency === '未计价'
               ? '待配置单价'
               : `${s.currency === 'CNY' ? '¥' : '$'}${s.estimatedCost.toFixed(6)}`}
           </Text>
-          <Text>
+          <Text style={{ color: palette.ink }}>
             已知输入 {s.inputTokens.toLocaleString()} · 输出 {s.outputTokens.toLocaleString()} token
           </Text>
           <Note>
@@ -198,14 +200,14 @@ export function UsageScreen() {
       />
       {recent.map((r) => (
         <Card key={r.requestId}>
-          <Text>
+          <Text style={{ color: palette.ink }}>
             {purposeLabel(r.purpose)} · {r.model}
           </Text>
           <Note>
             {new Date(r.startedAt).toLocaleString()} · {(r.duration / 1000).toFixed(1)}s ·{' '}
             {r.success ? '完成' : '失败 / 中断'}
           </Note>
-          <Text>
+          <Text style={{ color: palette.ink }}>
             输入 {r.inputTokens ?? '未知'} / 输出 {r.outputTokens ?? '未知'} token
           </Text>
           <Note>
