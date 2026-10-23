@@ -13,7 +13,7 @@ import { migrate, SQLiteStore } from '../src/storage/store';
 import { TestDatabase } from './database';
 import type { NotificationRecord } from '../src/domain/models';
 
-it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1')(
+it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1' || process.env.NYVEMI_LIVE_FOCUS === 'memory')(
   'validates a bounded real DeepSeek interview/chat/memory/proactive flow',
   async () => {
     const db = new TestDatabase();
@@ -128,6 +128,8 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1')(
         requests: metrics.length,
         usage: await ledger.summary(),
         replies,
+        memories: await store.list('memories'),
+        intentions: await store.list('intentions'),
         evidence:
           'Real HTTP provider + isolated SQLite; notification gateway is a test double. Not Android delivery or elapsed-background acceptance.',
       };
@@ -138,4 +140,76 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1')(
     }
   },
   900000,
+);
+
+it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1' || process.env.NYVEMI_LIVE_FOCUS !== 'memory')(
+  'inspects real model preference extraction with one request',
+  async () => {
+    const db = new TestDatabase();
+    await migrate(db);
+    const store = new SQLiteStore(db);
+    const provider = new OpenAICompatibleProvider(
+      {
+        ...deepSeekPreset,
+        baseUrl: process.env.NYVEMI_TEST_BASE_URL!,
+        model: process.env.NYVEMI_TEST_MODEL!,
+      },
+      {
+        get: async () => process.env.NYVEMI_TEST_API_KEY!,
+        set: async () => {},
+        remove: async () => {},
+      },
+      async () => {},
+      async (input, init) => {
+        const response = await fetch(input, init);
+        const body = (await response.clone().json()) as {
+          choices?: { message?: { content?: string } }[];
+        };
+        mkdirSync('artifacts', { recursive: true });
+        writeFileSync(
+          'artifacts/live-memory-raw.json',
+          JSON.stringify({ content: body.choices?.[0]?.message?.content }, null, 2),
+        );
+        return response;
+      },
+    );
+    const c = await new CharacterService(store, async () => provider).create(
+      { ...defaultAnswers, name: '测试桶砸' },
+      true,
+    );
+    const user = {
+      id: 'test-user',
+      characterId: c.id,
+      role: 'user' as const,
+      content:
+        '今天上班烦死了。我最烦 AI 每句话最后问我要不要继续。下午还有个很重要的代码治理会议，晚上想跟你聊聊结果。',
+      createdAt: Date.now(),
+      origin: 'chat' as const,
+      status: 'complete' as const,
+    };
+    await store.put('messages', user);
+    const extraction = new MemoryExtractionService(
+      store,
+      async () => provider,
+      new Diagnostics(store),
+    );
+    await extraction.enqueue(c.id, user, []);
+    await extraction.drain();
+    mkdirSync('artifacts', { recursive: true });
+    writeFileSync(
+      'artifacts/live-memory-result.json',
+      JSON.stringify(
+        {
+          memories: await store.list('memories'),
+          intentions: await store.list('intentions'),
+          jobs: await store.list('extractions'),
+          persona: (await store.get('characters', c.id))?.persona,
+        },
+        null,
+        2,
+      ),
+    );
+    expect((await store.list('memories')).some((m) => m.type === 'relationship')).toBe(true);
+  },
+  120000,
 );

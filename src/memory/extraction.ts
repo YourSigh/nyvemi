@@ -90,7 +90,7 @@ export class MemoryExtractionService {
             [
               {
                 role: 'system',
-                content: `提取有长期价值的事实、共同事件、用户对说话方式的反馈、以后值得问的事。不要把寒暄存为记忆；不要捏造用户未说的事实。importance 在 0..1。关系反馈写成用户偏好，personaFeedback 写成简短可执行的表达偏好。只有用户明确说明事情已结束或要求停止跟进，才完成已有 open loop，不能因为助手问过就完成。用户明确要求不要主动联系时，proactivityPreference 设为 pause；只是反感模板或结尾提问时设为 unchanged。不要自行恢复主动联系。只输出 JSON，示例：{"memories":[{"type":"semantic","content":"用户做 Android 开发","importance":0.7,"expiresInDays":null}],"openLoops":[{"topic":"下午的会议","reason":"用户可能愿意分享结果","importance":0.72,"earliestInMinutes":180,"latestInMinutes":720}],"relationshipUpdates":[],"personaFeedback":[],"completedOpenLoopIds":[]}。无相应信息则空数组。open loop 只记录未来值得问的时间窗口，不预先生成发送文案。当前时间 ${new Date(now).toISOString()}。已有未完成事件：${JSON.stringify(loops.map((m) => ({ id: m.id, content: m.content })))}`,
+                content: `提取有长期价值的事实、共同事件、用户对说话方式的反馈、以后值得问的事。不要把寒暄存为记忆；不要捏造用户未说的事实。importance 在 0..1。用户对说话方式的明确喜恶必须写入 relationshipUpdates，personaFeedback 同时写简短可执行的表达偏好。relationshipUpdates 的每项与 memories 的事实结构一致：content 字符串、importance 数字、expiresInDays 为数字或 null，不使用 preference/direction 等其它字段。只有用户明确说明事情已结束或要求停止跟进，才完成已有 open loop，不能因为助手问过就完成。用户明确要求不要主动联系时，proactivityPreference 设为 pause；只是反感模板或结尾提问时设为 unchanged。不要自行恢复主动联系。只输出 JSON，示例：{"memories":[{"type":"semantic","content":"用户做 Android 开发","importance":0.7,"expiresInDays":null}],"openLoops":[{"topic":"下午的会议","reason":"用户可能愿意分享结果","importance":0.72,"earliestInMinutes":180,"latestInMinutes":720}],"relationshipUpdates":[{"content":"用户讨厌助手每句结尾问要不要继续","importance":0.9,"expiresInDays":null}],"personaFeedback":["不要每句以要不要继续结尾"],"completedOpenLoopIds":[]}。无相应信息则空数组。open loop 只记录未来值得问的时间窗口，不预先生成发送文案。当前时间 ${new Date(now).toISOString()}。已有未完成事件：${JSON.stringify(loops.map((m) => ({ id: m.id, content: m.content })))}`,
               },
               {
                 role: 'user',
@@ -153,6 +153,10 @@ export class MemoryExtractionService {
           item.expiresInDays === null ? undefined : now + item.expiresInDays * 86400000,
           source,
         );
+      // Expression feedback is relationship knowledge even if the model only fills personaFeedback.
+      for (const feedback of validated.personaFeedback)
+        if (feedback.trim() && !validated.relationshipUpdates.length)
+          await repo.upsert(characterId, 'relationship', feedback, 0.75, now, undefined, source);
       for (const loop of validated.openLoops) {
         if (loop.importance < 0.5 || loop.latestInMinutes <= loop.earliestInMinutes) continue;
         const active = await tx.list('intentions', characterId, 10000);

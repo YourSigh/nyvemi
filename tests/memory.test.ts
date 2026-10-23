@@ -181,3 +181,18 @@ it('cancels follow-ups when the user forgets their source loop', async () => {
   await repo.remove(m.id);
   expect((await store.get('intentions', 'i'))?.status).toBe('completed');
 });
+
+it('persists expression feedback as relationship knowledge when the model leaves relationshipUpdates empty', async () => {
+  const { store, repo } = await setup();
+  await new MemoryExtractionService(store, async () => unavailable, new Diagnostics(store)).apply(
+    'c',
+    { ...empty, personaFeedback: ['不要每句结尾问要不要继续'] },
+    1000,
+    'feedback',
+  );
+  expect(
+    (await repo.list('c', 1000)).some(
+      (m) => m.type === 'relationship' && m.content.includes('继续'),
+    ),
+  ).toBe(true);
+});

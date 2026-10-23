@@ -26,6 +26,7 @@ const result = spawnSync(
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_LIVE_FOCUS: process.argv.includes('--focus-memory') ? 'memory' : 'full',
       NYVEMI_TEST_API_KEY: key,
       NYVEMI_TEST_BASE_URL: base,
       NYVEMI_TEST_MODEL: local.NYVEMI_TEST_MODEL || 'deepseek-flash',
