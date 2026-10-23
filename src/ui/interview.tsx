@@ -1,3 +1,4 @@
+import { useHeaderHeight } from '@react-navigation/elements';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -9,6 +10,7 @@ import { Avatar, Button, Card, ErrorText, Field, Note, palette, Busy } from './c
 import type { ScreenProps } from './navigation';
 export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
   const runtime = useRuntime();
+  const headerHeight = useHeaderHeight();
   const [draft, setDraft] = useState<InterviewDraft>();
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,7 +65,11 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
           />
         </View>
       </View>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior="padding"
+        keyboardVerticalOffset={headerHeight}
+      >
         <ScrollView
           ref={scroll}
           keyboardShouldPersistTaps="handled"

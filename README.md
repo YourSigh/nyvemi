@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation, not a completed real-device field trial. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. Real BYOK model behavior, full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
+This is an early MVP implementation, not a completed real-device field trial. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. A real DeepSeek test has passed the complete 12-round interview, persona generation, streamed chat, relationship-memory extraction and contextual proactive generation against isolated SQLite. Notification delivery in that test is a test double, with a simulated clock. Full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
 
 ## Local-first and BYOK
 
@@ -58,7 +58,7 @@ A heartbeat first cleans expired data and evaluates local gates: enabled setting
 
 Only a sufficiently strong candidate generates a short contextual message. The engine checks activity and intention state again after generation. A persistent notification outbox makes delivery recoverable and idempotent. Tapping a notification, or opening its character chat, promotes the pending proactive message into normal conversation history. Developer Mode explains each evaluated decision.
 
-Default: proactive messages off; quiet hours 23:00–08:00; at most 2 per character/day; 180-minute character interval; 30-minute recent-activity suppression. This MVP also enforces a global cap of 4/day and 30 minutes between different characters. These are conservative hard caps in this version.
+New characters enable proactive messages according to the interview initiative answer; an explicit opt-out remains off. Existing settings are preserved. Default quiet hours: 23:00–08:00; at most 2 per character/day; 180-minute character interval; 30-minute recent-activity suppression. This MVP also enforces a global cap of 4/day and 30 minutes between different characters. These are conservative hard caps in this version.
 
 ## Experience engine
 
@@ -90,7 +90,7 @@ DeepSeek fixed-tariff presets were checked on 2026-10-22 against the [official R
 
 In character settings, choose **开启常驻陪伴** while the app is foregrounded. This is separate from **允许她主动来信**. A private, silent ongoing notification names the character and reflects actual memory processing, experience ingestion or message generation; idle/quiet/offline states are explicit. The notification opens that character's chat and has **结束常驻**. Ending this session preserves ordinary WorkManager behavior; disable proactive messaging to pause all spontaneous contact.
 
-The local Kotlin service and globally registered Headless JS task use the same visible-session pattern studied in the local countdown project. A minute loop checks status, with at most one local cycle every ten minutes; model calls still require normal intent and interruption gates. Android may kill/restrict the service and force-stop still wins. The session uses a wake lock while running and increases battery consumption. No silent audio or exact-alarm tricks are used. It is off until explicitly started and is device-specific, not exported with the character.
+The local Kotlin service and globally registered Headless JS task use the same visible-session pattern studied in the local countdown project. A minute loop checks status, with at most one local cycle every ten minutes; model calls still require normal intent and interruption gates. Android may kill/restrict the service and force-stop still wins. The session uses a wake lock while running and increases battery consumption. No silent audio or exact-alarm tricks are used. Completing creation starts it when the interview allows initiative and notification permission is granted; existing characters can enable it in settings. Manually ending a session does not restart it automatically. The session is device-specific and is not exported with the character.
 
 Android 14+ uses `specialUse` with a stated use case, since this app does not relay text messages between devices. This declaration is subject to Google Play review; it is not a claim of approval. See [Android foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types).
 
@@ -102,7 +102,7 @@ Upload a local avatar in character settings; otherwise an initial-based placehol
 
 A `.nyvemi` v1 file is a ZIP containing `manifest.json` and, optionally, `avatar.bin`. It includes Persona, relationship memories/state, interests, conversation, memory, open loops, future intentions, experiences, notification history, queued extraction and character settings. It excludes Provider config, API keys, diagnostics and device-specific paths.
 
-Import validates ownership/references and writes a new character transactionally, so existing characters are preserved. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 20 MB ZIP, 12 MB JSON, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
+The UI supports one current companion. Import is available after confirming a reset of the existing companion; it never silently overwrites one. The underlying bundle importer validates ownership/references and writes transactionally. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 20 MB ZIP, 12 MB JSON, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
 
 ## Architecture
 
@@ -145,7 +145,7 @@ npm run format:check
 ./scripts/verify.sh
 ```
 
-Tests use Node's SQLite and deterministic providers/HTTP fixtures. They do not call paid APIs or contain real keys. Developer Mode includes local notification testing, heartbeat history, usage, prompts, queue retry, and a Debug-only real Worker trigger. A local test notification is explicitly labeled and counts toward notification history/caps.
+Normal tests use Node's SQLite and deterministic providers/HTTP fixtures. They do not call paid APIs or contain real keys. `npm run test:live` is a separate, explicitly billable test that reads an ignored `.env` or `.env.local`, using `NYVEMI_TEST_API_KEY` (or `DEEPSEEK_API_KEY`), with optional `NYVEMI_TEST_MODEL` / `NYVEMI_TEST_BASE_URL`. See `.env.example`. Keys never use an `EXPO_PUBLIC_` prefix or enter the APK. Live test output uses synthetic dialogue and is saved under ignored `artifacts/`. Developer Mode includes local notification testing, heartbeat history, usage, prompts, queue retry, and a Debug-only real Worker trigger. A local test notification is explicitly labeled and counts toward notification history/caps.
 
 ## Build
 
@@ -173,3 +173,9 @@ The generated Expo project's release build currently uses the development signin
 Real-device background reliability/acceptance → release signing → retrieval quality/local embeddings → richer experience appraisal → optional encrypted bundles → additional provider/image adapters.
 
 Live2D, 3D, real-time voice, QQ/WeChat, phone-control agents, browser agents, social networks, accounts, payments, servers, cloud sync, agent swarms and dynamic APK generation are outside this MVP.
+
+## Settings and restarting a companion
+
+Use the gear at the top left of Chat. The notification section shows app/channel availability, the current reason a proactive message may be suppressed, and the latest heartbeat result. It links directly to Android app notification settings and battery optimization settings, with a clearly labeled system-notification test that does not call a model or write a chat message. Permission is requested on first app entry; after a denial, the system settings link remains available. Proactive toggles save immediately.
+
+There is no “meet another character” action. **清空当前角色并重新创建** first explains the irreversible scope, then requires the exact current name before the final action becomes enabled. It removes the current persona, conversation, memories, experiences, intentions, related diagnostics/notification records, avatar, and desktop shortcut access. Provider credentials and the usage ledger remain. Exported backup files are not deleted. SQLite erasure markers prevent late asynchronous results from resurrecting erased state; busy conversations/background tasks must finish before reset.

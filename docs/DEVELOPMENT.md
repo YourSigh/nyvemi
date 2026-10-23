@@ -111,3 +111,16 @@
 - 文件：artifacts/Nyvemi-0.2.0-arm64-preview.apk，SHA-256：5257df902d07f74c08617c585ebbad7aa8cd49e2565f8b81d0668f3ad62a59e6。
 - 常驻通知点击/后台维持约 3 分钟/结束/重开不复活已实测；完整 12 轮 UI 与真实模型、数小时后台尚待验收，见 ACCEPTANCE.md。没有调用用户付费模型。
 - 临时本地模型测试服务已停止；不将测试配置或应用私有数据打入 APK。本批只本地 commit，未 push。
+
+## 0.2.1 用户试用反馈修复（2026-10-23）
+
+- 重新审计现有状态后保留人格/记忆/主动引擎。参考 countdown 的 keyboard-controller 根 Provider、聊天键盘布局与 Android 通知设置跳转；未修改 countdown。
+- SDK 55 对应 keyboard-controller 1.20.7 / Reanimated 4.2.1 / Worklets 0.7.4。通用表单自动滚动到焦点，聊天与访谈使用键盘动画避让；移除根布局重复顶部安全区。访谈考虑原生导航栏高度；推荐选项自动换行全部展开。
+- 首次进入 App 申请通知权限；聊天左上角显式设置入口，设置页显示系统/渠道状态、当前来信抑制原因和最近决策，提供系统通知设置、电池说明与无模型通知测试。主动开关立即保存，普通创建依据访谈主动偏好启用，显式拒绝仍关闭；旧设置保留。
+- 去掉“认识新角色”和角色切换界面。重建必须先展开删除说明，再完整输入当前角色名。清理当前角色关联数据、通知、头像与桌面入口；保留 Provider/密钥/费用账本。SQLite v3 迁移加入删除标记，旧异步结果不能复活已删角色；任务占用时拒绝删除并释放已取得的锁。
+- 新增忽略的本地 .env.local 与可提交的 .env.example，用户将 Key 放入忽略的 .env。test:live 从两者读取非空值，只允许发送到 DeepSeek 官方 origin，不使用 EXPO*PUBLIC*，不自动随常规测试执行。构建禁用 dotenv；APK 和跟踪源码已扫描未含测试 Key。
+- 真实模型测试首次发现抽取提示未定义关系反馈字段，模型可能返回 preference/direction 等不兼容结构；补全字段示例，且只有模型未给显式 relationshipUpdates 时才从 personaFeedback 补充关系记忆，避免成对重复。
+- 修复后真实 deepseek-flash：完整 12 轮访谈 → 人格 → SSE 聊天 → 关系记忆/Open Loop → 主动消息生成 → 点击入聊天的领域流程通过。该次 17 个请求，输入 5997 / 输出 1049 / 输入内缓存 1664 Token；本地账本未配置单价，不能将未计价总和 0 当成免费。测试对话均为专门构造的数据，通知 Gateway 与时间推进为测试环境，不代表 Android 几小时后台送达。
+- lint / typecheck / 61 项常规测试通过，2 项真实模型测试默认跳过；单独 full live 测试 1 项通过，focused memory 测试 1 项通过。格式检查通过。最终 Debug 6s / Release 19s 构建通过，Release 已安装到 API 35 ARM64 模拟器。
+- 0.2.1（versionCode 3）侧载包 artifacts/Nyvemi-0.2.1-arm64-preview.apk，开发签名、内嵌 JS、v2 签名校验通过；SHA-256：bcbbc7b06b066fcde27c25b2065cd1f76c6c0936dfe04f01a66a4faa13d8b728。
+- 为 UI 走查临时构建 app.nyvemi.qa（不同 applicationId、Nyvemi QA 名称）的独立安装包，不覆盖当前角色；仅改了忽略的原生生成目录，原始原生配置已恢复。测试包不包含密钥或已有应用数据。
