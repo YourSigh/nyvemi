@@ -4,6 +4,7 @@ import { Diagnostics } from '../storage/diagnostics';
 import { OpenAICompatibleProvider } from '../providers/openai';
 import { type LLMProvider } from '../providers/provider';
 import type { ProviderConfig } from '../domain/models';
+import { ThemeService } from '../theme/service';
 import { ActivityMonitor } from '../presence/activity';
 import { PersonaInterview } from '../characters/interview';
 import { CharacterService } from '../characters/service';
@@ -83,6 +84,7 @@ async function createRuntime() {
     usage,
     provider,
     saveProvider,
+    themes: new ThemeService(store, provider),
     memories,
     retriever,
     extraction,
