@@ -16,7 +16,8 @@
     "format": "prettier --write App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
     "format:check": "prettier --check App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
     "verify": "bash scripts/verify.sh",
-    "prebuild:android": "expo prebuild --platform android"
+    "prebuild:android": "expo prebuild --platform android",
+    "test:live": "node scripts/test-live.cjs"
   },
   "dependencies": {
     "@react-navigation/native": "^7.3.14",
@@ -38,8 +39,11 @@
     "fflate": "^0.8.3",
     "react": "19.2.0",
     "react-native": "0.83.10",
+    "react-native-keyboard-controller": "1.20.7",
+    "react-native-reanimated": "4.2.1",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
+    "react-native-worklets": "0.7.4",
     "zod": "^3.25.76"
   },
   "devDependencies": {

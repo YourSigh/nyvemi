@@ -1,15 +1,6 @@
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AppState,
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { AppState, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Character, Message } from '../domain/models';
@@ -105,7 +96,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     }
   };
   return (
-    <SafeAreaView edges={['bottom']} style={s.root}>
+    <SafeAreaView edges={['top', 'bottom']} style={s.root}>
       <View style={s.header}>
         <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} />
         <Pressable
@@ -125,11 +116,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           <Text style={s.more}>···</Text>
         </Pressable>
       </View>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
         <FlatList
           ref={list}
           data={messages}
@@ -141,6 +128,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               autoScroll.current = false;
             }
           }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           ListHeaderComponent={
             hasMore ? (
               <Pressable

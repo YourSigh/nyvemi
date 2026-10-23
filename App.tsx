@@ -1,5 +1,6 @@
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, View } from 'react-native';
 import { resumeCompanionPresence } from './src/native/presence';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
@@ -10,7 +11,7 @@ import { DeveloperScreen } from './src/ui/developer';
 import { TransferScreen } from './src/ui/transfer';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { getRuntime, type Runtime } from './src/application/runtime';
 import { RuntimeContext } from './src/ui/context';
@@ -75,119 +76,121 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: palette.background }}>
-        {error ? (
-          <Page>
-            <ErrorText text={error} />
-            <Button
-              title="重试"
-              onPress={() => {
-                setError('');
-                setAttempt((n) => n + 1);
-              }}
-            />
-          </Page>
-        ) : !runtime || !ready ? (
-          <Busy />
-        ) : (
-          <RuntimeContext.Provider value={runtime}>
-            <ScreenErrorBoundary
-              report={() => {
-                void runtime.diagnostics.error('', 'render').catch(() => undefined);
-              }}
-            >
-              <NavigationContainer
-                theme={{
-                  ...DefaultTheme,
-                  colors: {
-                    ...DefaultTheme.colors,
-                    background: palette.background,
-                    card: palette.background,
-                    text: palette.ink,
-                    primary: palette.accent,
-                    border: palette.line,
-                  },
+      <KeyboardProvider>
+        <View style={{ flex: 1, backgroundColor: palette.background }}>
+          {error ? (
+            <Page>
+              <ErrorText text={error} />
+              <Button
+                title="重试"
+                onPress={() => {
+                  setError('');
+                  setAttempt((n) => n + 1);
                 }}
-                linking={{
-                  prefixes: ['nyvemi://'],
-                  config: { screens: { Chat: 'chat/:characterId' } },
+              />
+            </Page>
+          ) : !runtime || !ready ? (
+            <Busy />
+          ) : (
+            <RuntimeContext.Provider value={runtime}>
+              <ScreenErrorBoundary
+                report={() => {
+                  void runtime.diagnostics.error('', 'render').catch(() => undefined);
                 }}
               >
-                <Stack.Navigator
-                  initialRouteName={initial ? 'Chat' : resumeInterview ? 'Create' : 'Welcome'}
-                  screenOptions={{
-                    headerShadowVisible: false,
-                    headerBackTitle: '返回',
-                    contentStyle: { backgroundColor: palette.background },
+                <NavigationContainer
+                  theme={{
+                    ...DefaultTheme,
+                    colors: {
+                      ...DefaultTheme.colors,
+                      background: palette.background,
+                      card: palette.background,
+                      text: palette.ink,
+                      primary: palette.accent,
+                      border: palette.line,
+                    },
+                  }}
+                  linking={{
+                    prefixes: ['nyvemi://'],
+                    config: { screens: { Chat: 'chat/:characterId' } },
                   }}
                 >
-                  <Stack.Screen
-                    name="Usage"
-                    component={UsageScreen}
-                    options={{ title: '用量与费用' }}
-                  />
-                  <Stack.Screen
-                    name="Welcome"
-                    component={WelcomeScreen}
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="Provider"
-                    component={ProviderScreen}
-                    options={{ title: '模型连接' }}
-                  />
-                  <Stack.Screen
-                    name="Create"
-                    component={InterviewScreen}
-                    options={{ title: '创建角色' }}
-                  />
-                  <Stack.Screen
-                    name="Generate"
-                    component={GenerateScreen}
-                    options={{ title: '认识她', headerBackVisible: false, gestureEnabled: false }}
-                  />
-                  <Stack.Screen
-                    name="Chat"
-                    component={ChatScreen}
-                    initialParams={initial ? { characterId: initial } : undefined}
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="Transfer"
-                    component={TransferScreen}
-                    options={{ title: '角色迁移' }}
-                  />
-                  <Stack.Screen
-                    name="Developer"
-                    component={DeveloperScreen}
-                    options={{ title: 'Developer Mode' }}
-                  />
-                  <Stack.Screen
-                    name="Experiences"
-                    component={ExperiencesScreen}
-                    options={{ title: '经历' }}
-                  />
-                  <Stack.Screen
-                    name="Memory"
-                    component={MemoryScreen}
-                    options={{ title: '记忆' }}
-                  />
-                  <Stack.Screen
-                    name="Settings"
-                    component={SettingsScreen}
-                    options={{ title: '关于她' }}
-                  />
-                  <Stack.Screen
-                    name="Characters"
-                    component={CharactersScreen}
-                    options={{ title: '角色' }}
-                  />
-                </Stack.Navigator>
-              </NavigationContainer>
-            </ScreenErrorBoundary>
-          </RuntimeContext.Provider>
-        )}
-      </SafeAreaView>
+                  <Stack.Navigator
+                    initialRouteName={initial ? 'Chat' : resumeInterview ? 'Create' : 'Welcome'}
+                    screenOptions={{
+                      headerShadowVisible: false,
+                      headerBackTitle: '返回',
+                      contentStyle: { backgroundColor: palette.background },
+                    }}
+                  >
+                    <Stack.Screen
+                      name="Usage"
+                      component={UsageScreen}
+                      options={{ title: '用量与费用' }}
+                    />
+                    <Stack.Screen
+                      name="Welcome"
+                      component={WelcomeScreen}
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="Provider"
+                      component={ProviderScreen}
+                      options={{ title: '模型连接' }}
+                    />
+                    <Stack.Screen
+                      name="Create"
+                      component={InterviewScreen}
+                      options={{ title: '创建角色' }}
+                    />
+                    <Stack.Screen
+                      name="Generate"
+                      component={GenerateScreen}
+                      options={{ title: '认识她', headerBackVisible: false, gestureEnabled: false }}
+                    />
+                    <Stack.Screen
+                      name="Chat"
+                      component={ChatScreen}
+                      initialParams={initial ? { characterId: initial } : undefined}
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="Transfer"
+                      component={TransferScreen}
+                      options={{ title: '角色迁移' }}
+                    />
+                    <Stack.Screen
+                      name="Developer"
+                      component={DeveloperScreen}
+                      options={{ title: 'Developer Mode' }}
+                    />
+                    <Stack.Screen
+                      name="Experiences"
+                      component={ExperiencesScreen}
+                      options={{ title: '经历' }}
+                    />
+                    <Stack.Screen
+                      name="Memory"
+                      component={MemoryScreen}
+                      options={{ title: '记忆' }}
+                    />
+                    <Stack.Screen
+                      name="Settings"
+                      component={SettingsScreen}
+                      options={{ title: '关于她' }}
+                    />
+                    <Stack.Screen
+                      name="Characters"
+                      component={CharactersScreen}
+                      options={{ title: '角色' }}
+                    />
+                  </Stack.Navigator>
+                </NavigationContainer>
+              </ScreenErrorBoundary>
+            </RuntimeContext.Provider>
+          )}
+        </View>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

@@ -1,11 +1,9 @@
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useEffect, useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -24,18 +22,14 @@ export const palette = {
 };
 export function Page({ children }: PropsWithChildren) {
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAwareScrollView
+      bottomOffset={24}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      contentContainerStyle={styles.page}
     >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        contentContainerStyle={styles.page}
-      >
-        {children}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      {children}
+    </KeyboardAwareScrollView>
   );
 }
 export function Heading({ children }: PropsWithChildren) {

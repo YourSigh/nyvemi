@@ -1,14 +1,6 @@
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useEffect, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { interviewQuestions, type InterviewDraft } from '../characters/interview';
 import { defaultAnswers, type CharacterAnswers } from '../characters/service';
@@ -71,10 +63,7 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
           />
         </View>
       </View>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView
           ref={scroll}
           keyboardShouldPersistTaps="handled"
@@ -198,20 +187,18 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                 {busy ? (
                   <Note>正在听你说，也在整理下一笔…</Note>
                 ) : question?.choices ? (
-                  <ScrollView horizontal keyboardShouldPersistTaps="handled">
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {question.choices.map((c) => (
-                        <Pressable
-                          key={c}
-                          accessibilityRole="button"
-                          onPress={() => setAnswer(c)}
-                          style={s.chip}
-                        >
-                          <Text style={{ color: palette.accent }}>{c}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </ScrollView>
+                  <View style={s.choices}>
+                    {question.choices.map((c) => (
+                      <Pressable
+                        key={c}
+                        accessibilityRole="button"
+                        onPress={() => setAnswer(c)}
+                        style={s.chip}
+                      >
+                        <Text style={{ color: palette.accent }}>{c}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
                 ) : null}
                 <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
@@ -270,5 +257,12 @@ const s = StyleSheet.create({
     fontSize: 16,
     textAlignVertical: 'top',
   },
-  chip: { padding: 10, borderRadius: 12, backgroundColor: palette.tint },
+  choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
+    maxWidth: '100%',
+    flexShrink: 1,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: palette.tint,
+  },
 });
