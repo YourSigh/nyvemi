@@ -271,3 +271,39 @@ it('includes a retried old message after the bounded context window', async () =
     (await store.list('messages', c.id, 200)).filter((m) => m.content === finalRequest),
   ).toHaveLength(1);
 });
+
+it('keeps partial and incomplete multi-part responses out of visible history', async () => {
+  const store = await setup();
+  const c = await new CharacterService(store, async () => fake).create(
+    { ...defaultAnswers, name: '桶' },
+    true,
+  );
+  let service: ChatService;
+  const visible: string[][] = [];
+  const provider: LLMProvider = {
+    ...fake,
+    streamChat: async (_, onDelta) => {
+      onDelta('{"messages":["半句');
+      expect((await service.history(c.id)).filter((m) => m.role === 'assistant')).toHaveLength(0);
+      onDelta('话","第二条"]}');
+      expect((await service.history(c.id)).filter((m) => m.role === 'assistant')).toHaveLength(0);
+      return { content: '{"messages":["半句话","第二条"]}', usage: {} };
+    },
+  };
+  service = new ChatService(
+    store,
+    async () => provider,
+    new Diagnostics(store),
+    undefined,
+    async () => {
+      visible.push(
+        (await service.history(c.id)).filter((m) => m.role === 'assistant').map((m) => m.content),
+      );
+    },
+  );
+  await service.send(c.id, '你好', () => {});
+  expect(visible).toEqual([['半句话']]);
+  expect(
+    (await service.history(c.id)).filter((m) => m.role === 'assistant').map((m) => m.content),
+  ).toEqual(['半句话', '第二条']);
+});

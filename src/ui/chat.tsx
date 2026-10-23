@@ -1,6 +1,16 @@
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Animated,
+  AppState,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import type { PropsWithChildren } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Character, Message } from '../domain/models';
@@ -8,6 +18,37 @@ import { Avatar, Button, ErrorText, palette } from './components';
 import { bridge } from '../native/android';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
+function Arrival({
+  children,
+  messageId,
+  arrivals,
+}: PropsWithChildren<{ messageId: string; arrivals: Set<string> }>) {
+  const animate = useRef(arrivals.has(messageId)).current;
+  const progress = useRef(new Animated.Value(animate ? 0 : 1)).current;
+  useEffect(() => {
+    if (!animate) return;
+    arrivals.delete(messageId);
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: 220,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [animate, progress, arrivals, messageId]);
+  return (
+    <Animated.View
+      style={{
+        opacity: progress,
+        transform: [
+          { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
@@ -18,7 +59,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
   const [draft, setDraft] = useState('');
-  const [preview, setPreview] = useState('');
+  const seen = useRef(new Set<string>());
+  const arrivals = useRef(new Set<string>());
+  const loaded = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const list = useRef<FlatList<Message>>(null);
@@ -26,6 +69,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const sending = useRef(false);
   const refresh = useCallback(async () => {
     const page = await runtime.chat.historyPage(cid, historyLimit);
+    for (const message of page.messages) {
+      if (
+        loaded.current &&
+        !seen.current.has(message.id) &&
+        message.role === 'assistant' &&
+        Date.now() - message.createdAt < 10000
+      )
+        arrivals.current.add(message.id);
+      seen.current.add(message.id);
+    }
+    loaded.current = true;
     setMessages(page.messages);
     setHasMore(page.hasMore);
     const c = await runtime.store.get('characters', cid);
@@ -64,6 +118,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   );
   useEffect(() => {
     setMessages([]);
+    loaded.current = false;
+    seen.current.clear();
+    arrivals.current.clear();
     setHistoryLimit(100);
     autoScroll.current = true;
     return () => {
@@ -84,7 +141,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       await runtime.chat.send(
         cid,
         text,
-        setPreview,
+        () => {},
         () => {
           void refresh().catch(() => setError('读取消息失败'));
         },
@@ -96,7 +153,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     } finally {
       sending.current = false;
       setBusy(false);
-      setPreview('');
       void refresh().catch(() => setError('读取消息失败'));
     }
   };
@@ -119,7 +175,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           style={{ flex: 1 }}
         >
           <Text style={s.name}>{character?.persona.name ?? '正在载入'}</Text>
-          <Text style={s.sub}>此刻，以及对话之外</Text>
+          <Text style={s.sub} accessibilityLiveRegion="polite">
+            {busy ? '正在输入…' : '此刻，以及对话之外'}
+          </Text>
         </Pressable>
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
@@ -135,18 +193,28 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         ) : null}
         <FlatList
           ref={list}
-          data={messages}
+          data={[...messages].reverse()}
+          inverted
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           keyExtractor={(m) => m.id}
           contentContainerStyle={s.messages}
-          onContentSizeChange={() => {
-            if (busy || autoScroll.current) {
-              list.current?.scrollToEnd({ animated: true });
-              autoScroll.current = false;
-            }
+          onLayout={() => {
+            // Keyboard changes the viewport, not the message content size.
+            if (autoScroll.current)
+              requestAnimationFrame(() =>
+                list.current?.scrollToOffset({ offset: 0, animated: false }),
+              );
           }}
+          onContentSizeChange={() => {
+            if (autoScroll.current) list.current?.scrollToOffset({ offset: 0, animated: true });
+          }}
+          onScroll={({ nativeEvent: { contentOffset } }) => {
+            autoScroll.current = contentOffset.y < 80;
+          }}
+          scrollEventThrottle={16}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
-          ListHeaderComponent={
+          ListFooterComponent={
             hasMore ? (
               <Pressable
                 accessibilityRole="button"
@@ -161,47 +229,39 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           }
           ListEmptyComponent={<Text style={s.empty}>从一句随便的话开始吧。</Text>}
           renderItem={({ item: m }) => (
-            <View style={[s.row, m.role === 'user' && s.mine]}>
-              {m.role === 'assistant' ? (
-                <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={32} />
-              ) : null}
-              <View style={{ maxWidth: '80%', gap: 5 }}>
-                <Text style={s.time}>
-                  {new Date(m.createdAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </Text>
-                <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
-                  <Text selectable style={s.message}>
-                    {m.content}
-                  </Text>
-                </View>
-                {m.status === 'error' ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="重试消息"
-                    disabled={busy}
-                    onPress={() => void send(m)}
-                  >
-                    <Text style={{ color: palette.error, fontSize: 12 }}>
-                      未收到回复 · 点此重试
-                    </Text>
-                  </Pressable>
+            <Arrival messageId={m.id} arrivals={arrivals.current}>
+              <View style={[s.row, m.role === 'user' && s.mine]}>
+                {m.role === 'assistant' ? (
+                  <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={32} />
                 ) : null}
-              </View>
-            </View>
-          )}
-          ListFooterComponent={
-            busy ? (
-              <View style={s.row}>
-                <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={32} />
-                <View style={s.bubble}>
-                  <Text style={s.message}>{preview || '···'}</Text>
+                <View style={{ maxWidth: '80%', gap: 5 }}>
+                  <Text style={s.time}>
+                    {new Date(m.createdAt).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                  <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
+                    <Text selectable style={s.message}>
+                      {m.content}
+                    </Text>
+                  </View>
+                  {m.status === 'error' ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="重试消息"
+                      disabled={busy}
+                      onPress={() => void send(m)}
+                    >
+                      <Text style={{ color: palette.error, fontSize: 12 }}>
+                        未收到回复 · 点此重试
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
-            ) : null
-          }
+            </Arrival>
+          )}
         />
         <View style={s.footer}>
           <ErrorText text={error} />
@@ -212,6 +272,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               placeholder="说点什么…"
               value={draft}
               onChangeText={setDraft}
+              onFocus={() => {
+                autoScroll.current = true;
+                requestAnimationFrame(() =>
+                  list.current?.scrollToOffset({ offset: 0, animated: false }),
+                );
+              }}
               multiline
               maxLength={6000}
             />
