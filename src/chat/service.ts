@@ -6,7 +6,7 @@ import { Diagnostics } from '../storage/diagnostics';
 import { buildChatPrompt } from './prompt';
 import { requestedDelay } from './delayed-request';
 const ReplySchema = z.object({
-  messages: z.array(z.string().trim().min(1).max(6000)).min(1).max(4),
+  messages: z.array(z.string().trim().min(1).max(6000)).max(6),
 });
 export function parseReply(raw: string): string[] {
   const trimmed = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
@@ -92,6 +92,10 @@ export class ChatService {
         group.push({ ...message, status: 'complete' });
         groups.set(message.groupId, group);
       }
+    // Silent rounds are complete too: recover their extraction without calling the chat model again.
+    for (const user of messages)
+      if (user.role === 'user' && user.status === 'complete' && user.replyDisposition === 'silence')
+        await this.hooks.afterRound(characterId, user, []);
     for (const [userId, assistant] of groups) {
       const user = await this.store.get('messages', userId);
       if (user?.status === 'complete')
@@ -200,12 +204,18 @@ export class ChatService {
         status: 'pending',
         groupId: user!.id,
       }));
-      user = { ...user, status: 'complete' };
+      user = {
+        ...user,
+        status: 'complete',
+        replyDisposition: replies.length ? 'reply' : 'silence',
+      };
       await this.store.atomic(async (tx) => {
         await tx.put('messages', user!);
         for (const message of group) await tx.put('messages', message);
       });
       hasReply = true;
+      onPreview('');
+      onSaved();
       for (let n = 0; n < group.length; n++) {
         if (n > 0) await this.pause(400 + Math.floor(Math.random() * 600));
         const message: Message = { ...group[n], status: 'complete' };

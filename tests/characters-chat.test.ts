@@ -307,3 +307,46 @@ it('keeps partial and incomplete multi-part responses out of visible history', a
     (await service.history(c.id)).filter((m) => m.role === 'assistant').map((m) => m.content),
   ).toEqual(['半句话', '第二条']);
 });
+
+it('accepts intentional silence, keeps it complete after restart, and still extracts user preferences', async () => {
+  const store = await setup();
+  const c = await new CharacterService(store, async () => fake).create(
+    { ...defaultAnswers, name: '桶砸' },
+    true,
+  );
+  let calls = 0;
+  const silent: LLMProvider = {
+    ...fake,
+    streamChat: async () => {
+      calls++;
+      return { content: '{"messages":[]}', usage: {} };
+    },
+  };
+  const extracted: string[][] = [];
+  const hooks = {
+    retrieve: async () => [],
+    afterRound: async (_: string, user: { content: string }, assistant: { content: string }[]) => {
+      extracted.push([user.content, ...assistant.map((m) => m.content)]);
+    },
+  };
+  const service = new ChatService(store, async () => silent, new Diagnostics(store), hooks);
+  await service.send(c.id, '先别回，我还没说完', () => {});
+  const history = await service.history(c.id);
+  expect(history).toHaveLength(1);
+  expect(history[0]).toMatchObject({
+    role: 'user',
+    status: 'complete',
+    replyDisposition: 'silence',
+  });
+  await new ChatService(
+    store,
+    async () => silent,
+    new Diagnostics(store),
+    hooks,
+  ).recoverInterrupted(c.id);
+  expect(calls).toBe(1);
+  expect(extracted).toEqual([['先别回，我还没说完'], ['先别回，我还没说完']]);
+  expect(parseReply('{"messages":["诶","我想到一个事","刚好跟你说的有关"]}')).toHaveLength(3);
+  expect(() => parseReply('')).toThrow();
+  expect(() => parseReply('{"messages":[""]}')).toThrow();
+});

@@ -79,6 +79,7 @@ export const MessageSchema = z
     origin: z.enum(['chat', 'proactive']),
     status: z.enum(['pending', 'complete', 'error']),
     groupId: z.string().optional(),
+    replyDisposition: z.enum(['reply', 'silence']).optional(),
   })
   .strict();
 export type Message = z.infer<typeof MessageSchema>;
