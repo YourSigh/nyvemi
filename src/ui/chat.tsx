@@ -82,6 +82,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     loaded.current = true;
     setMessages(page.messages);
     setHasMore(page.hasMore);
+    setError((current) =>
+      current === '读取聊天失败' || current === '读取消息失败' ? '' : current,
+    );
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
     const settings = await runtime.store.get('settings', cid);
@@ -199,7 +202,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           ref={list}
           data={[...messages].reverse()}
           inverted
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
           keyExtractor={(m) => m.id}
           contentContainerStyle={s.messages}
           onLayout={() => {
@@ -212,7 +215,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           onContentSizeChange={() => {
             if (autoScroll.current) list.current?.scrollToOffset({ offset: 0, animated: true });
           }}
-          onScroll={({ nativeEvent: { contentOffset } }) => {
+          onScrollBeginDrag={() => {
+            autoScroll.current = false;
+          }}
+          onScrollEndDrag={({ nativeEvent: { contentOffset } }) => {
+            autoScroll.current = contentOffset.y < 80;
+          }}
+          onMomentumScrollEnd={({ nativeEvent: { contentOffset } }) => {
             autoScroll.current = contentOffset.y < 80;
           }}
           scrollEventThrottle={16}

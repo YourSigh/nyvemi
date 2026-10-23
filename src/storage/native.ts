@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import * as SecureStore from 'expo-secure-store';
 import { migrate, SQLiteStore, type Database } from './store';
 import type { SecretStore } from '../providers/provider';
+import { serializeDatabase } from './serialized';
 function adapt(db: SQLite.SQLiteDatabase): Database {
   return {
     exec: (sql) => db.execAsync(sql),
@@ -22,7 +23,7 @@ function adapt(db: SQLite.SQLiteDatabase): Database {
 let databasePending: Promise<Database> | undefined;
 export function openDatabase(): Promise<Database> {
   return (databasePending ??= (async () => {
-    const db = adapt(await SQLite.openDatabaseAsync('nyvemi.db'));
+    const db = serializeDatabase(adapt(await SQLite.openDatabaseAsync('nyvemi.db')));
     await migrate(db);
     return db;
   })().catch((error) => {

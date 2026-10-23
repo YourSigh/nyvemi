@@ -69,7 +69,7 @@ export class HeartbeatEngine {
             const prompt = [
               {
                 role: 'system' as const,
-                content: `${naturalRules}\n${localTimeContext(now)}\n用户明确让你稍后主动发一条消息，现在到了约定时间。根据最近对话和人格自然说一两句你想聊的话，不再许诺稍后发送，不要虚构经历。返回严格 JSON {"messages":["消息"]}。人格：${JSON.stringify(character.persona)}。行为状态：${JSON.stringify(character.state)}。相关记忆：${JSON.stringify(memories.map((m) => m.memory.content))}。本次请求：${JSON.stringify(intention.topic)}`,
+                content: `${naturalRules}\n${localTimeContext(now)}\n用户明确让你稍后主动发一条消息，现在到了约定时间。根据最近对话和人格自然说一两句你想聊的话，不再许诺稍后发送。没有提供外部经历，不能声称刚刷到、看到、读过、查过任何新内容，也不能说现实中做过什么。只接着最近的话题，或自然说一个想法，不需要制造事件。返回严格 JSON {"messages":["消息"]}。人格：${JSON.stringify(character.persona)}。行为状态：${JSON.stringify(character.state)}。相关记忆：${JSON.stringify(memories.map((m) => m.memory.content))}。本次请求：${JSON.stringify(intention.topic)}`,
               },
               ...recent.map((m) => ({ role: m.role, content: m.content.slice(0, 1000) })),
             ];
@@ -119,6 +119,7 @@ export class HeartbeatEngine {
             if (message) await tx.put('messages', { ...message, status: 'complete' });
           });
           await report('requested_by_user', 'send');
+          return;
         } catch {
           // Back off: frequent local due checks must never turn an API failure into a call storm.
           const fresh = await this.store.get('intentions', intention.id);
@@ -126,6 +127,7 @@ export class HeartbeatEngine {
             await this.store.put('intentions', { ...fresh, earliestAt: this.clock() + 60000 });
           await this.diagnostics.error(cid, 'requested_generation_or_delivery');
           await report('requested_generation_or_delivery_error');
+          return;
         }
       }
     } finally {

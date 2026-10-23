@@ -10,7 +10,12 @@ export function requestedDelay(text: string): number | undefined {
     /^(?:请你?|你|那你|那|帮我)?\s*([\d]+|[一二两三四五六七八九十半]+)\s*(秒钟?|分钟|小时)(?:以)?后\s*(.{1,100})$/.exec(
       input,
     );
-  if (!match || !/(?:发|给|找|联系|聊)/.test(match[3]) || !/(?:消息|来信|聊|联系我)/.test(match[3]))
+  if (
+    !match ||
+    !/(?:发|给|找|联系|聊)/.test(match[3]) ||
+    !/(?:消息|来信|聊|联系我)/.test(match[3]) ||
+    !/(?:给我|找我|跟我|和我|联系我)/.test(match[3])
+  )
     return;
   const digits: Record<string, number> = {
     一: 1,
@@ -44,20 +49,22 @@ export async function queueRequestedMessage(
   user: Message,
   delayMs: number,
   ensureDelivery: () => Promise<void>,
-  now = Date.now(),
+  now?: number,
 ): Promise<string> {
   if (!Number.isFinite(delayMs) || delayMs < 10000 || delayMs > 86400000)
     throw new Error('暂时支持 10 秒至 24 小时后的来信');
+  const startedAt = now ?? Date.now();
   const taskId = `requested:${user.id}`;
   const existing = await store.get('intentions', taskId);
   if (existing && existing.status !== 'pending')
     throw new Error('这条来信任务已结束，请重新发送请求');
   const pending = (await store.list('intentions', user.characterId, 10000)).filter(
-    (i) => i.type === 'requested' && i.status === 'pending' && i.latestAt > now,
+    (i) => i.type === 'requested' && i.status === 'pending' && i.latestAt > startedAt,
   );
   if (!existing && pending.length >= 3) throw new Error('已经约好三次来信了，等她聊完再约吧');
   await ensureDelivery();
-  const dueAt = existing?.earliestAt ?? now + delayMs;
+  const armedAt = now ?? Date.now();
+  const dueAt = existing?.earliestAt ?? armedAt + delayMs;
   if (!existing)
     await store.put('intentions', {
       id: taskId,
@@ -70,7 +77,7 @@ export async function queueRequestedMessage(
       importance: 1,
       reason: '用户明确要求稍后来信',
       status: 'pending',
-      createdAt: now,
+      createdAt: armedAt,
     });
   const due = new Date(dueAt).toLocaleTimeString([], {
     hour: '2-digit',

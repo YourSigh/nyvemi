@@ -82,7 +82,12 @@ export class ChatService {
     if (interrupted) await this.store.release(`chat:${characterId}`);
     const groups = new Map<string, Message[]>();
     for (const message of messages)
-      if (message.role === 'assistant' && message.origin === 'chat' && message.groupId) {
+      if (
+        message.role === 'assistant' &&
+        message.origin === 'chat' &&
+        message.groupId &&
+        !message.id.startsWith('ack:')
+      ) {
         const group = groups.get(message.groupId) ?? [];
         group.push({ ...message, status: 'complete' });
         groups.set(message.groupId, group);

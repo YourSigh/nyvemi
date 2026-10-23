@@ -48,6 +48,7 @@ it('recognizes direct relative requests without scheduling quoted, hypothetical 
     '如果一分钟后发消息给我',
     '0分钟后发消息给我',
     '25小时后发消息给我',
+    '一分钟后给你发消息',
   ])
     expect(requestedDelay(input)).toBeUndefined();
 });
