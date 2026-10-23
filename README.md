@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation, not a completed real-device field trial. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. A real DeepSeek test has passed the complete 12-round interview, persona generation, streamed chat, relationship-memory extraction and contextual proactive generation against isolated SQLite. Notification delivery in that test is a test double, with a simulated clock. Full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
+This is an early MVP implementation, not a completed real-device field trial. **0.3.1:** conversational timer recognition and native one-time WorkManager delivery have passed local logic tests and Android compilation; this revision has not been tested on a device or with a paid model. Earlier emulator results below apply to earlier implementations. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. A real DeepSeek test has passed the complete 12-round interview, persona generation, streamed chat, relationship-memory extraction and contextual proactive generation against isolated SQLite. Notification delivery in that test is a test double, with a simulated clock. Full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
 
 ## Local-first and BYOK
 
@@ -44,7 +44,7 @@ For Ollama or a LAN endpoint, use its OpenAI-compatible `/v1` API. Local/private
 
 Creation is a 12-round conversational interview: one question at a time, a short model acknowledgement, then the next question. Progress is explicit; all but the name can be skipped. A local draft survives interruption, and a review/edit step precedes final persona generation. Appearance, relationship, tone, independent interests, boundaries and a venting scenario are covered. Offline acknowledgements are explicitly labeled as local guidance. It uses natural questions rather than personality percentages. The model generates a validated Persona. A **桶砸** development persona is also available; it skips persona generation, but does not invent model responses or bypass BYOK for chat.
 
-Chat uses a private-messenger layout with avatars, timestamps, local history, streaming and 1–4 short reply bubbles. Additional bubbles appear about 400–1000 ms apart. Failed requests can be retried without duplicating the user message. Requests and multi-part replies survive interruption with recoverable state. Older history loads on demand; model prompts remain bounded to 16 recent messages and up to 8 selected memories.
+Chat uses a private-messenger layout with avatars, timestamps, local history, streaming and 0–6 reply bubbles chosen by context. A complete reply is validated before any assistant bubble appears; generation only shows a typing status. Intentional silence creates no placeholder bubble and still preserves the user turn for memory extraction. Additional bubbles appear about 400–1000 ms apart. Failed requests can be retried without duplicating the user message. Requests and multi-part replies survive interruption with recoverable state. Older history loads on demand; model prompts remain bounded to 16 recent messages and up to 8 selected memories.
 
 ## Memory and relationship
 
@@ -182,9 +182,11 @@ There is no “meet another character” action. **清空当前角色并重新�
 
 ### 明确约好的稍后来信
 
-直接说“一分钟后发一条你想发的消息给我”时，应用会先保存本地任务并开启可见的常驻陪伴，再确认约定时间。支持 10 秒至 24 小时的直接相对时间请求（秒、分钟、小时，中文或阿拉伯数字），最多同时等待三条。内容到期才根据人格和最近对话生成，不是预先写好的提醒。生成与系统通知失败会退避重试；通知成功后可在聊天中直接看到。
+说“芜湖，一分钟后随便给我发一条消息吧”“你过一分钟来找我”等直接请求时，应用会检查通知、开启可见陪伴，保存本地任务，等待 Android WorkManager 确认登记成功后才确认约定。支持 10 秒至 24 小时的相对时间请求（秒、分钟、小时，中文或阿拉伯数字），最多同时等待三条。聊天顶部显示约定时间及取消入口；清空角色同时取消原生任务。内容到期才根据人格和最近对话生成，不是预先写好的提醒。生成与系统通知失败会退避重试，复用已有 outbox，避免重复生成；通知成功后可在聊天中直接看到。
 
-这类用户明确请求的来信独立于普通主动聊天，不受最近聊天、静默时段和每日主动消息上限拦截。常驻会话每 10 秒只做本地到期检查，没有到期任务时不调用模型。关掉常驻、断网、系统杀进程、强行停止或电池限制仍可能延迟；它不是精确闹钟，超出约定时间一小时的任务过期。导入角色不会重新执行旧安装中尚未送出的定时任务。Developer Mode 的未来意图、通知历史与 Heartbeat 可追踪排程和失败原因。
+这类用户明确请求的来信独立于普通主动聊天，不受最近聊天、静默时段和每日主动消息上限拦截。每条约定使用唯一原生一次性 WorkManager 任务，冷启动时直接启动对应 Headless JS，再检查 SQLite 并投递；成功回执依据持久化状态，不能把 JS 函数结束当成通知成功。可见常驻会话存活时另有原生截止时间回调，JS 10 秒检查仅保留为补充。重开 App 会补登记旧版未过期任务，不推迟原截止时间。无到期任务时不调用模型。结束常驻不会取消已约定的来信，需要点击聊天顶部的取消。
+
+这不是精确闹钟。断网、Doze、系统杀进程、强行停止或厂商电池限制仍可能延后执行；强行停止后要重新打开 App。超出约定时间一小时的任务过期。导入角色不会重放旧安装尚未送出的定时任务。Developer Mode 的未来意图、通知历史与 Heartbeat 可追踪排程和失败原因。0.3.1 的手机后台送达效果仍由用户安装验证，不能将本地替身测试等同于实机送达。
 
 聊天生成期间只在顶部显示“正在输入…”。完整回复生成并校验后，分段消息依次淡入并轻轻上移；本地历史不会重复播放入场。聊天列表从底部锚定，以便键盘出现时最新消息和输入框一起上移。
 

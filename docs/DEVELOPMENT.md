@@ -145,3 +145,13 @@
 - 本轮不做设备 UI 走查或任何付费模型调用；依用户要求由用户安装验收。发布目标 0.3.0 / versionCode 5，ARM64、开发签名、内嵌 Hermes JS。
 
 - 最终检查：format / lint / typecheck、82 项测试通过（2 项 live 跳过）；Debug 5s、Release 32s。0.3.0 APK 35,807,105 bytes，v2 签名校验通过，内嵌 JS、正式 applicationId 和版本信息确认；解包与跟踪文件扫描未发现 .env Key 或 QA 入口。SHA-256：5472453ca6af2d46a3cfb7d74f919f4f011c83d30801bc321eb59f5a28895740。
+
+## 0.3.1 后台定时与聊天轮次（2026-10-23）
+
+- 取消“至少一条”的回复硬限制；Prompt 引导语境决定 0～6 条消息，维持完整生成后逐条入场。用户消息的可选 replyDisposition 保存沉默完成态，重启时补提取而不重发模型聊天。
+- 相对请求识别补充真实反馈句“芜湖，一分钟后随便给我发一条消息吧”、口语与礼貌问句。通知和原生持久任务登记完成后才能确认约定；requestedDueAt 保留最初约定，earliestAt 继续用于失败退避。
+- 自定义 WorkManager Worker 按意图 ID 唤起 ReactHost / Headless JS，原生回执和 SQLite 状态共同判定完成；未完成返回 retry。唯一任务名、原生 single-flight、SQLite lease、稳定 outbox 限制重复生成/投递。常驻存活时保留原生 Handler 的到期入口；旧 JS 快检查仅作补充。没有新增精确闹钟权限或后台启动前台服务的绕行。
+- App 激活时补登记未过期的旧任务；取消先写状态再清原生任务，角色重置同时取消该角色任务。聊天显示约定时间和取消入口，设置区解释两类来信及失败原因。
+- 发布目标：0.3.1 / versionCode 6，ARM64、内嵌 JS、开发签名侧载包。验收边界见 ACCEPTANCE.md；本轮不做设备或付费模型测试。
+
+- 最终检查：format / lint / typecheck、87 项常规测试通过（2 项 live 跳过），Debug 20s、Release 27s；v2 签名、正式包名/versionCode、内嵌 Hermes JS、原生 Worker 和 Headless 入口检查通过，跟踪文件及解包内容未发现 .env Key 或 QA 入口。安装包 artifacts/Nyvemi-0.3.1-arm64-preview.apk，35,814,389 bytes，SHA-256：223ef0c2568f1629e36612c591b81e9724bf90a01d646365e222d3e2d4800130。本批仅本地提交，未 push。
