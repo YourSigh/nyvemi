@@ -85,7 +85,8 @@ export const IntentionSchema = z
   .object({
     id: z.string(),
     characterId: z.string(),
-    type: z.enum(['follow_up', 'share']),
+    type: z.enum(['follow_up', 'share', 'requested']),
+    sourceMessageId: z.string().optional(),
     topic: z.string(),
     earliestAt: z.number(),
     latestAt: z.number(),

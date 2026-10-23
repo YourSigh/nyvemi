@@ -29,7 +29,8 @@ export function bridge(): AndroidBridge {
 export const androidNotifications: NotificationGateway = {
   enabled: async () => bridge().canNotify(),
   show: async (n: NotificationRecord, c: Character) => {
-    await bridge().notify(n.id, c.id, c.persona.name, n.body, c.avatar ?? null);
+    if (!(await bridge().notify(n.id, c.id, c.persona.name, n.body, c.avatar ?? null)))
+      throw new Error('系统未接收角色来信通知');
   },
   cancel: async (id) => {
     bridge().cancelNotification(id);

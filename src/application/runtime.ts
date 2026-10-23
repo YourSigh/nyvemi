@@ -8,12 +8,14 @@ import { ActivityMonitor } from '../presence/activity';
 import { PersonaInterview } from '../characters/interview';
 import { CharacterService } from '../characters/service';
 import { ChatService } from '../chat/service';
+import { queueRequestedMessage } from '../chat/delayed-request';
 import { saveProviderSettings } from './provider-settings';
 import { MemoryRepository } from '../memory/repository';
 import { KeywordMemoryRetriever } from '../memory/retrieval';
 import { MemoryExtractionService } from '../memory/extraction';
 import { HeartbeatEngine } from '../proactive/heartbeat/engine';
-import { androidNotifications } from '../native/android';
+import { androidNotifications, bridge, requestNotifications } from '../native/android';
+import { AppState } from 'react-native';
 import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
 async function createRuntime() {
@@ -44,6 +46,15 @@ async function createRuntime() {
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const chat = new ChatService(store, provider, diagnostics, {
+    scheduleRequested: async (user, delayMs) =>
+      queueRequestedMessage(store, user, delayMs, async () => {
+        if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
+        if (!(await requestNotifications()) || !bridge().canNotify())
+          throw new Error('没有排好来信：请先在设置中允许角色通知，然后重试这条消息');
+        const c = await store.get('characters', user.characterId);
+        if (!c) throw new Error('角色不存在');
+        await bridge().startPresence(c.id, c.persona.name);
+      }),
     retrieve: async (characterId, query) => {
       const ranked = retriever.rank(query, await memories.list(characterId), Date.now());
       await memories.touch(ranked.map((r) => r.memory));

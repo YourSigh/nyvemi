@@ -104,6 +104,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       };
       void active().catch(() => {});
       const timer = setInterval(() => void active().catch(() => {}), 60000);
+      const incoming = setInterval(() => {
+        if (AppState.currentState === 'active') void refresh().catch(() => {});
+      }, 3000);
       const subscription = AppState.addEventListener('change', (state) => {
         if (state === 'active') {
           void active().catch(() => {});
@@ -112,6 +115,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       });
       return () => {
         clearInterval(timer);
+        clearInterval(incoming);
         subscription.remove();
       };
     }, [runtime, cid, refresh, route.params.notificationId]),

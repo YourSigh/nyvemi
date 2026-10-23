@@ -19,6 +19,7 @@ export async function resetCharacter(
     for (const name of [
       'background-cycle',
       'heartbeat',
+      'requested-delivery',
       'memory-extraction',
       `chat:${characterId}`,
     ]) {

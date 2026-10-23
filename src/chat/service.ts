@@ -4,6 +4,7 @@ import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
 import { buildChatPrompt } from './prompt';
+import { requestedDelay } from './delayed-request';
 const ReplySchema = z.object({
   messages: z.array(z.string().trim().min(1).max(6000)).min(1).max(4),
 });
@@ -27,6 +28,7 @@ export function streamingPreview(raw: string): string {
   }
 }
 export interface ChatHooks {
+  scheduleRequested?: (user: Message, delayMs: number) => Promise<string>;
   retrieve: (characterId: string, query: string) => Promise<Memory[]>;
   afterRound: (characterId: string, user: Message, assistant: Message[]) => Promise<void>;
 }
@@ -139,6 +141,27 @@ export class ChatService {
           };
       await this.store.put('messages', user);
       onSaved();
+      const delay = requestedDelay(content);
+      if (delay !== undefined && this.hooks.scheduleRequested) {
+        // The acknowledgement is produced only after durable storage and native service startup.
+        const acknowledgement = await this.hooks.scheduleRequested(user, delay);
+        await this.store.atomic(async (tx) => {
+          await tx.put('messages', { ...user!, status: 'complete' });
+          await tx.put('messages', {
+            id: `ack:${user!.id}`,
+            characterId,
+            role: 'assistant',
+            content: acknowledgement,
+            createdAt: Date.now(),
+            origin: 'chat',
+            status: 'complete',
+            groupId: user!.id,
+          });
+        });
+        hasReply = true;
+        onSaved();
+        return;
+      }
       const history = (await this.history(characterId)).filter(
         (m) => m.status === 'complete' && m.id !== user!.id,
       );

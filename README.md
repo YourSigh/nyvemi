@@ -179,3 +179,11 @@ Live2D, 3D, real-time voice, QQ/WeChat, phone-control agents, browser agents, so
 Use the gear at the top left of Chat. The notification section shows app/channel availability, the current reason a proactive message may be suppressed, and the latest heartbeat result. It links directly to Android app notification settings and battery optimization settings, with a clearly labeled system-notification test that does not call a model or write a chat message. Permission is requested on first app entry; after a denial, the system settings link remains available. Proactive toggles save immediately.
 
 There is no “meet another character” action. **清空当前角色并重新创建** first explains the irreversible scope, then requires the exact current name before the final action becomes enabled. It removes the current persona, conversation, memories, experiences, intentions, related diagnostics/notification records, avatar, and desktop shortcut access. Provider credentials and the usage ledger remain. Exported backup files are not deleted. SQLite erasure markers prevent late asynchronous results from resurrecting erased state; busy conversations/background tasks must finish before reset.
+
+### 明确约好的稍后来信
+
+直接说“一分钟后发一条你想发的消息给我”时，应用会先保存本地任务并开启可见的常驻陪伴，再确认约定时间。支持 10 秒至 24 小时的直接相对时间请求（秒、分钟、小时，中文或阿拉伯数字），最多同时等待三条。内容到期才根据人格和最近对话生成，不是预先写好的提醒。生成与系统通知失败会退避重试；通知成功后可在聊天中直接看到。
+
+这类用户明确请求的来信独立于普通主动聊天，不受最近聊天、静默时段和每日主动消息上限拦截。常驻会话每 10 秒只做本地到期检查，没有到期任务时不调用模型。关掉常驻、断网、系统杀进程、强行停止或电池限制仍可能延迟；它不是精确闹钟，超出约定时间一小时的任务过期。导入角色不会重新执行旧安装中尚未送出的定时任务。Developer Mode 的未来意图、通知历史与 Heartbeat 可追踪排程和失败原因。
+
+聊天生成期间只在顶部显示“正在输入…”。完整回复生成并校验后，分段消息依次淡入并轻轻上移；本地历史不会重复播放入场。聊天列表从底部锚定，以便键盘出现时最新消息和输入框一起上移。

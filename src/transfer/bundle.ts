@@ -247,6 +247,14 @@ export class CharacterBundleService {
           await tx.put('intentions', {
             ...intention,
             id: remap('intentions', intention.id),
+            sourceMessageId: intention.sourceMessageId
+              ? remap('messages', intention.sourceMessageId)
+              : undefined,
+            // A transfer must not silently re-arm a timed notification from another installation.
+            status:
+              intention.type === 'requested' && intention.status === 'pending'
+                ? 'expired'
+                : intention.status,
             characterId: cid,
             openLoopId: intention.openLoopId ? remap('memories', intention.openLoopId) : undefined,
             experienceId: intention.experienceId

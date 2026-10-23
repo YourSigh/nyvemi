@@ -36,6 +36,13 @@ async function session(): Promise<void> {
       })
       .catch(() => undefined);
   });
+  // Separate from the slower experience/extraction cycle: a network request there can take minutes.
+  const requestedTimer = setInterval(() => {
+    if (bridge().presenceState().running && bridge().hasNetwork())
+      void runtime.heartbeat
+        .runRequested()
+        .catch(() => runtime.diagnostics.error('system', 'requested_tick'));
+  }, 10000);
   try {
     await runPresenceLoop({
       state: () => bridge().presenceState(),
@@ -72,6 +79,7 @@ async function session(): Promise<void> {
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
   } finally {
+    clearInterval(requestedTimer);
     unsubscribe();
     await updates;
   }
