@@ -1,4 +1,4 @@
-import { usePalette } from '../theme/context';
+import { useTheme } from '../theme/context';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
@@ -11,7 +11,7 @@ import { useRuntime } from './context';
 import { Button, Card, ErrorText, Heading, Note, Page } from './components';
 import type { ScreenProps } from './navigation';
 export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
-  const palette = usePalette();
+  const { palette, hydrate } = useTheme();
   const runtime = useRuntime();
   const [bytes, setBytes] = useState<Uint8Array>();
   const [preview, setPreview] = useState<BundleManifest>();
@@ -48,6 +48,7 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
     setError('');
     try {
       const character = await bundleService(runtime.store).importCharacter(bytes);
+      hydrate(await runtime.themes.load());
       navigation.reset({
         index: 0,
         routes: [{ name: 'Chat', params: { characterId: character.id } }],

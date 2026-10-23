@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ThemeRecordSchema } from '../theme/model';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import {
   CharacterSchema,
@@ -28,7 +29,8 @@ const JobSchema = z
 const ManifestSchema = z
   .object({
     format: z.literal('nyvemi'),
-    version: z.literal(1),
+    version: z.union([z.literal(1), z.literal(2)]),
+    theme: ThemeRecordSchema.optional(),
     exportedAt: z.number(),
     character: CharacterSchema.omit({ avatar: true }).extend({
       avatar: z.literal('avatar.bin').optional(),
@@ -150,7 +152,8 @@ export class CharacterBundleService {
       };
       return {
         format: 'nyvemi' as const,
-        version: 1 as const,
+        version: 2 as const,
+        theme: await tx.get('themes', 'app'),
         exportedAt: Date.now(),
         character: portable,
         settings,
@@ -202,6 +205,8 @@ export class CharacterBundleService {
       };
       await this.store.atomic(async (tx) => {
         await tx.put('characters', character);
+        // Restore appearance on a fresh installation; an existing user's app preference wins.
+        if (m.theme && !(await tx.get('themes', 'app'))) await tx.put('themes', m.theme);
         await tx.put('settings', {
           ...m.settings,
           id: cid,

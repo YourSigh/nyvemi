@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  setNavigationBarDark(dark: boolean): Promise<void>;
   presenceState(): PresenceState;
   hasNetwork(): boolean;
   startPresence(characterId: string, name: string): Promise<void>;

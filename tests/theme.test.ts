@@ -84,6 +84,7 @@ it('interprets semantic output once, persists only on apply and survives a servi
       throw new Error('offline');
     }).load(),
   ).toEqual(record);
+  expect(await service.interpret('蓝灰色，安静一点')).toEqual(record);
   expect(calls).toEqual(['theme_interpretation']);
   expect(ThemeRecordSchema.parse(JSON.parse(JSON.stringify(record)))).toEqual(record);
 });

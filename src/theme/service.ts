@@ -70,6 +70,8 @@ export class ThemeService {
     const description = raw.trim();
     if (!description || description.length > 500)
       throw new Error('用 1～500 字说说你喜欢的颜色或感觉吧');
+    const existing = await this.load();
+    if (existing?.source === 'model' && existing.description === description) return existing;
     let preference: ThemePreference;
     let source: ThemeRecord['source'] = 'model';
     try {

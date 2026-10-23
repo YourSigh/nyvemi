@@ -193,6 +193,8 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                   maxLength={question?.key === 'name' ? 80 : 1000}
                   placeholder="说说你心里的样子…"
                   placeholderTextColor={palette.muted}
+                  selectionColor={palette.accent}
+                  cursorColor={palette.accent}
                 />
                 {busy ? (
                   <Note>正在听你说，也在整理下一笔…</Note>

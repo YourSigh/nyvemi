@@ -15,6 +15,7 @@ import android.graphics.Paint
 import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import androidx.core.view.WindowCompat
 import androidx.core.content.ContextCompat
 import android.net.Uri
 import android.provider.Settings
@@ -88,6 +89,11 @@ class NyvemiAndroidModule : Module() {
       if (Build.VERSION.SDK_INT >= 26) context().getSystemService(ShortcutManager::class.java)
         .disableShortcuts(listOf("character:$characterId"), "这个角色已重新创建")
     }
+    AsyncFunction("setNavigationBarDark") { dark: Boolean ->
+      appContext.currentActivity?.let { activity ->
+        WindowCompat.getInsetsController(activity.window, activity.window.decorView).isAppearanceLightNavigationBars = !dark
+      }
+    }.runOnQueue(Queues.MAIN)
     Function("hasNetwork") {
       val connectivity = context().getSystemService(ConnectivityManager::class.java)
       val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork)

@@ -13,6 +13,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   useEffect(() => {
     void runtime.themes
       .opening()
@@ -22,7 +23,8 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
       .catch(() => setError('读取开场偏好失败'));
   }, [runtime]);
   const continueOpening = async (skip = false) => {
-    if (busy) return;
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     try {
       if (skip) await runtime.themes.clearOpening();
@@ -31,6 +33,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
     } catch {
       setError('没能保存这点小偏好，请再试一次');
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -100,6 +103,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   useEffect(() => {
@@ -111,6 +115,8 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
       .catch(() => setError('无法读取 Provider 设置'));
   }, [runtime]);
   const save = async (test: boolean) => {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError('');
     setNotice('');
@@ -132,6 +138,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败');
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   };

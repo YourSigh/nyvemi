@@ -287,6 +287,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               accessibilityLabel="消息"
               style={s.input}
               placeholder="说点什么…"
+              placeholderTextColor={palette.muted}
+              selectionColor={palette.accent}
+              cursorColor={palette.accent}
               value={draft}
               onChangeText={setDraft}
               onFocus={() => {

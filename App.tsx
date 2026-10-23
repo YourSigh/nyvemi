@@ -3,7 +3,7 @@ import { ThemeScreen } from './src/ui/theme';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
 import { AppState, View } from 'react-native';
-import { requestNotificationsOnLaunch } from './src/native/android';
+import { bridge, requestNotificationsOnLaunch } from './src/native/android';
 import { resumeCompanionPresence } from './src/native/presence';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
@@ -35,6 +35,11 @@ export default function App() {
 }
 function Application() {
   const { palette, hydrate, record } = useTheme();
+  useEffect(() => {
+    void bridge()
+      .setNavigationBarDark(record?.preference.brightness === 'dark')
+      .catch(() => {});
+  }, [record?.preference.brightness]);
   const [resumeTheme, setResumeTheme] = useState(false);
   const [runtime, setRuntime] = useState<Runtime>();
   const [initial, setInitial] = useState<string>();

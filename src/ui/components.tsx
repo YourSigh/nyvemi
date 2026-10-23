@@ -75,6 +75,8 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={palette.muted}
+        selectionColor={palette.accent}
+        cursorColor={palette.accent}
         style={[styles.input, props.multiline && { minHeight: 72, textAlignVertical: 'top' }]}
         {...props}
       />

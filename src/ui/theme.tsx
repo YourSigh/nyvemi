@@ -174,11 +174,18 @@ export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
               ? transitioning
                 ? '颜色正在慢慢铺开…'
                 : '正在听你说…'
-              : done
-                ? '再调整一下感觉'
-                : '就按这个感觉'
+              : record?.source === 'model' && description.trim() === record.description
+                ? '已经是这个感觉'
+                : record?.source === 'local' && description.trim() === record.description
+                  ? '让模型再听一次'
+                  : '就按这个感觉'
           }
-          disabled={!loaded || busy || !description.trim()}
+          disabled={
+            !loaded ||
+            busy ||
+            !description.trim() ||
+            (record?.source === 'model' && description.trim() === record.description)
+          }
           onPress={() => void change(description)}
         />
         {record ? (

@@ -1,3 +1,4 @@
+import { defaultPreference } from '../src/theme/model';
 import { it, expect } from 'vitest';
 import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import { CharacterBundleService, readBundle, type BundleAssets } from '../src/transfer/bundle';
@@ -114,7 +115,7 @@ it('rejects path traversal, unknown versions, inconsistent ownership and danglin
   await store.put('settings', defaultSettings('c'));
   const good = readBundle(await service.exportCharacter('c')).manifest;
   for (const bad of [
-    { ...good, version: 2 },
+    { ...good, version: 999 },
     { ...good, provider: { apiKey: 'bad' } },
     {
       ...good,
@@ -204,4 +205,40 @@ it('rolls back character data and removes the newly written avatar when import s
   await expect(target.service.importCharacter(bytes)).rejects.toThrow();
   expect(await target.store.list('characters')).toEqual([]);
   expect(target.assets.size).toBe(0);
+});
+
+it('migrates the chosen appearance while preserving an existing app theme and accepting v1 bundles', async () => {
+  const a = await setup(),
+    b = await setup();
+  await a.store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    state: { energy: 0.5, relationshipCloseness: 0.5, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: 1,
+  });
+  await a.store.put('settings', defaultSettings('c'));
+  const theme = {
+    id: 'app' as const,
+    version: 1 as const,
+    preference: { ...defaultPreference, base: 'blue' as const },
+    description: '安静的蓝灰色',
+    source: 'model' as const,
+    createdAt: 1,
+  };
+  await a.store.put('themes', theme);
+  const bytes = await a.service.exportCharacter('c');
+  expect(readBundle(bytes).manifest.version).toBe(2);
+  await b.service.importCharacter(bytes);
+  expect(await b.store.get('themes', 'app')).toEqual(theme);
+  const c = await setup();
+  const own = { ...theme, preference: defaultPreference, description: '我的粉白' };
+  await c.store.put('themes', own);
+  await c.service.importCharacter(bytes);
+  expect(await c.store.get('themes', 'app')).toEqual(own);
+  const legacy = { ...readBundle(bytes).manifest, version: 1, theme: undefined };
+  const d = await setup();
+  await d.service.importCharacter(zipSync({ 'manifest.json': strToU8(JSON.stringify(legacy)) }));
+  expect(await d.store.list('characters')).toHaveLength(1);
+  expect(await d.store.get('themes', 'app')).toBeUndefined();
 });
