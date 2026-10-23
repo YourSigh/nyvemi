@@ -5,11 +5,13 @@ import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Character, Message } from '../domain/models';
 import { Avatar, Button, ErrorText, palette } from './components';
+import { bridge } from '../native/android';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
+  const [needsSetup, setNeedsSetup] = useState(false);
   const [character, setCharacter] = useState<Character>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [historyLimit, setHistoryLimit] = useState(100);
@@ -28,7 +30,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     setHasMore(page.hasMore);
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
-    if (!c) setError('这个角色不存在，请从角色列表选择。');
+    const settings = await runtime.store.get('settings', cid);
+    setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
+
+    if (!c) setError('这个角色已被清空，请重新创建。');
   }, [runtime, cid, historyLimit]);
   useFocusEffect(
     useCallback(() => {
@@ -98,6 +103,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={s.root}>
       <View style={s.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="打开设置"
+          onPress={() => navigation.navigate('Settings', { characterId: cid })}
+          style={{ padding: 8 }}
+        >
+          <Text style={{ fontSize: 25, color: palette.accent }}>⚙</Text>
+        </Pressable>
         <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} />
         <Pressable
           accessibilityRole="button"
@@ -108,15 +121,18 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           <Text style={s.name}>{character?.persona.name ?? '正在载入'}</Text>
           <Text style={s.sub}>此刻，以及对话之外</Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="切换角色"
-          onPress={() => navigation.navigate('Characters')}
-        >
-          <Text style={s.more}>···</Text>
-        </Pressable>
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
+        {needsSetup ? (
+          <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => navigation.navigate('Settings', { characterId: cid })}
+            >
+              <Text style={{ color: palette.accent }}>主动来信还未就绪 · 点此开启通知与陪伴</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <FlatList
           ref={list}
           data={messages}

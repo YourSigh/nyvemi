@@ -13,6 +13,7 @@ export const migrations = [
   `CREATE TABLE IF NOT EXISTS api_usage (id TEXT PRIMARY KEY, created_at INTEGER NOT NULL, endpoint TEXT NOT NULL, model TEXT NOT NULL, purpose TEXT NOT NULL, payload TEXT NOT NULL);
    CREATE INDEX IF NOT EXISTS api_usage_time ON api_usage(created_at);
    CREATE TABLE IF NOT EXISTS token_prices (endpoint TEXT NOT NULL, model TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(endpoint,model));`,
+  `CREATE TABLE IF NOT EXISTS erased_characters (id TEXT PRIMARY KEY);`,
 ];
 export async function migrate(db: Database): Promise<void> {
   await db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
@@ -31,6 +32,7 @@ export interface Storage {
   list<K extends EntityKind>(kind: K, characterId?: string, limit?: number): Promise<Entities[K][]>;
   put<K extends EntityKind>(kind: K, value: Entities[K]): Promise<void>;
   remove(kind: EntityKind, id: string): Promise<void>;
+  eraseCharacter(characterId: string): Promise<void>;
   atomic<T>(work: (store: Storage) => Promise<T>): Promise<T>;
   lease(name: string, now: number, durationMs: number): Promise<boolean>;
   release(name: string): Promise<void>;
@@ -62,16 +64,22 @@ export class SQLiteStore implements Storage {
     const characterId =
       'characterId' in value ? value.characterId : kind === 'characters' ? value.id : '';
     await this.db.run(
-      'INSERT INTO entities(kind,id,character_id,created_at,payload) VALUES(?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET character_id=excluded.character_id, created_at=excluded.created_at, payload=excluded.payload',
+      'INSERT INTO entities(kind,id,character_id,created_at,payload) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM erased_characters WHERE id=?) ON CONFLICT(kind,id) DO UPDATE SET character_id=excluded.character_id, created_at=excluded.created_at, payload=excluded.payload',
       kind,
       value.id,
       characterId,
       'createdAt' in value ? value.createdAt : 0,
       JSON.stringify(value),
+      characterId,
     );
   }
   async remove(kind: EntityKind, id: string): Promise<void> {
     await this.db.run('DELETE FROM entities WHERE kind=? AND id=?', kind, id);
+  }
+  async eraseCharacter(characterId: string): Promise<void> {
+    await this.db.run('INSERT OR IGNORE INTO erased_characters(id) VALUES(?)', characterId);
+    await this.db.run('DELETE FROM entities WHERE character_id=?', characterId);
+    await this.db.run("DELETE FROM entities WHERE kind='interviews' AND id='active'");
   }
   atomic<T>(work: (store: Storage) => Promise<T>): Promise<T> {
     return this.db.transaction((tx) => work(new SQLiteStore(tx)));

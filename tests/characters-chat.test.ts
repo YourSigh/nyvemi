@@ -31,7 +31,7 @@ it('generates and persists a persona under a device-owned id', async () => {
   expect(character.id).not.toBe('model-id');
   expect(character.persona.id).toBe(character.id);
   expect((await store.get('characters', character.id))?.persona.name).toBe('小桶');
-  expect((await store.get('settings', character.id))?.proactiveEnabled).toBe(false);
+  expect((await store.get('settings', character.id))?.proactiveEnabled).toBe(true);
 });
 it('streams, persists multiple messages and schedules post-round work', async () => {
   const store = await setup();

@@ -1,3 +1,4 @@
+import { startCompanionPresence } from '../native/presence';
 import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useRuntime } from './context';
@@ -133,9 +134,11 @@ export function GenerateScreen({ navigation, route }: ScreenProps<'Generate'>) {
         ? runtime.interview.finish()
         : runtime.characters.create(route.params.answers, route.params.demo)
     )
-      .then((c) =>
-        navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] }),
-      )
+      .then(async (c) => {
+        if ((await runtime.store.get('settings', c.id))?.proactiveEnabled)
+          await startCompanionPresence(c).catch(() => undefined);
+        navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] });
+      })
       .catch((e) => setError(e instanceof Error ? e.message : '角色生成失败'));
   }, [runtime, navigation, route.params, attempt]);
   return (

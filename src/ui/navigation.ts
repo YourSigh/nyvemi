@@ -12,6 +12,5 @@ export type Routes = {
   Experiences: { characterId: string };
   Developer: { characterId: string };
   Transfer: { characterId?: string } | undefined;
-  Characters: undefined;
 };
 export type ScreenProps<K extends keyof Routes> = NativeStackScreenProps<Routes, K>;

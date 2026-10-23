@@ -1,3 +1,4 @@
+import { NotificationSetup } from './notification-setup';
 import { useEffect, useState, useCallback } from 'react';
 import { Switch, Text, View } from 'react-native';
 import type { Character, Settings } from '../domain/models';
@@ -9,7 +10,8 @@ import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
 import { updateSettings } from '../application/settings';
 import { bridge, pinCharacter, requestNotifications } from '../native/android';
-import { pickAvatar } from '../transfer/native';
+import { resetCharacter } from '../characters/reset';
+import { bundleAssets, pickAvatar } from '../transfer/native';
 export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
@@ -23,6 +25,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetName, setResetName] = useState('');
   const [presence, setPresence] = useState<PresenceState>();
   useFocusEffect(
     useCallback(() => {
@@ -86,6 +90,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
   };
   return (
     <Page>
+      <NotificationSetup
+        characterId={cid}
+        onEnabled={() => setSettings((s) => (s ? { ...s, proactiveEnabled: true } : s))}
+      />
       <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={70} />
       <Heading>{character?.persona.name}</Heading>
       <Note>{character?.persona.identity}</Note>
@@ -143,7 +151,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           分钟检查一次，绝大多数不会调用模型。保持后台运行会增加耗电；安静时间和来信限频仍然有效。
         </Note>
         <Button
-          title={presence?.running ? '切换常驻角色到她' : '开启常驻陪伴'}
+          title={presence?.running ? '常驻陪伴已开启' : '开启常驻陪伴'}
           disabled={busy || !character || (presence?.running && presence.characterId === cid)}
           onPress={() => {
             if (!character) return;
@@ -182,9 +190,27 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           <Switch
             trackColor={{ false: '#EADDE3', true: '#EFBBD0' }}
             thumbColor="#D86B96"
+            disabled={busy}
             value={settings?.proactiveEnabled ?? false}
             onValueChange={(v) => {
-              if (settings) setSettings({ ...settings, proactiveEnabled: v });
+              if (!settings) return;
+              setBusy(true);
+              setError('');
+              void (async () => {
+                if (v && (!(await requestNotifications()) || !bridge().canNotify()))
+                  throw new Error('请先在上方系统通知设置中允许角色来信');
+                await runtime.store.atomic(async (tx) => {
+                  const fresh = await tx.get('settings', cid);
+                  if (fresh) await tx.put('settings', { ...fresh, proactiveEnabled: v });
+                });
+                setSettings({ ...settings, proactiveEnabled: v });
+                if (v && character) await startCompanionPresence(character);
+                setNotice(
+                  v ? '主动来信已开启并保存；有具体话题且适合时才会来信。' : '主动来信已关闭并保存',
+                );
+              })()
+                .catch((e) => setError(e instanceof Error ? e.message : '设置失败'))
+                .finally(() => setBusy(false));
             }}
           />
         </View>
@@ -261,36 +287,64 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
       ) : null}
       <Button title="用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
       <Button title="模型与 API Key" secondary onPress={() => navigation.navigate('Provider')} />
-      <Button title="切换或创建角色" secondary onPress={() => navigation.navigate('Characters')} />
-    </Page>
-  );
-}
-export function CharactersScreen({ navigation }: ScreenProps<'Characters'>) {
-  const runtime = useRuntime();
-  const [characters, setCharacters] = useState<Character[]>([]);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    void runtime.store
-      .list('characters')
-      .then(setCharacters)
-      .catch(() => setError('读取角色失败'));
-  }, [runtime]);
-  return (
-    <Page>
-      <Heading>相遇的人</Heading>
-      <ErrorText text={error} />
-      {characters.map((c) => (
-        <Card key={c.id}>
-          <Avatar name={c.persona.name} uri={c.avatar} />
+      <Card>
+        <Text style={{ fontSize: 18, fontWeight: '600' }}>清空并重新创建</Text>
+        <Note>
+          这会永久删除当前角色的人格、全部聊天、记忆、经历和待办，并停用她的通知和桌面入口。模型密钥与费用账本保留。建议先导出备份。
+        </Note>
+        {resetOpen ? (
+          <>
+            <Field
+              label={`输入当前角色名「${character?.persona.name ?? ''}」确认`}
+              value={resetName}
+              onChangeText={setResetName}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+            <ErrorText text={error} />
+            <Button
+              title="确认清空，重新创建"
+              disabled={busy || !character || resetName !== character.persona.name}
+              onPress={() => {
+                setBusy(true);
+                setError('');
+                void resetCharacter(runtime.store, cid, resetName, {
+                  stop: async (id) => {
+                    if (bridge().presenceState().characterId === id) bridge().stopPresence();
+                    bridge().cancelNotification(`settings-test:${id}`);
+                  },
+                  cancelNotification: async (id) => bridge().cancelNotification(id),
+                  removeShortcut: async (id) => bridge().removeShortcut(id),
+                  removeAvatar: bundleAssets.removeAvatar,
+                })
+                  .then(() => navigation.reset({ index: 0, routes: [{ name: 'Create' }] }))
+                  .catch((e) => setError(e instanceof Error ? e.message : '无法重置，请稍后再试'))
+                  .finally(() => setBusy(false));
+              }}
+            />
+            <Button
+              title="取消，保留当前角色"
+              secondary
+              disabled={busy}
+              onPress={() => {
+                setResetOpen(false);
+                setResetName('');
+              }}
+            />
+          </>
+        ) : (
           <Button
-            title={c.persona.name}
+            title="清空当前角色并重新创建"
             secondary
-            onPress={() => navigation.replace('Chat', { characterId: c.id })}
+            disabled={busy}
+            onPress={() => {
+              setResetOpen(true);
+              setResetName('');
+              setError('');
+            }}
           />
-          <Note>{c.persona.identity}</Note>
-        </Card>
-      ))}
-      <Button title="认识新的角色" onPress={() => navigation.navigate('Create')} />
+        )}
+      </Card>
     </Page>
   );
 }

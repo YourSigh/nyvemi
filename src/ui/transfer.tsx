@@ -38,6 +38,10 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
   };
   const importPerson = async () => {
     if (!bytes) return;
+    if ((await runtime.store.list('characters')).length) {
+      setError('请先在设置中备份并确认清空当前角色，再导入备份。');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -102,7 +106,7 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
             {preview.messages.length} 条对话 · {preview.memories.length} 条记忆 ·{' '}
             {preview.experiences.length} 个经历
           </Note>
-          <Note>将作为独立角色导入，不覆盖已有角色。</Note>
+          <Note>导入用于恢复这位角色；已有角色时，请先到设置中备份并确认清空。</Note>
           <Button title="导入这个人" disabled={busy} onPress={() => void importPerson()} />
         </Card>
       ) : null}

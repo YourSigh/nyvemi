@@ -1,6 +1,7 @@
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
 import { AppState, View } from 'react-native';
+import { requestNotificationsOnLaunch } from './src/native/android';
 import { resumeCompanionPresence } from './src/native/presence';
 import { registerHeartbeat } from './src/native/background';
 import { markAppActive } from './src/application/settings';
@@ -20,7 +21,7 @@ import { WelcomeScreen, ProviderScreen, GenerateScreen } from './src/ui/onboardi
 import { ChatScreen } from './src/ui/chat';
 import { ScreenErrorBoundary } from './src/ui/error-boundary';
 import { MemoryScreen } from './src/ui/memory';
-import { SettingsScreen, CharactersScreen } from './src/ui/settings';
+import { SettingsScreen } from './src/ui/settings';
 import type { Routes } from './src/ui/navigation';
 const Stack = createNativeStackNavigator<Routes>();
 export default function App() {
@@ -65,6 +66,7 @@ export default function App() {
         .catch(() => runtime.diagnostics.error('', 'presence_resume'))
         .catch(() => undefined);
     };
+    void requestNotificationsOnLaunch().catch(() => undefined);
     resume();
     const timer = setInterval(active, 60000);
     const subscription = AppState.addEventListener('change', resume);
@@ -178,11 +180,6 @@ export default function App() {
                       name="Settings"
                       component={SettingsScreen}
                       options={{ title: '关于她' }}
-                    />
-                    <Stack.Screen
-                      name="Characters"
-                      component={CharactersScreen}
-                      options={{ title: '角色' }}
                     />
                   </Stack.Navigator>
                 </NavigationContainer>

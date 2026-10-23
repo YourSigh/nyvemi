@@ -82,6 +82,10 @@ export class CharacterService {
     await this.store.atomic(async (tx) => {
       await tx.put('characters', character);
       const settings = defaultSettings(characterId);
+      // The interview already asks the user how initiative should work. Respect an explicit opt-out.
+      settings.proactiveEnabled = !/等我开启|不[要想用]?主动|关闭|不打扰|等我找/.test(
+        answers.initiative,
+      );
       const hours = answers.quietTimes.match(/(\d{1,2}):\d{2}\s*[-–—至到]\s*(\d{1,2}):\d{2}/);
       if (hours && Number(hours[1]) <= 23 && Number(hours[2]) <= 23) {
         settings.quietStart = Number(hours[1]);

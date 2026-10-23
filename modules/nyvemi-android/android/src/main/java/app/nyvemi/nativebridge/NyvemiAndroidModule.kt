@@ -17,6 +17,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.core.content.ContextCompat
 import android.net.Uri
+import android.provider.Settings
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -71,6 +72,21 @@ class NyvemiAndroidModule : Module() {
     Function("presenceState") {
       val prefs = NyvemiPresenceService.preferences(context())
       mapOf("enabled" to prefs.getBoolean("enabled", false), "running" to (NyvemiPresenceService.instance != null), "characterId" to (prefs.getString("characterId", "") ?: ""))
+    }
+    AsyncFunction("openNotificationSettings") {
+      val ctx = context(); channel(ctx)
+      val intent = if (Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+        putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+      } else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}"))
+      ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+    AsyncFunction("openBatterySettings") {
+      val ctx = context()
+      ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+    Function("removeShortcut") { characterId: String ->
+      if (Build.VERSION.SDK_INT >= 26) context().getSystemService(ShortcutManager::class.java)
+        .disableShortcuts(listOf("character:$characterId"), "这个角色已重新创建")
     }
     Function("hasNetwork") {
       val connectivity = context().getSystemService(ConnectivityManager::class.java)

@@ -10,6 +10,9 @@ interface AndroidBridge {
   stopPresence(): void;
   updatePresence(characterId: string, name: string, text: string): void;
   canNotify(): boolean;
+  openNotificationSettings(): Promise<void>;
+  openBatterySettings(): Promise<void>;
+  removeShortcut(characterId: string): void;
   notify(
     id: string,
     cid: string,
@@ -42,4 +45,12 @@ export async function requestNotifications(): Promise<boolean> {
 }
 export function pinCharacter(character: Character): Promise<boolean> {
   return bridge().pinShortcut(character.id, character.persona.name, character.avatar ?? null);
+}
+
+let launchRequest: Promise<void> | undefined;
+export function requestNotificationsOnLaunch(): Promise<void> {
+  return (launchRequest ??= (async () => {
+    const current = await Notifications.getPermissionsAsync();
+    if (current.status === 'undetermined') await requestNotifications();
+  })());
 }
