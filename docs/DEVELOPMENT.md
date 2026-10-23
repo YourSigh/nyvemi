@@ -135,3 +135,13 @@
 - 发布版本 0.2.2 / versionCode 4，ARM64 内嵌 JS 开发签名侧载包 artifacts/Nyvemi-0.2.2-arm64-preview.apk；不包含验收入口或 .env Key。
 
 - 最终 APK SHA-256：81a1f5caa774bedfa66dda697c546712ed0ce3c1cbfce1a3c20a215f51009682。v2 签名、内嵌 JS、正式 applicationId 与版本信息校验通过；解包扫描未发现 .env 密钥或 QA 入口标记。
+
+## 0.3.0 语义主题与颜色开场（2026-10-23）
+
+- src/theme/ 分离了语义模型、配色引擎、持久化、临时截图和遮罩几何；运行时 Theme Context 驱动所有现有页面和公共组件，移除模块加载时固化的页面颜色。
+- 模型只解析枚举语义，最终 HEX 在设备生成。浅色/深色下正文、说明、强调、错误文字及按钮前景有对比度约束；系统栏图标与选择光标一起适配。UsageLedger 记录 theme_interpretation，用途上限 400 输出 Token。已保存的相同模型解释直接复用；本地降级可显式重试。
+- 新增 react-native-svg / react-native-view-shot，使用 Expo SDK 55 指定版本。动画以 1050ms 的对角 SVG Path 揭示新主题；仅捕获当前原生页面用于短暂覆盖，失败则直接应用。减少动态效果跳过过渡；不引入 Skia 或第二套页面树。
+- 第一屏收集颜色草稿；Provider 保存后进入主题阶段；已有角色在设置更换。默认粉白可跳过、可恢复，原有访谈题数不变。主题、草稿采用现有 SQLite entity schema，不在组件建表；角色 Bundle 升级为 v2 并兼容读取 v1，迁移时只在新环境恢复主题。
+- 本轮不做设备 UI 走查或任何付费模型调用；依用户要求由用户安装验收。发布目标 0.3.0 / versionCode 5，ARM64、开发签名、内嵌 Hermes JS。
+
+- 最终检查：format / lint / typecheck、82 项测试通过（2 项 live 跳过）；Debug 5s、Release 32s。0.3.0 APK 35,807,105 bytes，v2 签名校验通过，内嵌 JS、正式 applicationId 和版本信息确认；解包与跟踪文件扫描未发现 .env Key 或 QA 入口。SHA-256：5472453ca6af2d46a3cfb7d74f919f4f011c83d30801bc321eb59f5a28895740。

@@ -7,6 +7,9 @@ import { TestDatabase } from './database';
 import type { LLMProvider } from '../src/providers/provider';
 
 it('generates readable, bounded palettes across all supported semantic combinations', () => {
+  expect(contrast('#000000', '#FFFFFF')).toBe(21);
+  expect(contrast('#FFFFFF', '#FFFFFF')).toBe(1);
+  expect(contrast('#777777', '#FFFFFF')).toBeCloseTo(4.478089, 5);
   for (const base of ThemePreferenceSchema.shape.base.options)
     for (const mood of ThemePreferenceSchema.shape.mood.options)
       for (const brightness of ['light', 'dark'] as const)
