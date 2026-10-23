@@ -124,3 +124,14 @@
 - lint / typecheck / 61 项常规测试通过，2 项真实模型测试默认跳过；单独 full live 测试 1 项通过，focused memory 测试 1 项通过。格式检查通过。最终 Debug 6s / Release 19s 构建通过，Release 已安装到 API 35 ARM64 模拟器。
 - 0.2.1（versionCode 3）侧载包 artifacts/Nyvemi-0.2.1-arm64-preview.apk，开发签名、内嵌 JS、v2 签名校验通过；SHA-256：bcbbc7b06b066fcde27c25b2065cd1f76c6c0936dfe04f01a66a4faa13d8b728。
 - 为 UI 走查临时构建 app.nyvemi.qa（不同 applicationId、Nyvemi QA 名称）的独立安装包，不覆盖当前角色；仅改了忽略的原生生成目录，原始原生配置已恢复。测试包不包含密钥或已有应用数据。
+
+## 0.2.2 实际试用修复（2026-10-23）
+
+- 去掉聊天流式预览；完整 JSON 回复校验后才逐段显示。新到助手气泡使用 220ms、14dp 上移淡入，历史不重放。生成过程中只更新顶部输入状态。
+- 对照 countdown 的倒序聊天列表，采用底部锚定与键盘高度避让；通过原生保持位置阈值和用户拖动事件区分主动翻历史与布局滚动。
+- 明确延时请求在 ChatService 中走持久化 requested 意图；通知授权、可见常驻启动成功后才确认约定。独立本地快检查不被耗时的普通后台周期堵住，不受普通主动策略的最近聊天/静默/配额阻拦。到期才生成，使用稳定通知 ID 和 outbox、失败一分钟退避、过期清理；重置锁纳入 requested-delivery，迁移不重放未发的定时通知。
+- Android SQLite 共享连接增加串行适配器，排它事务内使用原始事务适配器，避免外层读写争用和重入死锁。当前时间提示同时包含设备本地时间、时区、UTC 偏移与 ISO，禁止模型声称另一套时钟。
+- 70 项常规测试、lint、typecheck、Debug 与 Release 构建；真实一分钟送达、键盘和输入状态证据见 ACCEPTANCE.md。本批本地提交，未 push。
+- 发布版本 0.2.2 / versionCode 4，ARM64 内嵌 JS 开发签名侧载包 artifacts/Nyvemi-0.2.2-arm64-preview.apk；不包含验收入口或 .env Key。
+
+- 最终 APK SHA-256：81a1f5caa774bedfa66dda697c546712ed0ce3c1cbfce1a3c20a215f51009682。v2 签名、内嵌 JS、正式 applicationId 与版本信息校验通过；解包扫描未发现 .env 密钥或 QA 入口标记。
