@@ -8,6 +8,7 @@ import { defaultSettings } from '../src/domain/models';
 import { deepSeekPreset } from '../src/providers/provider';
 import { UsageLedger } from '../src/usage/ledger';
 const cleanup: CharacterCleanup = {
+  cancelRequested: async () => {},
   stop: async () => {},
   cancelNotification: async () => {},
   removeShortcut: async () => {},

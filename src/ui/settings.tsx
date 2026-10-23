@@ -316,6 +316,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                 setBusy(true);
                 setError('');
                 void resetCharacter(runtime.store, cid, resetName, {
+                  cancelRequested: (cid) => bridge().cancelRequestedCharacter(cid),
                   stop: async (id) => {
                     if (bridge().presenceState().characterId === id) bridge().stopPresence();
                     bridge().cancelNotification(`settings-test:${id}`);

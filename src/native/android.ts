@@ -4,6 +4,10 @@ import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  scheduleRequested(id: string, characterId: string, dueAt: number): Promise<void>;
+  cancelRequested(id: string): Promise<void>;
+  cancelRequestedCharacter(characterId: string): Promise<void>;
+  completeRequestedRun(runId: string, done: boolean): void;
   setNavigationBarDark(dark: boolean): Promise<void>;
   presenceState(): PresenceState;
   hasNetwork(): boolean;

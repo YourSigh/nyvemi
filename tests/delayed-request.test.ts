@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
 import { requestedDelay, queueRequestedMessage } from '../src/chat/delayed-request';
+import {
+  reconcileRequestedWork,
+  executeRequestedWork,
+  cancelRequestedWork,
+} from '../src/proactive/requested-delivery';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
 import { ChatService } from '../src/chat/service';
 import { defaultSettings, type Message, type NotificationRecord } from '../src/domain/models';
@@ -38,7 +43,15 @@ async function setup() {
 }
 it('recognizes direct relative requests without scheduling quoted, hypothetical or negative statements', () => {
   expect(requestedDelay('一分钟后发一条你想发的消息给我')).toBe(60000);
+  expect(requestedDelay('芜湖，一分钟后随便给我发一条消息吧')).toBe(60000);
   expect(requestedDelay('请你30秒后给我发一条消息')).toBe(30000);
+  expect(requestedDelay('你过一分钟来找我')).toBe(60000);
+  expect(requestedDelay('那你能不能过一分钟给我发条消息？')).toBe(60000);
+  expect(requestedDelay('半个小时后给我发消息')).toBe(1800000);
+  expect(requestedDelay('一分钟后说一句你想说的话')).toBe(60000);
+  expect(requestedDelay('能不能一分钟后给我发个信息？')).toBe(60000);
+  expect(requestedDelay('过一分钟给我发个信息，可以吗？')).toBe(60000);
+  expect(requestedDelay('请你在1.5分钟后跟我聊聊')).toBe(90000);
   expect(requestedDelay('半小时后找我聊聊')).toBe(1800000);
   expect(requestedDelay('十二分钟后发消息给我')).toBe(720000);
   for (const input of [
@@ -49,6 +62,11 @@ it('recognizes direct relative requests without scheduling quoted, hypothetical 
     '0分钟后发消息给我',
     '25小时后发消息给我',
     '一分钟后给你发消息',
+    '一分钟后我给你发消息',
+    '我过一分钟找你聊聊',
+    '你一分钟前给我发个消息',
+    '一分钟后不要联系我',
+    '假设一分钟后找我聊聊',
   ])
     expect(requestedDelay(input)).toBeUndefined();
 });
@@ -73,13 +91,14 @@ it('only acknowledges an armed, persisted request and retries without changing i
   expect(await store.list('intentions')).toHaveLength(1);
 });
 it('routes the exact reported chat request into the queue before showing its acknowledgement', async () => {
-  const { store, c, user } = await setup();
+  const { store, c } = await setup();
   const service = new ChatService(store, async () => fake, new Diagnostics(store), {
     retrieve: async () => [],
     afterRound: async () => {},
-    scheduleRequested: (request) => queueRequestedMessage(store, request, 60000, async () => {}),
+    scheduleRequested: (request, delay) =>
+      queueRequestedMessage(store, request, delay, async () => {}),
   });
-  await service.send(c.id, user.content, () => {});
+  await service.send(c.id, '芜湖，一分钟后随便给我发一条消息吧', () => {});
   expect(await store.list('intentions')).toHaveLength(1);
   expect((await service.history(c.id)).at(-1)?.content).toContain('记下了');
 });
@@ -193,4 +212,143 @@ it('does not call the API when expired or denied notification permission', async
   now += 3600001;
   await engine.runRequested();
   expect((await store.list('intentions', c.id))[0].status).toBe('expired');
+});
+
+it('registers only a persisted task, recovers pending tasks after upgrade and does not replay cancelled/expired work', async () => {
+  const { store, user } = await setup();
+  const scheduled: [string, number][] = [];
+  const cancelled: string[] = [];
+  await queueRequestedMessage(
+    store,
+    user,
+    60000,
+    async (task) => {
+      expect(await store.get('intentions', task.id)).toEqual(task);
+      scheduled.push([task.id, task.earliestAt]);
+    },
+    100,
+  );
+  const scheduler = {
+    scheduleRequested: async (id: string, _: string, due: number) => {
+      scheduled.push([id, due]);
+    },
+    cancelRequested: async (id: string) => {
+      cancelled.push(id);
+    },
+  };
+  await reconcileRequestedWork(store, scheduler, 1000);
+  expect(scheduled).toEqual([
+    ['requested:u', 60100],
+    ['requested:u', 60100],
+  ]);
+  await cancelRequestedWork(store, scheduler, 'requested:u');
+  let runs = 0;
+  expect(
+    await executeRequestedWork(
+      store,
+      async () => {
+        runs++;
+      },
+      'requested:u',
+    ),
+  ).toBe(true);
+  expect(
+    await executeRequestedWork(
+      store,
+      async () => {
+        runs++;
+      },
+      'missing',
+    ),
+  ).toBe(true);
+  expect(runs).toBe(0);
+  await reconcileRequestedWork(store, scheduler, 1000);
+  expect(cancelled).toEqual(['requested:u', 'requested:u']);
+  expect(scheduled).toHaveLength(2);
+});
+
+it('does not mark a native run successful merely because heartbeat returned while leased, early, or permission blocked', async () => {
+  const { store, user } = await setup();
+  await queueRequestedMessage(store, user, 60000, async () => {}, 100);
+  expect(await executeRequestedWork(store, async () => {}, 'requested:u')).toBe(false);
+  await store.put('intentions', {
+    ...(await store.get('intentions', 'requested:u'))!,
+    status: 'completed',
+  });
+  expect(
+    await executeRequestedWork(
+      store,
+      async () => {
+        throw new Error('must not regenerate');
+      },
+      'requested:u',
+    ),
+  ).toBe(true);
+});
+
+it('dispatches a specific native intention without losing other due tasks or sending duplicates', async () => {
+  const { store, c, user } = await setup();
+  let now = 100000;
+  await queueRequestedMessage(store, user, 10000, async () => {}, now);
+  await queueRequestedMessage(store, { ...user, id: 'second' }, 10000, async () => {}, now + 1);
+  now += 10001;
+  const sent: NotificationRecord[] = [];
+  const engine = new HeartbeatEngine(
+    store,
+    async () => fake,
+    {
+      enabled: async () => true,
+      show: async (n) => {
+        sent.push(n);
+      },
+      cancel: async () => {},
+    },
+    new Diagnostics(store),
+    () => now,
+  );
+  const run = (id: string) =>
+    executeRequestedWork(store, (target) => engine.runRequested(target), id);
+  expect(await run('requested:u')).toBe(true);
+  expect((await store.get('intentions', 'requested:second'))?.status).toBe('pending');
+  expect(await run('requested:second')).toBe(true);
+  await run('requested:u');
+  expect(sent).toHaveLength(2);
+  expect((await store.list('messages', c.id)).filter((m) => m.status === 'complete')).toHaveLength(
+    2,
+  );
+});
+
+it('cancels a request during generation before an outbox or notification is created', async () => {
+  const { store, user } = await setup();
+  const now = 100000;
+  await queueRequestedMessage(store, user, 10000, async () => {}, now - 10000);
+  const provider: LLMProvider = {
+    ...fake,
+    structuredOutput: async (_, schema) => {
+      await cancelRequestedWork(
+        store,
+        { scheduleRequested: async () => {}, cancelRequested: async () => {} },
+        'requested:u',
+      );
+      return schema.parse({ messages: ['这条不应该出现'] });
+    },
+  };
+  const engine = new HeartbeatEngine(
+    store,
+    async () => provider,
+    {
+      enabled: async () => true,
+      show: async () => {
+        throw new Error('must not notify');
+      },
+      cancel: async () => {},
+    },
+    new Diagnostics(store),
+    () => now,
+  );
+  expect(await executeRequestedWork(store, (id) => engine.runRequested(id), 'requested:u')).toBe(
+    true,
+  );
+  expect(await store.list('notifications')).toHaveLength(0);
+  expect(await store.list('messages')).toHaveLength(0);
 });

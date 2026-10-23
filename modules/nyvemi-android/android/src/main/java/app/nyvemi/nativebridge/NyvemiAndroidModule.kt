@@ -70,6 +70,12 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("scheduleRequested") { id: String, cid: String, dueAt: Double ->
+      NyvemiRequestedWork.schedule(context().applicationContext, id, cid, dueAt.toLong())
+    }
+    AsyncFunction("cancelRequested") { id: String -> NyvemiRequestedWork.cancel(context(), id) }
+    AsyncFunction("cancelRequestedCharacter") { cid: String -> NyvemiRequestedWork.cancelCharacter(context(), cid) }
+    Function("completeRequestedRun") { runId: String, done: Boolean -> NyvemiRequestedWork.complete(runId, done) }
     Function("presenceState") {
       val prefs = NyvemiPresenceService.preferences(context())
       mapOf("enabled" to prefs.getBoolean("enabled", false), "running" to (NyvemiPresenceService.instance != null), "characterId" to (prefs.getString("characterId", "") ?: ""))
@@ -122,7 +128,7 @@ class NyvemiAndroidModule : Module() {
     }
     AsyncFunction("notify") { notificationId: String, characterId: String, name: String, body: String, avatarUri: String? ->
       val ctx = context(); channel(ctx)
-      if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled()) throw IllegalStateException("Notification permission missing")
+      if (!NotificationManagerCompat.from(ctx).areNotificationsEnabled() || (Build.VERSION.SDK_INT >= 26 && manager(ctx).getNotificationChannel(channelId)?.importance == NotificationManager.IMPORTANCE_NONE)) throw IllegalStateException("Notification permission missing")
       val pending = PendingIntent.getActivity(ctx, notificationId.hashCode(), launchIntent(ctx, characterId, notificationId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
       val smallIcon = ctx.resources.getIdentifier("nyvemi_notification", "drawable", ctx.packageName).takeIf { it != 0 } ?: ctx.applicationInfo.icon
       val notification = NotificationCompat.Builder(ctx, channelId)

@@ -2,6 +2,7 @@ import { registerRootComponent } from 'expo';
 
 import './src/native/background';
 import './src/native/presence';
+import './src/native/requested';
 import App from './App';
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);

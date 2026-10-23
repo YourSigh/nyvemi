@@ -1,3 +1,4 @@
+import { cancelRequestedWork } from '../proactive/requested-delivery';
 import { usePalette } from '../theme/context';
 import type { Palette } from '../theme/model';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
@@ -15,7 +16,7 @@ import {
 import type { PropsWithChildren } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Character, Message } from '../domain/models';
+import type { Character, Message, Intention } from '../domain/models';
 import { Avatar, Button, ErrorText } from './components';
 import { bridge } from '../native/android';
 import { useRuntime } from './context';
@@ -57,6 +58,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [historyLimit, setHistoryLimit] = useState(100);
@@ -93,6 +95,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     setCharacter(c);
     const settings = await runtime.store.get('settings', cid);
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
+    setRequested(
+      (await runtime.store.list('intentions', cid, 10000))
+        .filter((i) => i.type === 'requested' && i.status === 'pending' && i.latestAt > Date.now())
+        .sort((a, b) => a.earliestAt - b.earliestAt),
+    );
 
     if (!c) setError('这个角色已被清空，请重新创建。');
   }, [runtime, cid, historyLimit]);
@@ -202,6 +209,46 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             </Pressable>
           </View>
         ) : null}
+        {requested.map((task) => (
+          <View
+            key={task.id}
+            style={{
+              paddingHorizontal: 16,
+              paddingVertical: 6,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+            }}
+          >
+            <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
+              约好{' '}
+              {new Date(task.requestedDueAt ?? task.earliestAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}{' '}
+              来找你
+              {!bridge().canNotify()
+                ? ' · 通知未开启'
+                : Date.now() >= task.earliestAt
+                  ? ' · 正在等待送达'
+                  : task.requestedDueAt && task.earliestAt > task.requestedDueAt
+                    ? ' · 稍后重试'
+                    : ''}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="取消这次约定来信"
+              onPress={() => {
+                void cancelRequestedWork(runtime.store, bridge(), task.id)
+                  .then(refresh)
+                  .catch(() => setError('取消未完成，请稍后重试'));
+              }}
+            >
+              <Text style={{ color: palette.accent, padding: 6 }}>取消</Text>
+            </Pressable>
+          </View>
+        ))}
         <FlatList
           ref={list}
           data={[...messages].reverse()}

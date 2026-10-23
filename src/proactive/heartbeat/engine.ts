@@ -25,11 +25,12 @@ export class HeartbeatEngine {
     private activity: (stage: CompanionActivity, characterId: string) => void = () => {},
   ) {}
   // User-requested delivery is independent of unsolicited initiative and its cooldowns.
-  async runRequested(): Promise<void> {
+  async runRequested(targetId?: string): Promise<void> {
     const now = this.clock();
     if (!(await this.store.lease('requested-delivery', now, 180000))) return;
     try {
       for (const intention of await this.store.list('intentions', undefined, 10000)) {
+        if (targetId && intention.id !== targetId) continue;
         if (intention.type !== 'requested' || intention.status !== 'pending') continue;
         const cid = intention.characterId;
         const report = (reason: string, decision = 'skip') =>
@@ -111,6 +112,7 @@ export class HeartbeatEngine {
               await tx.put('notifications', outbox);
             });
           }
+          if ((await this.store.get('intentions', intention.id))?.status !== 'pending') continue;
           if (record.status !== 'delivered') await this.deliver(record, character);
           await this.store.atomic(async (tx) => {
             const fresh = await tx.get('intentions', intention.id);

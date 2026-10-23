@@ -47,15 +47,17 @@ async function createRuntime() {
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const chat = new ChatService(store, provider, diagnostics, {
-    scheduleRequested: async (user, delayMs) =>
-      queueRequestedMessage(store, user, delayMs, async () => {
-        if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
-        if (!(await requestNotifications()) || !bridge().canNotify())
-          throw new Error('没有排好来信：请先在设置中允许角色通知，然后重试这条消息');
-        const c = await store.get('characters', user.characterId);
-        if (!c) throw new Error('角色不存在');
-        await bridge().startPresence(c.id, c.persona.name);
-      }),
+    scheduleRequested: async (user, delayMs) => {
+      if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
+      if (!(await requestNotifications()) || !bridge().canNotify())
+        throw new Error('没有排好来信：请先在设置中允许角色通知，然后重试这条消息');
+      const c = await store.get('characters', user.characterId);
+      if (!c) throw new Error('角色不存在');
+      await bridge().startPresence(c.id, c.persona.name);
+      return queueRequestedMessage(store, user, delayMs, (task) =>
+        bridge().scheduleRequested(task.id, task.characterId, task.earliestAt),
+      );
+    },
     retrieve: async (characterId, query) => {
       const ranked = retriever.rank(query, await memories.list(characterId), Date.now());
       await memories.touch(ranked.map((r) => r.memory));

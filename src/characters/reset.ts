@@ -1,5 +1,6 @@
 import type { Storage } from '../storage/store';
 export interface CharacterCleanup {
+  cancelRequested(characterId: string): Promise<void>;
   stop(characterId: string): Promise<void>;
   cancelNotification(id: string): Promise<void>;
   removeShortcut(characterId: string): Promise<void>;
@@ -30,6 +31,7 @@ export async function resetCharacter(
     const notifications = await store.list('notifications', characterId, 100000);
     // Fail before deletion if the OS service cannot be stopped/cancelled.
     await cleanup.stop(characterId);
+    await cleanup.cancelRequested(characterId);
     for (const n of notifications) await cleanup.cancelNotification(n.id);
     await cleanup.removeShortcut(characterId);
     await store.atomic(async (tx) => {

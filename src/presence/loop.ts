@@ -13,6 +13,16 @@ export function idleActivity(
   online = true,
 ): string {
   if (!online) return '暂时离线，已保存的记忆还在这里';
+  if (
+    intentions.some(
+      (i) =>
+        i.characterId === character.id &&
+        i.type === 'requested' &&
+        i.status === 'pending' &&
+        i.latestAt > now,
+    )
+  )
+    return '记着和你约好的来信，到了时间再找你';
   if (!settings.proactiveEnabled) return '安静陪着你，主动来信尚未开启';
   if (isQuietHour(now, settings.quietStart, settings.quietEnd)) return '现在是安静时段，先不打扰你';
   if (now - settings.lastActiveAt < settings.recentActiveMinutes * 60000)

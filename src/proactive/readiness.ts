@@ -1,6 +1,12 @@
 import type { Settings, Intention, NotificationRecord } from '../domain/models';
 import { policyBlock } from './policies';
 const reasons: Record<string, string> = {
+  requested_by_user: '已发出和你约好的来信',
+  requested_expired: '约定来信超过可发送的时间窗口',
+  requested_notification_permission: '约定来信等待通知权限，请打开角色来信渠道',
+  requested_generation_or_delivery_error:
+    '约定来信生成或投递失败，已安排重试；请检查网络、模型和通知设置',
+
   proactive_disabled: '主动来信尚未开启',
   quiet_hours: '现在是安静时段，暂不打扰',
   recent_active_chat: '你刚刚在 App 里，离开一段时间后才会考虑来信',
@@ -25,6 +31,8 @@ export function proactiveReadiness(
   now: number,
 ): string {
   if (!canNotify) return proactiveReason('notification_permission');
+  if (intentions.some((i) => i.type === 'requested' && i.status === 'pending' && i.latestAt > now))
+    return '已记下约定来信，Android 后台任务等待发送；约定时间和取消入口在聊天顶部';
   const block = policyBlock(settings, notifications, now);
   if (block) return proactiveReason(block);
   if (!intentions.some((i) => i.status === 'pending' && i.latestAt > now))
