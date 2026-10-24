@@ -242,3 +242,55 @@ it('migrates the chosen appearance while preserving an existing app theme and ac
   expect(await d.store.list('characters')).toHaveLength(1);
   expect(await d.store.get('themes', 'app')).toBeUndefined();
 });
+
+it('restores every bubble in a multi-part proactive notification and does not replay a pending continuation', async () => {
+  const a = await setup();
+  const b = await setup();
+  await a.store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    state: { energy: 0.7, relationshipCloseness: 0.1, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: 1,
+  });
+  await a.store.put('settings', defaultSettings('c'));
+  for (const [n, mid] of ['a1', 'a2'].entries())
+    await a.store.put('messages', {
+      id: mid,
+      characterId: 'c',
+      role: 'assistant',
+      content: `分段${n}`,
+      createdAt: 2 + n,
+      origin: 'proactive',
+      status: 'complete',
+    });
+  await a.store.put('notifications', {
+    id: 'n',
+    characterId: 'c',
+    messageId: 'a1',
+    messageIds: ['a1', 'a2'],
+    deliveryKind: 'continuation',
+    title: '桶',
+    body: '分段',
+    createdAt: 2,
+    status: 'delivered',
+  });
+  await a.store.put('intentions', {
+    id: 'i',
+    characterId: 'c',
+    type: 'continuation',
+    topic: '一个没说完的念头',
+    reason: '之后聊',
+    earliestAt: 10,
+    latestAt: 9000000000000,
+    importance: 0.75,
+    status: 'pending',
+    createdAt: 1,
+  });
+  const imported = await b.service.importCharacter(await a.service.exportCharacter('c'));
+  const notification = (await b.store.list('notifications', imported.id))[0];
+  expect(notification.messageIds).toHaveLength(2);
+  for (const mid of notification.messageIds!)
+    expect((await b.store.get('messages', mid))?.characterId).toBe(imported.id);
+  expect((await b.store.list('intentions', imported.id))[0].status).toBe('expired');
+});

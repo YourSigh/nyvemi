@@ -11,6 +11,8 @@ export async function reconcileIntentionWork(
   now = Date.now(),
 ): Promise<void> {
   for (const task of await store.list('intentions', undefined, 10000)) {
+    // Old terminal tasks cannot deliver again; avoid re-cancelling years of history every chat.
+    if (task.status !== 'pending' && now - task.createdAt > 86400000) continue;
     const settings = await store.get('settings', task.characterId);
     if (task.type !== 'requested' && !settings?.proactiveEnabled) {
       await scheduler.cancelRequested(task.id);
@@ -33,6 +35,11 @@ export async function executeIntentionWork(
 ): Promise<boolean> {
   const task = await store.get('intentions', id);
   if (!task || task.status !== 'pending') return true;
+  if (
+    task.type !== 'requested' &&
+    !(await store.get('settings', task.characterId))?.proactiveEnabled
+  )
+    return true;
   await run(id);
   const fresh = await store.get('intentions', id);
   return !fresh || fresh.status !== 'pending';

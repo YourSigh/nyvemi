@@ -1,9 +1,11 @@
+import type { NativeDeliveryState } from '../proactive/delivery-report';
 import type { PresenceState } from '../presence/loop';
 import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  intentionWorkState(id: string): Promise<NativeDeliveryState>;
   scheduleRequested(id: string, characterId: string, dueAt: number): Promise<void>;
   cancelRequested(id: string): Promise<void>;
   cancelRequestedCharacter(characterId: string): Promise<void>;

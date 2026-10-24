@@ -214,6 +214,7 @@ export class HeartbeatEngine {
             decision: 'skip',
             reason,
             expired,
+            intentionId: targetId,
             score: 0,
             threshold: 0.58,
             ...extra,

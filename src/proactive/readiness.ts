@@ -1,6 +1,17 @@
 import type { Settings, Intention, NotificationRecord } from '../domain/models';
 import { policyBlock } from './policies';
 const reasons: Record<string, string> = {
+  conversation_continuation: '她接着刚才的话题，又发来了几句',
+  continuation_declined: '她重新看了这个念头，决定先不说',
+  continuation_superseded: '你发了新消息，旧的待续念头已经作废',
+  continuation_changed_during_generation: '生成时对话或设置已变化，取消这次续聊',
+  continuation_recent_message: '刚收到你的消息，先让这一轮聊完',
+  continuation_daily_limit: '今天已经接着聊了几次，先安静陪着',
+  continuation_hour_limit: '这一小时已经主动续聊过，先不连着打扰',
+  continuation_expired: '这点余念已经过了适合再提的时间',
+  continuation_notification_permission: '有待续话题，但通知权限未开启',
+  continuation_generation_or_delivery_error: '续聊生成或通知失败，正在等待重试',
+
   requested_by_user: '已发出和你约好的来信',
   requested_expired: '约定来信超过可发送的时间窗口',
   requested_notification_permission: '约定来信等待通知权限，请打开角色来信渠道',

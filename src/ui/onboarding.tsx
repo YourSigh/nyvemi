@@ -206,7 +206,9 @@ export function GenerateScreen({ navigation, route }: ScreenProps<'Generate'>) {
     )
       .then(async (c) => {
         if ((await runtime.store.get('settings', c.id))?.proactiveEnabled)
-          await startCompanionPresence(c).catch(() => undefined);
+          await startCompanionPresence(c)
+            .catch(() => runtime.diagnostics.error(c.id, 'presence_start'))
+            .catch(() => undefined);
         navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] });
       })
       .catch((e) => setError(e instanceof Error ? e.message : '角色生成失败'));

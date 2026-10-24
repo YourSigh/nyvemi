@@ -222,8 +222,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           />
         </View>
         <Note>
-          有具体缘由才联系你。不是定时问候。全 App 每天最多 4 条，不同角色来信至少间隔 30
-          分钟。Android 强制停止、Doze 与厂商电池策略可能延迟后台任务。
+          有具体缘由才联系你。独立主动话题全 App 每天最多 4 次，不同角色至少间隔 30 分钟。
+          刚才话题的续聊单独计数：全 App 每小时最多 2 次、每天最多 6 次，也遵守安静时段。
+          下方上限设为 0 会同时关闭两类自主来信。Android 强制停止、Doze
+          与厂商电池策略可能延迟后台任务。
         </Note>
         <Field
           label="安静时段开始（0～23 点）"
@@ -239,13 +241,13 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
         />
         <Note>起止相同时不启用安静时段。</Note>
         <Field
-          label="每日主动来信上限（0～10）"
+          label="每日独立主动话题上限（0～10）"
           value={limit}
           onChangeText={setLimit}
           keyboardType="number-pad"
         />
         <Field
-          label="两次来信至少相隔几分钟（≥30）"
+          label="独立主动话题至少相隔几分钟（≥30）"
           value={interval}
           onChangeText={setIntervalMinutes}
           keyboardType="number-pad"

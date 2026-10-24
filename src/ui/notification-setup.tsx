@@ -1,6 +1,7 @@
+import { deliveryReport, deliverySummary } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
-import { AppState, Text } from 'react-native';
+import { AppState, Share, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { bridge, requestNotifications } from '../native/android';
 import { startCompanionPresence } from '../native/presence';
@@ -20,6 +21,7 @@ export function NotificationSetup({
   const [enabled, setEnabled] = useState(false);
   const [reason, setReason] = useState('正在检查来信状态…');
   const [latest, setLatest] = useState('');
+  const [health, setHealth] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
@@ -40,6 +42,17 @@ export function NotificationSetup({
     const decision = (await runtime.store.list('diagnostics', characterId, 200)).find(
       (d) => d.kind === 'heartbeat',
     );
+    const report = await deliveryReport(
+      runtime.store,
+      characterId,
+      (id) => bridge().intentionWorkState(id),
+      {
+        notifications: permission,
+        online: bridge().hasNetwork(),
+        presenceRunning: bridge().presenceState().running,
+      },
+    );
+    setHealth(deliverySummary(report));
     setLatest(
       decision
         ? `上次检查 ${new Date(decision.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}：${proactiveReason(String(decision.data.reason))}`
@@ -64,6 +77,7 @@ export function NotificationSetup({
     <Card>
       <Text style={{ color: palette.ink, fontSize: 18, fontWeight: '600' }}>通知与主动来信</Text>
       <Note>{allowed ? '系统与角色来信通知：已开启' : '系统通知或角色来信渠道：未开启'}</Note>
+      <Note>{health}</Note>
       <Note>{reason}</Note>
       <Note>{latest}</Note>
       <Note>
@@ -161,6 +175,42 @@ export function NotificationSetup({
       <Note>
         若后台收不到消息，在系统 App
         电池设置选择允许后台运行／不限制；部分手机还需允许自启动。是否放宽省电由你决定。
+      </Note>
+      <Button
+        title="修复后台任务登记"
+        secondary
+        disabled={busy}
+        onPress={() => {
+          setBusy(true);
+          setError('');
+          void runtime
+            .syncIntentionWork()
+            .then(refresh)
+            .catch(() => setError('后台登记未完成，请分享来信诊断以定位失败阶段'))
+            .finally(() => setBusy(false));
+        }}
+      />
+      <Button
+        title="分享来信诊断（不含聊天和密钥）"
+        secondary
+        disabled={busy}
+        onPress={() => {
+          setBusy(true);
+          setError('');
+          void deliveryReport(runtime.store, characterId, (id) => bridge().intentionWorkState(id), {
+            notifications: bridge().canNotify(),
+            online: bridge().hasNetwork(),
+            presenceRunning: bridge().presenceState().running,
+          })
+            .then((report) =>
+              Share.share({ message: JSON.stringify(report, null, 2), title: 'Nyvemi 来信诊断' }),
+            )
+            .catch(() => setError('无法生成诊断，请稍后重试'))
+            .finally(() => setBusy(false));
+        }}
+      />
+      <Note>
+        诊断只包含任务时间、后台执行阶段和通知状态。你可以把它发来，定位没有送达的具体环节。
       </Note>
       <ErrorText text={error} />
     </Card>

@@ -70,6 +70,7 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("intentionWorkState") { id: String -> NyvemiRequestedWork.status(context(), id) }
     AsyncFunction("scheduleRequested") { id: String, cid: String, dueAt: Double ->
       NyvemiRequestedWork.schedule(context().applicationContext, id, cid, dueAt.toLong())
     }

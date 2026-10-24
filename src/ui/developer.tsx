@@ -1,3 +1,4 @@
+import { deliveryReport } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
@@ -45,6 +46,16 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       抽取队列: await runtime.store.list('extractions', cid, 60),
       后台注册: await TaskManager.getRegisteredTasksAsync(),
       常驻状态: bridge().presenceState(),
+      来信执行链路: await deliveryReport(
+        runtime.store,
+        cid,
+        (id) => bridge().intentionWorkState(id),
+        {
+          notifications: bridge().canNotify(),
+          online: bridge().hasNetwork(),
+          presenceRunning: bridge().presenceState().running,
+        },
+      ),
     });
   }, [runtime, cid]);
   useFocusEffect(
