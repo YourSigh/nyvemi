@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation, not a completed real-device field trial. **0.4.0:** contextual conversation continuations, richer persona prompts, semantic timer actions and native one-time WorkManager delivery have passed local logic tests and Android compilation; this revision has not been tested on a device or with a paid model. Earlier emulator results below apply to earlier implementations. The core loop has a deterministic integration test using a clearly identified local HTTP model fixture. Android compilation, installation, React Native startup, SQLite creation and WorkManager registration/execution have been checked on an API 35 ARM64 emulator. The optional foreground companion notification was opened and stopped through the emulator UI, and remained active after returning to the launcher. A real DeepSeek test has passed the complete 12-round interview, persona generation, streamed chat, relationship-memory extraction and contextual proactive generation against isolated SQLite. Notification delivery in that test is a test double, with a simulated clock. Full interview UI completion, launcher shortcut confirmation and hours-long background behavior still require device acceptance testing. See [acceptance matrix](docs/ACCEPTANCE.md).
+This is an early MVP implementation. **0.4.1** simplifies settings, keeps everyday conversation in character, and introduces a 2.2-second native Android theme reveal from the upper-left to the lower-right with a feathered edge. Color is asked once during opening and can later be changed through an explicit chat request. Local tests and Android builds validate logic and compilation; device delivery, animation appearance and model behavior for this revision await user acceptance. Earlier emulator and paid-model results in the [acceptance matrix](docs/ACCEPTANCE.md) apply only to those earlier revisions.
 
 ## Local-first and BYOK
 
@@ -194,9 +194,9 @@ There is no “meet another character” action. **清空当前角色并重新�
 
 首次开场会问“你喜欢什么颜色呀？”，可以回答“淡粉色，柔和、不太艳”或“蓝灰色，安静一点”。回答先保存在本机；连接 BYOK Provider 后，模型只输出颜色、氛围、饱和度、明暗和冷暖等结构化语义，本地 Theme Engine 生成整套配色。背景、文字、按钮、气泡、表单和导航一起从左上向右下揭开新主题，随后进入原有的 12 题角色访谈。
 
-已有角色从设置顶部的“换成我喜欢的颜色”体验，不必清空角色。支持浅色、深色与恢复粉白；已确认的同一描述不重复调用模型，换色请求计入“颜色偏好理解”的用量记录。模型不可用时，能识别的颜色会明确使用本地配色；无法理解时保留现有主题并请你补充，也可以跳过。
+颜色只在首次开场询问。以后可在聊天中说“把这里换成淡紫色”或“调暗一点”，不必清空角色或进入设置。普通聊到喜欢什么颜色不会自动换色。支持浅色和深色；已确认的同一描述不重复调用主题模型，换色请求计入“颜色偏好理解”的用量记录。模型不可用时，能识别的颜色会明确使用本地配色；无法理解时保留现有主题并请你补充，也可以跳过。
 
-文字与背景的颜色由本地规则约束，支持的配色组合检查正常文字至少 4.5:1 对比度。系统开启减少动态效果时直接换色；截图失败或动画中断也会完成换色。过渡只保留当前页面的短暂旧画面，不会复制导航、会话或模型调用，结束后释放缓存图像，不写入相册、不上传。主题保存在设备内，Bundle v2 携带主题并兼容导入 v1；已有安装环境的主题优先保留。旧版 App 不能读取新版 v2 Bundle，请先升级。
+文字与背景的颜色由本地规则约束，支持的配色组合检查正常文字至少 4.5:1 对比度。系统开启减少动态效果时直接换色。原生捕获未准备好时保留旧主题并提示重试；已开始的动画中断时释放覆盖层。过渡仅在 Android 内存中保留本 App 的旧画面，不复制导航树，不写截图文件或上传；旧画面以 2.2 秒柔边渐变从左上向右下揭开新主题。主题保存在设备内，Bundle v2 携带主题并兼容导入 v1；已有安装环境的主题优先保留。旧版 App 不能读取新版 v2 Bundle，请先升级。
 
 ## Conversation continuations (0.4.0)
 
