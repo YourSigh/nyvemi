@@ -5,6 +5,7 @@ import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
 import { buildChatPrompt } from './prompt';
+import { isThemeChangeRequest } from '../theme/chat-request';
 import { requestedDelay } from './delayed-request';
 export function parseReply(raw: string): string[] {
   return parseChatOutcome(raw).messages;
@@ -105,6 +106,7 @@ export class ChatService {
     onSaved: () => void = () => {},
     signal?: AbortSignal,
     retryId?: string,
+    onThemeChange?: (description: string) => Promise<void>,
   ): Promise<void> {
     const content = text.trim();
     if (!content || content.length > 6000) throw new Error('请输入 1～6000 字消息');
@@ -174,10 +176,12 @@ export class ChatService {
       history.push({ ...user, status: 'complete' });
       const memories = await this.hooks.retrieve(characterId, content);
       const prompt = buildChatPrompt(character, history, memories);
+      prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
       const pendingIntentions = (await this.store.list('intentions', characterId, 100))
         .filter((i) => i.status === 'pending' && i.latestAt > Date.now())
         .slice(0, 6);
-      prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested))}\n应用实际保存的后续意图（requested 为用户明确约定，其它为可放弃的念头；不要声称有未列出的任务）：${JSON.stringify(pendingIntentions.map((i) => ({ type: i.type, topic: i.topic, earliestAt: new Date(i.earliestAt).toISOString() })))}`;
+      const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
+      prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n应用实际保存的后续意图（requested 为用户明确约定，其它为可放弃的念头；不要声称有未列出的任务）：${JSON.stringify(pendingIntentions.map((i) => ({ type: i.type, topic: i.topic, earliestAt: new Date(i.earliestAt).toISOString() })))}`;
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';
@@ -192,10 +196,15 @@ export class ChatService {
         signal,
       );
       const outcome = parseChatOutcome(result.content);
+      if (outcome.theme && !canChangeTheme) throw new Error('这轮未明确要求换色，已保留原来的颜色');
       if (outcome.schedule) {
         await acknowledge(outcome.schedule.afterSeconds * 1000);
         return;
       }
+      // Explicit UI requests still execute if a provider omits the optional action field.
+      const themeDescription = canChangeTheme
+        ? (outcome.theme?.description ?? content.slice(0, 500))
+        : undefined;
       const replies = outcome.messages;
       const saved: Message[] = [];
       const base = Math.max(Date.now(), user.createdAt + 1);
@@ -217,7 +226,7 @@ export class ChatService {
       await this.store.atomic(async (tx) => {
         await tx.put('messages', user!);
         for (const message of group) await tx.put('messages', message);
-        if (outcome.continuation && replies.length)
+        if (outcome.continuation && replies.length && !themeDescription)
           await saveContinuation(tx, user!, outcome.continuation, base);
       });
       hasReply = true;
@@ -231,6 +240,7 @@ export class ChatService {
         onPreview('');
         onSaved();
       }
+      if (themeDescription && onThemeChange) await onThemeChange(themeDescription);
       // Hooks persist their durable work before returning; actual extraction does not block the composer.
       try {
         await this.hooks.afterRound(characterId, user, saved);

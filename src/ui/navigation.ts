@@ -4,7 +4,7 @@ export type Routes = {
   Welcome: undefined;
   Usage: undefined;
   Provider: { onboarding?: boolean; skipTheme?: boolean } | undefined;
-  Theme: { onboarding?: boolean; autoGenerate?: boolean } | undefined;
+  Theme: undefined;
   Create: undefined;
   Generate: { answers: CharacterAnswers; demo: boolean; interview?: boolean };
   Chat: { characterId: string; notificationId?: string };

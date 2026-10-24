@@ -27,6 +27,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.functions.Queues
 
 class NyvemiAndroidModule : Module() {
+  private val themeTransition = NyvemiThemeTransition()
   private val channelId = "nyvemi-companions-v1"
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
   private fun manager(ctx: Context): NotificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -70,6 +71,13 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("prepareThemeTransition") { themeTransition.prepare(appContext.currentActivity) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("revealThemeTransition") { duration: Int, promise: expo.modules.kotlin.Promise ->
+      themeTransition.reveal(duration) { promise.resolve(null) }
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("finishThemeTransition") { themeTransition.finish() }.runOnQueue(Queues.MAIN)
+    OnActivityEntersBackground { themeTransition.finish() }
+    OnDestroy { themeTransition.finish() }
     AsyncFunction("intentionWorkState") { id: String -> NyvemiRequestedWork.status(context(), id) }
     AsyncFunction("scheduleRequested") { id: String, cid: String, dueAt: Double ->
       NyvemiRequestedWork.schedule(context().applicationContext, id, cid, dueAt.toLong())

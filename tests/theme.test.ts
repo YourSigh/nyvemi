@@ -130,3 +130,36 @@ it('remembers the opening color answer before BYOK setup without making any API 
   await service.clearOpening();
   expect(await service.opening()).toBeUndefined();
 });
+
+it('completes the first color question durably when skipped and preserves later chat changes', async () => {
+  const { store, service, calls } = await fixture(defaultPreference);
+  await service.rememberOpening('淡蓝色');
+  await service.completeOpening();
+  expect(await service.opening()).toBeUndefined();
+  expect(await service.load()).toMatchObject({ source: 'default' });
+  const selected = {
+    id: 'app' as const,
+    version: 1 as const,
+    preference: { ...defaultPreference, base: 'purple' as const },
+    description: '淡紫色',
+    source: 'model' as const,
+    createdAt: 123,
+  };
+  await service.save(selected);
+  const restarted = new ThemeService(store, async () => {
+    throw new Error('no model calls');
+  });
+  await restarted.completeOpening();
+  expect(await restarted.load()).toEqual(selected);
+  expect(await restarted.opening()).toBeUndefined();
+  expect(calls).toHaveLength(0);
+});
+
+it('keeps the current base color for relative chat adjustments when the provider is unavailable', async () => {
+  const { service } = await fixture({ invalid: true });
+  const theme = await service.interpret('调暗一点', { ...defaultPreference, base: 'purple' });
+  expect(theme).toMatchObject({
+    source: 'local',
+    preference: { base: 'purple', brightness: 'dark' },
+  });
+});

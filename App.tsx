@@ -42,6 +42,8 @@ function Application() {
       .catch(() => {});
   }, [record?.preference.brightness]);
   const [resumeTheme, setResumeTheme] = useState(false);
+  const [resumeProvider, setResumeProvider] = useState(false);
+  const [skipTheme, setSkipTheme] = useState(false);
   const [runtime, setRuntime] = useState<Runtime>();
   const [initial, setInitial] = useState<string>();
   const [resumeInterview, setResumeInterview] = useState(false);
@@ -56,9 +58,11 @@ function Application() {
         const draft = await r.store.get('interviews', 'active');
         const savedTheme = await r.themes.load();
         hydrate(savedTheme);
-        setResumeTheme(
-          Boolean(await r.themes.opening()) && Boolean(await r.store.get('provider', 'provider')),
-        );
+        const opening = await r.themes.opening();
+        const provider = await r.store.get('provider', 'provider');
+        setResumeProvider(!provider && Boolean(opening || savedTheme || draft));
+        setSkipTheme(Boolean(savedTheme) && !opening);
+        setResumeTheme(Boolean(opening) && Boolean(provider));
         if (live) {
           setRuntime(r);
           setInitial(chars[0]?.id);
@@ -148,11 +152,13 @@ function Application() {
                     initialRouteName={
                       initial
                         ? 'Chat'
-                        : resumeTheme
-                          ? 'Theme'
-                          : resumeInterview
-                            ? 'Create'
-                            : 'Welcome'
+                        : resumeProvider
+                          ? 'Provider'
+                          : resumeTheme
+                            ? 'Theme'
+                            : resumeInterview
+                              ? 'Create'
+                              : 'Welcome'
                     }
                     screenOptions={{
                       headerShadowVisible: false,
@@ -173,13 +179,13 @@ function Application() {
                     <Stack.Screen
                       name="Provider"
                       component={ProviderScreen}
+                      initialParams={resumeProvider ? { onboarding: true, skipTheme } : undefined}
                       options={{ title: '模型连接' }}
                     />
                     <Stack.Screen
                       name="Theme"
                       component={ThemeScreen}
-                      initialParams={{ onboarding: true }}
-                      options={{ title: '先从你的颜色开始' }}
+                      options={{ title: '属于你的颜色' }}
                     />
                     <Stack.Screen
                       name="Create"

@@ -27,7 +27,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
     submitting.current = true;
     setBusy(true);
     try {
-      if (skip) await runtime.themes.clearOpening();
+      if (skip) await runtime.themes.completeOpening();
       else await runtime.themes.rememberOpening(description);
       navigation.navigate('Provider', { onboarding: true, skipTheme: skip });
     } catch {
@@ -73,9 +73,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
             ),
           )}
         </View>
-        <Note>
-          先记下这一小点。下一步连接你自己的模型，它会理解你的偏好；颜色选好后，再一起创造她。人格与记忆保存在本机。
-        </Note>
+
         <ErrorText text={error} />
         <Button
           title="就这个感觉"
@@ -131,7 +129,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         setNotice('连接成功');
       } else if (route.params?.onboarding) {
         if (route.params.skipTheme) navigation.replace('Create');
-        else navigation.replace('Theme', { onboarding: true, autoGenerate: true });
+        else navigation.replace('Theme');
       } else {
         setNotice('已保存');
       }
@@ -145,7 +143,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
   return (
     <Page>
       <Heading>连接你的模型</Heading>
-      <Note>BYOK · 密钥保存在 Android 安全存储中。普通陪伴聊天默认关闭 thinking。</Note>
+      <Note>填写你自己的模型密钥，安全保存在本机。</Note>
       <Button title="使用 DeepSeek 预设" secondary onPress={() => setConfig(deepSeekPreset)} />
       <Field
         label="Base URL"
@@ -170,10 +168,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         autoCorrect={false}
         placeholder={hasKey ? '已保存，留空保留现有密钥' : '输入你的 API Key'}
       />
-      <Note>
-        DeepSeek 默认地址 https://api.deepseek.com，模型可自行修改。兼容接口填写服务商给出的 Base
-        URL（通常以 /v1 结尾）。本地服务可填 local 作为占位密钥。
-      </Note>
+      <Note>兼容接口请填写服务商提供的 Base URL。</Note>
       <Button title="查看用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
       <ErrorText text={error} />
       {notice ? <Note>{notice}</Note> : null}

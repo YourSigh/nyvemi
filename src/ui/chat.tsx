@@ -1,5 +1,6 @@
 import { cancelRequestedWork } from '../proactive/requested-delivery';
-import { usePalette } from '../theme/context';
+import { useTheme } from '../theme/context';
+import { closeKeyboard } from './keyboard';
 import type { Palette } from '../theme/model';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,7 +54,7 @@ function Arrival({
   );
 }
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
-  const palette = usePalette();
+  const { palette, apply } = useTheme();
   const s = useMemo(() => createStyles(palette), [palette]);
   const runtime = useRuntime();
   const cid = route.params.characterId;
@@ -165,6 +166,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         },
         abort.current.signal,
         retry?.id,
+        async (description) => {
+          await closeKeyboard();
+          const current = await runtime.themes.load();
+          const next = await runtime.themes.interpret(description, current?.preference);
+          await apply(next, () => runtime.themes.save(next));
+        },
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : '发送失败，消息已保留');
