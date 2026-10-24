@@ -53,7 +53,7 @@ export class CharacterService {
             {
               role: 'system',
               content:
-                '根据自然问答创造有边界、可长期相处的数字人格。不宣称意识，不强迫亲密，不创建未成年人色情设定。只输出 Persona JSON，字段和类型与示例一致，所有数组为字符串数组。示例：' +
+                '根据自然问答创造可长期相处的成年数字人格。portrait 用 300～600 字写她具体对什么来劲、如何看待事情、一个小矛盾或不擅长的地方、关心时怎样开口、熟悉后会怎样变化。写具体性格与动机，少用空泛形容词和必须/禁止清单；不编造已经和用户共同经历的往事。dialogueExamples 写 3 个符合该人格的短对话样本（user 字符串、messages 字符串数组），涵盖吐槽、分享喜悦与用户想安静；允许接着补一句、轻微改口，不机械追问。尊重用户给定关系、称呼、独处和边界，不强迫亲密，不宣称真正意识。只输出 Persona JSON，字段类型与示例一致。示例仅说明结构，不能把桶砸的个性、兴趣或原话套给所有角色：' +
                 JSON.stringify(demoPersona(characterId)),
             },
             { role: 'user', content: JSON.stringify(answers) },
