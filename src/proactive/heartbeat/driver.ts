@@ -56,6 +56,7 @@ export async function runBackgroundCycle(runtime: Runtime): Promise<void> {
         ),
       );
     }
+    await runtime.syncIntentionWork();
     await runtime.heartbeat.run();
   } finally {
     await runtime.store.release('background-cycle');

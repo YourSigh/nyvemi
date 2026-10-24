@@ -127,7 +127,8 @@ export function readBundle(bytes: Uint8Array): { manifest: BundleManifest; avata
     )
       throw new Error('意图引用的事件不存在');
   for (const n of manifest.notifications)
-    if (!ids.get('messages')?.has(n.messageId)) throw new Error('通知引用的消息不存在');
+    if (![n.messageId, ...(n.messageIds ?? [])].every((mid) => ids.get('messages')?.has(mid)))
+      throw new Error('通知引用的消息不存在');
   for (const job of manifest.extractions)
     if (
       !ids.get('messages')?.has(job.userMessageId) ||
@@ -195,7 +196,7 @@ export class CharacterBundleService {
       const received = new Set(
         m.notifications
           .filter((n) => n.status === 'delivered' || n.openedAt !== undefined)
-          .map((n) => n.messageId),
+          .flatMap((n) => n.messageIds ?? [n.messageId]),
       );
       const character: Character = {
         ...m.character,
@@ -257,7 +258,8 @@ export class CharacterBundleService {
               : undefined,
             // A transfer must not silently re-arm a timed notification from another installation.
             status:
-              intention.type === 'requested' && intention.status === 'pending'
+              (intention.type === 'requested' || intention.type === 'continuation') &&
+              intention.status === 'pending'
                 ? 'expired'
                 : intention.status,
             characterId: cid,
@@ -272,6 +274,7 @@ export class CharacterBundleService {
             id: remap('notifications', notification.id),
             characterId: cid,
             messageId: remap('messages', notification.messageId),
+            messageIds: notification.messageIds?.map((mid) => remap('messages', mid)),
             status: notification.status === 'pending' ? 'error' : notification.status,
             openedAt: notification.openedAt ?? Date.now(),
           });

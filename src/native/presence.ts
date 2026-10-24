@@ -23,6 +23,7 @@ export async function resumeCompanionPresence(): Promise<void> {
 let activeLoop: Promise<void> | undefined;
 async function session(): Promise<void> {
   const runtime = await getRuntime();
+  await runtime.syncIntentionWork();
   let updates = Promise.resolve();
   const unsubscribe = runtime.activity.subscribe((stage, cid) => {
     updates = updates
@@ -41,6 +42,7 @@ async function session(): Promise<void> {
     if (bridge().presenceState().running && bridge().hasNetwork())
       void runtime.heartbeat
         .runRequested()
+        .then(() => runtime.heartbeat.runContinuations())
         .catch(() => runtime.diagnostics.error('system', 'requested_tick'));
   }, 10000);
   try {

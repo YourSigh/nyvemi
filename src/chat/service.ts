@@ -1,21 +1,13 @@
-import { z } from 'zod';
+import { parseChatOutcome, conversationActions } from './outcome';
+import { saveContinuation } from '../proactive/continuations';
 import { id, type Memory, type Message } from '../domain/models';
 import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
 import { buildChatPrompt } from './prompt';
 import { requestedDelay } from './delayed-request';
-const ReplySchema = z.object({
-  messages: z.array(z.string().trim().min(1).max(6000)).max(6),
-});
 export function parseReply(raw: string): string[] {
-  const trimmed = raw.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
-  try {
-    return ReplySchema.parse(JSON.parse(trimmed)).messages;
-  } catch {
-    if (trimmed && !/^[{[]/.test(trimmed) && trimmed.length <= 6000) return [trimmed];
-    throw new Error('回复格式不完整，请重试本轮');
-  }
+  return parseChatOutcome(raw).messages;
 }
 export function streamingPreview(raw: string): string {
   if (!raw.trimStart().startsWith('{') && !raw.trimStart().startsWith('```')) return raw;
@@ -136,6 +128,7 @@ export class ChatService {
           retry.status !== 'error')
       )
         throw new Error('这条消息不能重试');
+      const latestAt = (await this.store.list('messages', characterId, 1))[0]?.createdAt ?? 0;
       user = retry;
       user = user
         ? { ...user, status: 'pending' }
@@ -144,16 +137,15 @@ export class ChatService {
             characterId,
             role: 'user',
             content,
-            createdAt: Date.now(),
+            createdAt: Math.max(Date.now(), latestAt + 1),
             origin: 'chat',
             status: 'pending',
           };
       await this.store.put('messages', user);
       onSaved();
-      const delay = requestedDelay(content);
-      if (delay !== undefined && this.hooks.scheduleRequested) {
-        // The acknowledgement is produced only after durable storage and native service startup.
-        const acknowledgement = await this.hooks.scheduleRequested(user, delay);
+      const acknowledge = async (delay: number) => {
+        if (!this.hooks.scheduleRequested) throw new Error('当前无法登记定时来信');
+        const acknowledgement = await this.hooks.scheduleRequested(user!, delay);
         await this.store.atomic(async (tx) => {
           await tx.put('messages', { ...user!, status: 'complete' });
           await tx.put('messages', {
@@ -161,7 +153,7 @@ export class ChatService {
             characterId,
             role: 'assistant',
             content: acknowledgement,
-            createdAt: Date.now(),
+            createdAt: Math.max(Date.now(), user!.createdAt + 1),
             origin: 'chat',
             status: 'complete',
             groupId: user!.id,
@@ -169,6 +161,10 @@ export class ChatService {
         });
         hasReply = true;
         onSaved();
+      };
+      const delay = requestedDelay(content);
+      if (delay !== undefined && this.hooks.scheduleRequested) {
+        await acknowledge(delay);
         return;
       }
       const history = (await this.history(characterId)).filter(
@@ -178,6 +174,10 @@ export class ChatService {
       history.push({ ...user, status: 'complete' });
       const memories = await this.hooks.retrieve(characterId, content);
       const prompt = buildChatPrompt(character, history, memories);
+      const pendingIntentions = (await this.store.list('intentions', characterId, 100))
+        .filter((i) => i.status === 'pending' && i.latestAt > Date.now())
+        .slice(0, 6);
+      prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested))}\n应用实际保存的后续意图（requested 为用户明确约定，其它为可放弃的念头；不要声称有未列出的任务）：${JSON.stringify(pendingIntentions.map((i) => ({ type: i.type, topic: i.topic, earliestAt: new Date(i.earliestAt).toISOString() })))}`;
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';
@@ -191,9 +191,14 @@ export class ChatService {
         },
         signal,
       );
-      const replies = parseReply(result.content);
+      const outcome = parseChatOutcome(result.content);
+      if (outcome.schedule) {
+        await acknowledge(outcome.schedule.afterSeconds * 1000);
+        return;
+      }
+      const replies = outcome.messages;
       const saved: Message[] = [];
-      const base = Date.now();
+      const base = Math.max(Date.now(), user.createdAt + 1);
       const group: Message[] = replies.map((content, n) => ({
         id: id(),
         characterId,
@@ -212,6 +217,8 @@ export class ChatService {
       await this.store.atomic(async (tx) => {
         await tx.put('messages', user!);
         for (const message of group) await tx.put('messages', message);
+        if (outcome.continuation && replies.length)
+          await saveContinuation(tx, user!, outcome.continuation, base);
       });
       hasReply = true;
       onPreview('');

@@ -1,7 +1,7 @@
 import { AppRegistry } from 'react-native';
 import { bridge } from './android';
 import { getRuntime } from '../application/runtime';
-import { executeRequestedWork } from '../proactive/requested-delivery';
+import { executeIntentionWork } from '../proactive/requested-delivery';
 
 AppRegistry.registerHeadlessTask(
   'NyvemiRequestedDelivery',
@@ -9,9 +9,9 @@ AppRegistry.registerHeadlessTask(
     let done = false;
     try {
       const runtime = await getRuntime();
-      done = await executeRequestedWork(
+      done = await executeIntentionWork(
         runtime.store,
-        (id) => runtime.heartbeat.runRequested(id),
+        (id) => runtime.heartbeat.runIntention(id),
         data.intentionId,
       );
     } catch {

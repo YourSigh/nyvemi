@@ -13,7 +13,12 @@ export function policyBlock(
   if (isQuietHour(now, settings.quietStart, settings.quietEnd)) return 'quiet_hours';
   if (now - settings.lastActiveAt < settings.recentActiveMinutes * 60000)
     return 'recent_active_chat';
-  const sent = notifications.filter((n) => n.status === 'delivered');
+  const sent = notifications.filter(
+    (n) =>
+      n.status === 'delivered' &&
+      n.deliveryKind !== 'continuation' &&
+      !n.id.startsWith('continuation:'),
+  );
   const today = sent.filter((n) => localDayKey(n.createdAt) === localDayKey(now));
   if (today.filter((n) => n.characterId === settings.characterId).length >= settings.dailyLimit)
     return 'daily_limit';

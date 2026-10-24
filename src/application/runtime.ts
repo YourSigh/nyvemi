@@ -1,3 +1,4 @@
+import { reconcileIntentionWork } from '../proactive/requested-delivery';
 import { fetch as nativeFetch } from 'expo/fetch';
 import { openStore, openDatabase, secretStore } from '../storage/native';
 import { Diagnostics } from '../storage/diagnostics';
@@ -46,6 +47,7 @@ async function createRuntime() {
   const memories = new MemoryRepository(store);
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
+  const syncIntentionWork = () => reconcileIntentionWork(store, bridge());
   const chat = new ChatService(store, provider, diagnostics, {
     scheduleRequested: async (user, delayMs) => {
       if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
@@ -75,12 +77,18 @@ async function createRuntime() {
     },
     afterRound: async (characterId, user, assistant) => {
       await extraction.enqueue(characterId, user, assistant);
-      void extraction.drain().catch(() => undefined);
+      await syncIntentionWork();
+      void extraction
+        .drain()
+        .then(syncIntentionWork)
+        .catch(() => diagnostics.error(characterId, 'intention_registration'))
+        .catch(() => undefined);
     },
   });
   const characters = new CharacterService(store, provider);
   return {
     store,
+    syncIntentionWork,
     diagnostics,
     activity,
     usage,

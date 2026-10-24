@@ -99,7 +99,7 @@ export const IntentionSchema = z
   .object({
     id: z.string(),
     characterId: z.string(),
-    type: z.enum(['follow_up', 'share', 'requested']),
+    type: z.enum(['follow_up', 'share', 'requested', 'continuation']),
     sourceMessageId: z.string().optional(),
     topic: z.string(),
     earliestAt: z.number(),
@@ -172,6 +172,8 @@ export const NotificationSchema = z
     id: z.string(),
     characterId: z.string(),
     messageId: z.string(),
+    messageIds: z.array(z.string()).min(1).max(6).optional(),
+    deliveryKind: z.enum(['initiative', 'requested', 'continuation']).optional(),
     title: z.string(),
     body: z.string(),
     createdAt: z.number(),

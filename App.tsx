@@ -1,4 +1,4 @@
-import { reconcileRequestedWork } from './src/proactive/requested-delivery';
+import { reconcileIntentionWork } from './src/proactive/requested-delivery';
 import { ThemeProvider, useTheme } from './src/theme/context';
 import { ThemeScreen } from './src/ui/theme';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -85,7 +85,7 @@ function Application() {
     const resume = () => {
       active();
       if (AppState.currentState === 'active')
-        void reconcileRequestedWork(runtime.store, bridge())
+        void reconcileIntentionWork(runtime.store, bridge())
           .catch(() => runtime.diagnostics.error('', 'requested_registration'))
           .catch(() => undefined);
       void resumeCompanionPresence()

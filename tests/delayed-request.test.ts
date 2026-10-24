@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest';
 import { requestedDelay, queueRequestedMessage } from '../src/chat/delayed-request';
 import {
-  reconcileRequestedWork,
-  executeRequestedWork,
+  reconcileIntentionWork,
+  executeIntentionWork,
   cancelRequestedWork,
 } from '../src/proactive/requested-delivery';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
@@ -236,7 +236,7 @@ it('registers only a persisted task, recovers pending tasks after upgrade and do
       cancelled.push(id);
     },
   };
-  await reconcileRequestedWork(store, scheduler, 1000);
+  await reconcileIntentionWork(store, scheduler, 1000);
   expect(scheduled).toEqual([
     ['requested:u', 60100],
     ['requested:u', 60100],
@@ -244,7 +244,7 @@ it('registers only a persisted task, recovers pending tasks after upgrade and do
   await cancelRequestedWork(store, scheduler, 'requested:u');
   let runs = 0;
   expect(
-    await executeRequestedWork(
+    await executeIntentionWork(
       store,
       async () => {
         runs++;
@@ -253,7 +253,7 @@ it('registers only a persisted task, recovers pending tasks after upgrade and do
     ),
   ).toBe(true);
   expect(
-    await executeRequestedWork(
+    await executeIntentionWork(
       store,
       async () => {
         runs++;
@@ -262,7 +262,7 @@ it('registers only a persisted task, recovers pending tasks after upgrade and do
     ),
   ).toBe(true);
   expect(runs).toBe(0);
-  await reconcileRequestedWork(store, scheduler, 1000);
+  await reconcileIntentionWork(store, scheduler, 1000);
   expect(cancelled).toEqual(['requested:u', 'requested:u']);
   expect(scheduled).toHaveLength(2);
 });
@@ -270,13 +270,13 @@ it('registers only a persisted task, recovers pending tasks after upgrade and do
 it('does not mark a native run successful merely because heartbeat returned while leased, early, or permission blocked', async () => {
   const { store, user } = await setup();
   await queueRequestedMessage(store, user, 60000, async () => {}, 100);
-  expect(await executeRequestedWork(store, async () => {}, 'requested:u')).toBe(false);
+  expect(await executeIntentionWork(store, async () => {}, 'requested:u')).toBe(false);
   await store.put('intentions', {
     ...(await store.get('intentions', 'requested:u'))!,
     status: 'completed',
   });
   expect(
-    await executeRequestedWork(
+    await executeIntentionWork(
       store,
       async () => {
         throw new Error('must not regenerate');
@@ -307,7 +307,7 @@ it('dispatches a specific native intention without losing other due tasks or sen
     () => now,
   );
   const run = (id: string) =>
-    executeRequestedWork(store, (target) => engine.runRequested(target), id);
+    executeIntentionWork(store, (target) => engine.runRequested(target), id);
   expect(await run('requested:u')).toBe(true);
   expect((await store.get('intentions', 'requested:second'))?.status).toBe('pending');
   expect(await run('requested:second')).toBe(true);
@@ -346,7 +346,7 @@ it('cancels a request during generation before an outbox or notification is crea
     new Diagnostics(store),
     () => now,
   );
-  expect(await executeRequestedWork(store, (id) => engine.runRequested(id), 'requested:u')).toBe(
+  expect(await executeIntentionWork(store, (id) => engine.runRequested(id), 'requested:u')).toBe(
     true,
   );
   expect(await store.list('notifications')).toHaveLength(0);
