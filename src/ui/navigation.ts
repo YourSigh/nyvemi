@@ -8,7 +8,10 @@ export type Routes = {
   Create: undefined;
   Generate: { answers: CharacterAnswers; demo: boolean; interview?: boolean };
   Chat: { characterId: string; notificationId?: string };
-  Settings: { characterId: string };
+  Settings: {
+    characterId: string;
+    section?: 'notifications' | 'preferences' | 'advanced' | 'reset';
+  };
   Memory: { characterId: string };
   Experiences: { characterId: string };
   Developer: { characterId: string };

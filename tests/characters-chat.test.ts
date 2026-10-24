@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
 import { ChatService, parseReply, streamingPreview } from '../src/chat/service';
-import { buildChatPrompt } from '../src/chat/prompt';
+import { buildChatPrompt, characterVoice } from '../src/chat/prompt';
 import { demoPersona } from '../src/domain/models';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { migrate, SQLiteStore } from '../src/storage/store';
@@ -349,4 +349,19 @@ it('accepts intentional silence, keeps it complete after restart, and still extr
   expect(parseReply('{"messages":["诶","我想到一个事","刚好跟你说的有关"]}')).toHaveLength(3);
   expect(() => parseReply('')).toThrow();
   expect(() => parseReply('{"messages":[""]}')).toThrow();
+});
+
+it('keeps an existing character voice without forcing a technical self-introduction', () => {
+  const old = {
+    ...demoPersona('old'),
+    identity: '一个有自己喜好、嘴上随意但会记住小事的数字伙伴',
+    portrait: undefined,
+    dialogueExamples: undefined,
+  };
+  const before = JSON.stringify(old);
+  const voice = characterVoice(old);
+  expect(voice).not.toContain('数字伙伴');
+  expect(voice).toContain('小众游戏');
+  expect(voice).toContain('语气样本');
+  expect(JSON.stringify(old)).toBe(before);
 });
