@@ -1,3 +1,4 @@
+import { conversationContext } from '../conversation/context';
 import { parseChatOutcome, conversationActions } from './outcome';
 import { saveContinuation } from '../proactive/continuations';
 import { id, type Memory, type Message } from '../domain/models';
@@ -177,11 +178,8 @@ export class ChatService {
       const memories = await this.hooks.retrieve(characterId, content);
       const prompt = buildChatPrompt(character, history, memories);
       prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
-      const pendingIntentions = (await this.store.list('intentions', characterId, 100))
-        .filter((i) => i.status === 'pending' && i.latestAt > Date.now())
-        .slice(0, 6);
       const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
-      prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n应用实际保存的后续意图（requested 为用户明确约定，其它为可放弃的念头；不要声称有未列出的任务）：${JSON.stringify(pendingIntentions.map((i) => ({ type: i.type, topic: i.topic, earliestAt: new Date(i.earliestAt).toISOString() })))}`;
+      prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n${await conversationContext(this.store, characterId, Date.now())}`;
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';

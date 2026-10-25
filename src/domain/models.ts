@@ -178,6 +178,7 @@ export const NotificationSchema = z
     body: z.string(),
     createdAt: z.number(),
     openedAt: z.number().optional(),
+    deliveredAt: z.number().optional(),
     status: z.enum(['pending', 'delivered', 'error']),
   })
   .strict();

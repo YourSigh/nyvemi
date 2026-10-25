@@ -1,3 +1,4 @@
+import { conversationContext } from '../../conversation/context';
 import { continuationBlock } from '../continuations';
 import type { CompanionActivity } from '../../presence/activity';
 import { z } from 'zod';
@@ -109,6 +110,7 @@ export class HeartbeatEngine {
               },
               ...recent.map((m) => ({ role: m.role, content: m.content.slice(0, 1000) })),
             ];
+            prompt[0].content += `\n${await conversationContext(this.store, cid, now)}`;
             if ((await this.store.get('settings', cid))?.developerMode)
               await this.diagnostics.record('prompt', cid, {
                 purpose: kind === 'requested' ? 'requested_message' : 'conversation_continuation',
@@ -303,6 +305,7 @@ export class HeartbeatEngine {
           },
           ...recent,
         ];
+        prompt[0].content += `\n${await conversationContext(this.store, cid, now)}`;
         if (settings.developerMode)
           await this.diagnostics.record('prompt', cid, { purpose: 'proactive', messages: prompt });
         try {
@@ -389,7 +392,11 @@ export class HeartbeatEngine {
   private async deliver(record: NotificationRecord, character: Character): Promise<void> {
     await this.notifications.show(record, character);
     this.activity('sent', character.id);
-    await this.store.put('notifications', { ...record, status: 'delivered' });
+    await this.store.put('notifications', {
+      ...record,
+      status: 'delivered',
+      deliveredAt: record.deliveredAt ?? this.clock(),
+    });
   }
   async openNotification(notificationId: string): Promise<string | undefined> {
     const record = await this.store.get('notifications', notificationId);

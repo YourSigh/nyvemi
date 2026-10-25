@@ -13,6 +13,7 @@ import { ChatService } from '../chat/service';
 import { queueRequestedMessage } from '../chat/delayed-request';
 import { saveProviderSettings } from './provider-settings';
 import { MemoryRepository } from '../memory/repository';
+import { MemoryRecall } from '../memory/recall';
 import { KeywordMemoryRetriever } from '../memory/retrieval';
 import { MemoryExtractionService } from '../memory/extraction';
 import { HeartbeatEngine } from '../proactive/heartbeat/engine';
@@ -60,21 +61,8 @@ async function createRuntime() {
         bridge().scheduleRequested(task.id, task.characterId, task.earliestAt),
       );
     },
-    retrieve: async (characterId, query) => {
-      const ranked = retriever.rank(query, await memories.list(characterId), Date.now());
-      await memories.touch(ranked.map((r) => r.memory));
-      if ((await store.get('settings', characterId))?.developerMode)
-        await diagnostics.record('retrieval', characterId, {
-          query,
-          results: ranked.map((r) => ({
-            id: r.memory.id,
-            content: r.memory.content,
-            score: r.score,
-            keyword: r.keyword,
-          })),
-        });
-      return ranked.map((r) => r.memory);
-    },
+    retrieve: (characterId, query) =>
+      new MemoryRecall(store, diagnostics).retrieve(characterId, query),
     afterRound: async (characterId, user, assistant) => {
       await extraction.enqueue(characterId, user, assistant);
       await syncIntentionWork();
