@@ -269,3 +269,19 @@ it('serializes ordinary and silence-triggered outbound generation across the sha
   await f.engine.runReconnects();
   expect(f.calls()).toBe(1);
 });
+
+it('does not reconstruct an idle candidate from a completed interface action during recovery', async () => {
+  const f = await setup();
+  await f.chat.send(
+    'c',
+    '把这里换成淡紫色吧',
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    async () => {},
+  );
+  await recoverReconnects(f.store);
+  expect(await f.store.list('intentions', 'c')).toHaveLength(0);
+  expect(f.scheduled).toHaveLength(0);
+});

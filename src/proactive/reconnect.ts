@@ -1,3 +1,4 @@
+import { isThemeChangeRequest } from '../theme/chat-request';
 import type { Intention, Message, NotificationRecord, Settings } from '../domain/models';
 import type { Storage } from '../storage/store';
 import { interactionState } from '../conversation/context';
@@ -23,7 +24,12 @@ export async function planReconnect(store: Storage, user: Message, now: number):
     if (old.type === 'reconnect' && old.status === 'pending' && old.sourceMessageId !== user.id)
       await store.put('intentions', { ...old, status: 'cancelled' });
   const settings = await store.get('settings', user.characterId);
-  if (!settings?.proactiveEnabled || settings.dailyLimit === 0 || asksForSpace(user.content))
+  if (
+    !settings?.proactiveEnabled ||
+    settings.dailyLimit === 0 ||
+    asksForSpace(user.content) ||
+    isThemeChangeRequest(user.content)
+  )
     return;
   const compact = user.content.replace(/[\s，。？！!?~～]/g, '');
   if (compact.length < 6 || /^(你好|早上好|晚上好|在吗|哈哈|谢谢|好的|好呀|嗯嗯)+$/.test(compact))
