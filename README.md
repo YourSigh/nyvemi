@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.4.1** simplifies settings, keeps everyday conversation in character, and introduces a 2.2-second native Android theme reveal from the upper-left to the lower-right with a feathered edge. Color is asked once during opening and can later be changed through an explicit chat request. Local tests and Android builds validate logic and compilation; device delivery, animation appearance and model behavior for this revision await user acceptance. Earlier emulator and paid-model results in the [acceptance matrix](docs/ACCEPTANCE.md) apply only to those earlier revisions.
+This is an early MVP implementation. **0.5.0** adds a durable silence trigger after meaningful chat, unanswered-message limits, shared live schedule context, and contextual memory recall. It builds on the compact settings and native diagonal theme reveal in 0.4.1. Local tests and Android builds validate logic and compilation; device delivery, animation appearance and subjective model behavior for this revision await user acceptance. Earlier results in the [acceptance matrix](docs/ACCEPTANCE.md) apply only to those earlier revisions.
 
 ## Local-first and BYOK
 
@@ -203,3 +203,11 @@ There is no “meet another character” action. **清空当前角色并重新�
 A reply may leave one concrete unfinished topic for reconsideration in 2–15 minutes. This is optional, not a timer added to every reply. At delivery time the model reads recent context again and may send 1–4 messages or decline. A new user turn supersedes the old thought. Continuations respect quiet hours and the proactive switch, with at most two per hour and six per day across the app; independent proactive topics retain their separate limits. Setting the daily topic limit to zero disables both autonomous paths. Explicit user-requested timers remain separate. Android scheduling is best-effort, not an exact alarm.
 
 Settings → notification setup shows task health, can repair registrations, and can share a redacted delivery report containing only task timing, decision codes, native execution stages and notification status. It excludes conversation content and credentials. Device delivery and subjective model quality for this release still require user acceptance.
+
+## Silence-triggered initiative (0.5.0)
+
+Ordinary chat can now leave a local evaluation even when the model does not explicitly return a continuation. After roughly 12–25 minutes of user-message silence, local checks run before any model call. The character may send several contextual messages or stay quiet. New user activity invalidates the old evaluation; specific due follow-ups take priority. Declining ends that evaluation rather than polling the model repeatedly.
+
+Two unanswered autonomous bursts pause further autonomous messages until the user speaks again. Explicit user-requested reminders remain separate. Reconnects share the ordinary daily budget and respect quiet hours, time between messages and opt-out; failures stop after three attempts. Android scheduling remains best-effort. Imported evaluations do not replay.
+
+The shared conversation context reads real pending tasks and unanswered counts on every request. Memory recall can connect a short follow-up such as “后来呢” to the recent user topic, while a new topic gets its own query. Reference projects and adaptation details are recorded in [module references](docs/OPEN_SOURCE_REFERENCES.md). These are native TypeScript adaptations, without a QQ or server dependency. Character bundles containing the new intention type require 0.5.0 or later to import.
