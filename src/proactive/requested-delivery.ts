@@ -1,3 +1,4 @@
+import { recoverReconnects } from './reconnect';
 import type { Storage } from '../storage/store';
 
 export interface RequestedWorkScheduler {
@@ -10,6 +11,7 @@ export async function reconcileIntentionWork(
   scheduler: RequestedWorkScheduler,
   now = Date.now(),
 ): Promise<void> {
+  await recoverReconnects(store, now);
   for (const task of await store.list('intentions', undefined, 10000)) {
     // Old terminal tasks cannot deliver again; avoid re-cancelling years of history every chat.
     if (task.status !== 'pending' && now - task.createdAt > 86400000) continue;

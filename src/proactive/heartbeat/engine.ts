@@ -1,3 +1,4 @@
+import { autonomousBlock, reconnectBlock } from '../reconnect';
 import { conversationContext } from '../../conversation/context';
 import { continuationBlock } from '../continuations';
 import type { CompanionActivity } from '../../presence/activity';
@@ -33,14 +34,18 @@ export class HeartbeatEngine {
   async runContinuations(targetId?: string): Promise<void> {
     return this.runConversationIntention('continuation', targetId);
   }
+  async runReconnects(targetId?: string): Promise<void> {
+    return this.runConversationIntention('reconnect', targetId);
+  }
   async runIntention(id: string): Promise<void> {
     const task = await this.store.get('intentions', id);
     if (task?.type === 'requested') await this.runRequested(id);
     else if (task?.type === 'continuation') await this.runContinuations(id);
+    else if (task?.type === 'reconnect') await this.runReconnects(id);
     else if (task) await this.run(id);
   }
   private async runConversationIntention(
-    kind: 'requested' | 'continuation',
+    kind: 'requested' | 'continuation' | 'reconnect',
     targetId?: string,
   ): Promise<void> {
     const now = this.clock();
@@ -67,8 +72,8 @@ export class HeartbeatEngine {
         const character = await this.store.get('characters', cid);
         if (!character) continue;
         const recordId = `${kind}:${intention.id}`;
-        const checkContinuation = async () =>
-          continuationBlock(
+        const checkConversation = async () =>
+          (kind === 'reconnect' ? reconnectBlock : continuationBlock)(
             this.store,
             intention,
             await this.store.get('settings', cid),
@@ -77,11 +82,24 @@ export class HeartbeatEngine {
             ),
             this.clock(),
           );
-        if (kind === 'continuation') {
-          const blocked = await checkContinuation();
+        if (kind !== 'requested') {
+          const blocked = await checkConversation();
           if (blocked) {
-            if (blocked === 'continuation_superseded' || blocked === 'proactive_disabled')
+            if (
+              [
+                'continuation_superseded',
+                'reconnect_superseded',
+                'proactive_disabled',
+                'awaiting_user_reply',
+                'user_wants_space',
+              ].includes(blocked)
+            )
               await this.store.put('intentions', { ...intention, status: 'cancelled' });
+            else
+              await this.store.put('intentions', {
+                ...intention,
+                earliestAt: Math.min(intention.latestAt, this.clock() + 5 * 60000),
+              });
             await report(blocked);
             continue;
           }
@@ -106,14 +124,19 @@ export class HeartbeatEngine {
             const prompt = [
               {
                 role: 'system' as const,
-                content: `${naturalRules}\n${localTimeContext(now)}\n${kind === 'continuation' ? '你刚才聊完之后还留着一个具体念头，现在想起了这句话。这次用户没有新发消息，你自己决定要不要再补一句或接着说几条。不能复述刚才的回复、索要回应或泛泛问在吗。如果已经没有新意思、话题已结束或不宜打扰，返回 messages 空数组。待续缘由：' + intention.reason : '用户明确约了现在来信，根据最近对话自然说你想聊的话，不再许诺稍后发送。'}没有提供外部经历，不能声称刚刷到、看到、读过、查过任何新内容，也不能说现实中做过什么。只接着最近的话题，或自然说一个想法，不需要制造事件。返回严格 JSON {"messages":["消息"]}。人格：${characterVoice(character.persona)}。行为状态：${JSON.stringify(character.state)}。相关记忆：${JSON.stringify(memories.map((m) => m.memory.content))}。本次请求：${JSON.stringify(intention.topic)}`,
+                content: `${naturalRules}\n${localTimeContext(now)}\n${kind === 'reconnect' ? '你们已停聊一会儿，现在是你自己重新想起刚才的交流，不是用户发来新消息。结合自己的兴趣、对他的了解和最近的话题，看看有没有一个具体的新反应、新看法或好奇想说。不能重复上一轮、泛泛问候、问在吗或催回复；没有新意思就返回 messages 空数组。' : kind === 'continuation' ? '你刚才聊完之后还留着一个具体念头，现在想起了这句话。这次用户没有新发消息，你自己决定要不要再补一句或接着说几条。不能复述刚才的回复、索要回应或泛泛问在吗。如果已经没有新意思、话题已结束或不宜打扰，返回 messages 空数组。待续缘由：' + intention.reason : '用户明确约了现在来信，根据最近对话自然说你想聊的话，不再许诺稍后发送。'}没有提供外部经历，不能声称刚刷到、看到、读过、查过任何新内容，也不能说现实中做过什么。只接着最近的话题，或自然说一个想法，不需要制造事件。返回严格 JSON {"messages":["消息"]}。人格：${characterVoice(character.persona)}。行为状态：${JSON.stringify(character.state)}。相关记忆：${JSON.stringify(memories.map((m) => m.memory.content))}。本次请求：${JSON.stringify(intention.topic)}`,
               },
               ...recent.map((m) => ({ role: m.role, content: m.content.slice(0, 1000) })),
             ];
             prompt[0].content += `\n${await conversationContext(this.store, cid, now)}`;
             if ((await this.store.get('settings', cid))?.developerMode)
               await this.diagnostics.record('prompt', cid, {
-                purpose: kind === 'requested' ? 'requested_message' : 'conversation_continuation',
+                purpose:
+                  kind === 'requested'
+                    ? 'requested_message'
+                    : kind === 'reconnect'
+                      ? 'silence_reconnect'
+                      : 'conversation_continuation',
                 messages: prompt,
               });
             const result = await (
@@ -130,15 +153,15 @@ export class HeartbeatEngine {
             );
             if (!result.messages.length) {
               await this.store.put('intentions', { ...intention, status: 'completed' });
-              await report('continuation_declined');
+              await report(`${kind}_declined`);
               continue;
             }
             // A reset or replacement can occur while the request is in flight.
             const fresh = await this.store.get('intentions', intention.id);
             if (!fresh || fresh.status !== 'pending' || fresh.latestAt <= this.clock()) continue;
-            if (kind === 'continuation' && (await checkContinuation())) {
+            if (kind !== 'requested' && (await checkConversation())) {
               await this.store.put('intentions', { ...intention, status: 'cancelled' });
-              await report('continuation_changed_during_generation');
+              await report(`${kind}_changed_during_generation`);
               continue;
             }
             record = {
@@ -179,17 +202,33 @@ export class HeartbeatEngine {
             }
           });
           await report(
-            kind === 'requested' ? 'requested_by_user' : 'conversation_continuation',
+            kind === 'requested'
+              ? 'requested_by_user'
+              : kind === 'reconnect'
+                ? 'silence_reconnect'
+                : 'conversation_continuation',
             'send',
           );
           return;
         } catch {
           // Back off: frequent local due checks must never turn an API failure into a call storm.
           const fresh = await this.store.get('intentions', intention.id);
-          if (fresh?.status === 'pending')
-            await this.store.put('intentions', { ...fresh, earliestAt: this.clock() + 60000 });
+          if (fresh?.status === 'pending') {
+            const attempts = (fresh.attempts ?? 0) + 1;
+            await this.store.put('intentions', {
+              ...fresh,
+              attempts,
+              status: kind === 'reconnect' && attempts >= 3 ? 'cancelled' : 'pending',
+              earliestAt:
+                this.clock() + (kind === 'reconnect' ? Math.min(15, attempts) : 1) * 60000,
+            });
+          }
           await this.diagnostics.error(cid, `${kind}_generation_or_delivery`);
-          await report(`${kind}_generation_or_delivery_error`);
+          await report(
+            kind === 'reconnect' && (fresh?.attempts ?? 0) >= 2
+              ? 'reconnect_retry_exhausted'
+              : `${kind}_generation_or_delivery_error`,
+          );
           return;
         }
       }
@@ -201,10 +240,14 @@ export class HeartbeatEngine {
     if (!targetId) {
       await this.runRequested();
       await this.runContinuations();
+      await this.runReconnects();
     }
     const now = this.clock();
     if (!(await this.store.lease('heartbeat', now, 600000))) return;
+    let deliveryLease = false;
     try {
+      deliveryLease = await this.store.lease('requested-delivery', now, 180000);
+      if (!deliveryLease) return;
       for (const character of await this.store.list('characters')) {
         const cid = character.id;
         const expired = await expireIntentions(this.store, cid, now);
@@ -222,7 +265,9 @@ export class HeartbeatEngine {
             ...extra,
           });
         const records = await this.store.list('notifications', undefined, 10000);
-        const block = policyBlock(settings, records, now);
+        const block =
+          policyBlock(settings, records, now) ??
+          (await autonomousBlock(this.store, cid, records, now));
         if (block) {
           await report(block);
           continue;
@@ -237,7 +282,8 @@ export class HeartbeatEngine {
             n.characterId === cid &&
             n.status === 'pending' &&
             !n.id.startsWith('requested:') &&
-            !n.id.startsWith('continuation:'),
+            !n.id.startsWith('continuation:') &&
+            !n.id.startsWith('reconnect:'),
         );
         if (pending) {
           if (now - pending.createdAt < 30 * 60000) {
@@ -258,6 +304,7 @@ export class HeartbeatEngine {
           (i) =>
             i.type !== 'requested' &&
             i.type !== 'continuation' &&
+            i.type !== 'reconnect' &&
             (!targetId || i.id === targetId) &&
             i.status === 'pending' &&
             i.earliestAt <= now &&
@@ -329,13 +376,20 @@ export class HeartbeatEngine {
           const freshNow = this.clock();
           const freshSettings = await this.store.get('settings', cid);
           const freshIntention = await this.store.get('intentions', i.id);
-          const recheck = freshSettings
-            ? policyBlock(
-                freshSettings,
-                await this.store.list('notifications', undefined, 10000),
-                freshNow,
-              )
-            : 'settings_missing';
+          const recheck =
+            (await autonomousBlock(
+              this.store,
+              cid,
+              await this.store.list('notifications', undefined, 10000),
+              freshNow,
+            )) ??
+            (freshSettings
+              ? policyBlock(
+                  freshSettings,
+                  await this.store.list('notifications', undefined, 10000),
+                  freshNow,
+                )
+              : 'settings_missing');
           if (recheck || freshIntention?.status !== 'pending' || i.latestAt <= freshNow) {
             await report(recheck ?? 'intention_no_longer_due', {
               score: candidate.score,
@@ -386,6 +440,7 @@ export class HeartbeatEngine {
         }
       }
     } finally {
+      if (deliveryLease) await this.store.release('requested-delivery');
       await this.store.release('heartbeat');
     }
   }

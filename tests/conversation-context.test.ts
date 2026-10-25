@@ -80,6 +80,7 @@ it('recalls a short follow-up using recent user topics without leaking another c
   );
   expect(memories.map((m) => m.content)).toEqual(['用户参与机器人会议，计划讨论机械臂']);
   expect(recallQuery('换个话题，聊聊晚饭', [user])).toBe('换个话题，聊聊晚饭');
+  expect(recallQuery('我想吃冰淇淋', [user])).toBe('我想吃冰淇淋');
   expect(
     recallQuery('我现在很想详细讨论一下草莓冰淇淋的口味、配料和做法，跟会议没关系', [user]),
   ).not.toContain('下午要去');

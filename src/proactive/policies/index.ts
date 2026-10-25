@@ -17,6 +17,8 @@ export function policyBlock(
     (n) =>
       n.status === 'delivered' &&
       n.deliveryKind !== 'continuation' &&
+      n.deliveryKind !== 'requested' &&
+      !n.id.startsWith('requested:') &&
       !n.id.startsWith('continuation:'),
   );
   const today = sent.filter((n) => localDayKey(n.createdAt) === localDayKey(now));

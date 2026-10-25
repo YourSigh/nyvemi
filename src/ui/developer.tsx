@@ -1,3 +1,4 @@
+import { conversationContext } from '../conversation/context';
 import { deliveryReport } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
@@ -29,6 +30,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
     const diagnostics = await runtime.store.list('diagnostics', undefined, 200);
     setSnapshot({
       人格: character?.persona,
+      会话感知: await conversationContext(runtime.store, cid, Date.now()),
       状态: character?.state,
       兴趣: character?.interests,
       记忆: await runtime.store.list('memories', cid, 60),

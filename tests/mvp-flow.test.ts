@@ -126,7 +126,10 @@ it('runs persona → streamed chat → extracted memory/loop → follow-up → R
         (m) => m.type === 'relationship' && m.content.includes('要不要继续'),
       ),
     ).toBe(true);
-    expect(await store.list('intentions', c.id)).toHaveLength(1);
+    expect(
+      (await store.list('intentions', c.id)).filter((i) => i.type === 'follow_up'),
+    ).toHaveLength(1);
+    expect((await store.list('intentions', c.id)).some((i) => i.type === 'reconnect')).toBe(true);
     let clock = start + 150 * 60000;
     const settings = (await store.get('settings', c.id))!;
     await store.put('settings', {

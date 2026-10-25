@@ -43,6 +43,7 @@ async function session(): Promise<void> {
       void runtime.heartbeat
         .runRequested()
         .then(() => runtime.heartbeat.runContinuations())
+        .then(() => runtime.heartbeat.runReconnects())
         .catch(() => runtime.diagnostics.error('system', 'requested_tick'));
   }, 10000);
   try {

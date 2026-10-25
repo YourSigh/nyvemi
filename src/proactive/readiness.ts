@@ -1,6 +1,20 @@
 import type { Settings, Intention, NotificationRecord } from '../domain/models';
 import { policyBlock } from './policies';
 const reasons: Record<string, string> = {
+  silence_reconnect: '停聊后，她又想起了你们刚才的话题',
+  reconnect_specific_intention: '有更具体的待办或话题，先给它留位置',
+  reconnect_declined: '她回看了刚才的交流，暂时没有新的话想说',
+  reconnect_superseded: '你发了新消息，旧的沉默触发已经取消',
+  reconnect_recent_message: '你们刚刚聊过，先留点时间',
+  reconnect_recent_proactive: '刚给你发过消息，先等一等',
+  reconnect_changed_during_generation: '生成时对话或设置改变，已取消',
+  reconnect_retry_exhausted: '这次来信重试失败，已停止继续调用模型',
+  reconnect_expired: '之前的话题已经过了适合再提的时间',
+  reconnect_notification_permission: '有待续话题，等待通知权限',
+  reconnect_generation_or_delivery_error: '主动来信失败，正在有限次重试',
+  awaiting_user_reply: '已经主动说过几次，等你接话再继续',
+  user_wants_space: '你想安静一会儿，她会尊重',
+
   conversation_continuation: '她接着刚才的话题，又发来了几句',
   continuation_declined: '她重新看了这个念头，决定先不说',
   continuation_superseded: '你发了新消息，旧的待续念头已经作废',

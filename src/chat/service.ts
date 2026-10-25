@@ -1,3 +1,4 @@
+import { planReconnect } from '../proactive/reconnect';
 import { conversationContext } from '../conversation/context';
 import { parseChatOutcome, conversationActions } from './outcome';
 import { saveContinuation } from '../proactive/continuations';
@@ -226,6 +227,7 @@ export class ChatService {
         for (const message of group) await tx.put('messages', message);
         if (outcome.continuation && replies.length && !themeDescription)
           await saveContinuation(tx, user!, outcome.continuation, base);
+        if (replies.length && !themeDescription) await planReconnect(tx, user!, base);
       });
       hasReply = true;
       onPreview('');

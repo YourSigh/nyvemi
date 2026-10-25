@@ -1,6 +1,7 @@
 import type { Continuation } from '../chat/outcome';
 import type { Intention, Message, NotificationRecord, Settings } from '../domain/models';
 import type { Storage } from '../storage/store';
+import { autonomousBlock } from './reconnect';
 import { localDayKey } from './policies';
 import { isQuietHour } from './quiet-hours';
 
@@ -44,6 +45,8 @@ export async function continuationBlock(
     (m) => m.role === 'user',
   );
   if (!latestUser || latestUser.id !== task.sourceMessageId) return 'continuation_superseded';
+  const blocked = await autonomousBlock(store, task.characterId, records, now);
+  if (blocked) return blocked;
   if (isQuietHour(now, settings.quietStart, settings.quietEnd)) return 'quiet_hours';
   if (now - latestUser.createdAt < 90000) return 'continuation_recent_message';
   const sent = records.filter((r) => r.status === 'delivered' && isContinuation(r));

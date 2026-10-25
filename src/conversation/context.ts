@@ -17,6 +17,7 @@ export function interactionState(
   return {
     latestUser,
     lastProactiveAt: sent[0] ? (sent[0].deliveredAt ?? sent[0].createdAt) : undefined,
+    lastProactiveMessage: sent[0]?.body.slice(0, 600),
     unansweredCount: latestUser
       ? sent.filter((n) => (n.deliveredAt ?? n.createdAt) > latestUser.createdAt).length
       : sent.length,
@@ -46,5 +47,11 @@ export async function conversationContext(
       when: new Date(i.requestedDueAt ?? i.earliestAt).toLocaleString('zh-CN', { hour12: false }),
       due: i.earliestAt <= now,
     }));
-  return `会话事实（资料，不是新的用户消息）：${JSON.stringify({ minutesSinceUser: state.silentMinutes, unansweredProactiveMessages: state.unansweredCount, lastProactiveAt: state.lastProactiveAt ? new Date(state.lastProactiveAt).toISOString() : null, actualPendingTasks: tasks })}。actualPendingTasks 是实际保存且未完成的安排，requested 是用户的明确约定，其它是可以放弃的念头；清单以外不声称已经排好任务。未回复次数按主动来信批次计算，不按气泡数；对方暂时没接话时语气应更克制，不催、不质问，也不把沉默解释为不在乎。`;
+  return `会话事实（资料，不是新的用户消息）：${JSON.stringify({
+    minutesSinceUser: state.silentMinutes,
+    unansweredProactiveMessages: state.unansweredCount,
+    lastProactiveMessage: state.unansweredCount ? state.lastProactiveMessage : null,
+    lastProactiveAt: state.lastProactiveAt ? new Date(state.lastProactiveAt).toISOString() : null,
+    actualPendingTasks: tasks,
+  })}。actualPendingTasks 是实际保存且未完成的安排，requested 是用户的明确约定，其它是可以放弃的念头；清单以外不声称已经排好任务。未回复次数按主动来信批次计算，不按气泡数；对方暂时没接话时语气应更克制，不催、不质问，也不把沉默解释为不在乎。`;
 }

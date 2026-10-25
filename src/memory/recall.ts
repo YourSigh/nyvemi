@@ -5,7 +5,13 @@ import { MemoryRepository } from './repository';
 import { KeywordMemoryRetriever } from './retrieval';
 export function recallQuery(latest: string, history: Message[]): string {
   if (/换个话题|不聊这个|新话题|先不说这个/.test(latest)) return latest;
-  if (latest.length > 30 && !/那个|之前|上次|刚才|后来|怎么样|然后呢/.test(latest)) return latest;
+  if (
+    latest.length > 120 ||
+    !/那个|这件事|这事|之前|上次|刚才|后来|怎么样|然后呢|后续|结果呢|接着聊|继续聊|还记得/.test(
+      latest,
+    )
+  )
+    return latest;
   const anchors = history
     .filter((m) => m.role === 'user' && m.status === 'complete' && m.content !== latest)
     .sort((a, b) => b.createdAt - a.createdAt)

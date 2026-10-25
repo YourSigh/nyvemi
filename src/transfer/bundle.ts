@@ -258,7 +258,7 @@ export class CharacterBundleService {
               : undefined,
             // A transfer must not silently re-arm a timed notification from another installation.
             status:
-              (intention.type === 'requested' || intention.type === 'continuation') &&
+              ['requested', 'continuation', 'reconnect'].includes(intention.type) &&
               intention.status === 'pending'
                 ? 'expired'
                 : intention.status,

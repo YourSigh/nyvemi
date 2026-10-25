@@ -176,7 +176,7 @@ it('respects disabled initiative, quiet hours and separate continuation caps', a
     messageId: String(n),
     title: '桶',
     body: 'hi',
-    createdAt: now - n * 60000,
+    createdAt: task.createdAt - n * 60000,
     status: 'delivered',
     deliveryKind: 'continuation',
   }));

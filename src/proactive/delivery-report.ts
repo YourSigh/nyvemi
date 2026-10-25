@@ -1,3 +1,4 @@
+import { interactionState } from '../conversation/context';
 import type { Storage } from '../storage/store';
 export interface NativeDeliveryState {
   stage: string;
@@ -21,17 +22,25 @@ export async function deliveryReport(
   const logs = await store.list('diagnostics', characterId, 200);
   const notifications = await store.list('notifications', characterId, 100);
   const settings = await store.get('settings', characterId);
+  const interaction = interactionState(
+    await store.list('messages', characterId, 100),
+    notifications,
+    now,
+  );
   const states = [];
   for (const task of tasks) {
     const state = await native(task.id).catch(() => undefined);
     const log = logs.find((l) => l.kind === 'heartbeat' && l.data.intentionId === task.id);
-    const sent = notifications.find((n) => n.id === `${task.type}:${task.id}`);
+    const sent = notifications.find(
+      (n) => n.id === `${task.type}:${task.id}` || n.id === log?.data.notificationId,
+    );
     states.push({
       type: task.type,
       status: task.status,
       createdAt: task.createdAt,
       dueAt: task.earliestAt,
       expiresAt: task.latestAt,
+      attempts: task.attempts ?? 0,
       decision: typeof log?.data.decision === 'string' ? log.data.decision : undefined,
       reason: typeof log?.data.reason === 'string' ? log.data.reason : undefined,
       checkedAt: log?.createdAt,
@@ -58,6 +67,8 @@ export async function deliveryReport(
       online: environment.online,
       presenceRunning: environment.presenceRunning,
     },
+    unansweredProactiveMessages: interaction.unansweredCount,
+    silentMinutes: interaction.silentMinutes,
     proactiveEnabled: settings?.proactiveEnabled ?? false,
     quietHours: settings ? [settings.quietStart, settings.quietEnd] : [],
     tasks: states,
@@ -71,6 +82,7 @@ export function deliverySummary(report: DeliveryReport): string {
     !report.tasks.some((t) => t.type === 'requested' && t.status === 'pending')
   )
     return '自主来信已关闭';
+  if (report.unansweredProactiveMessages >= 2) return '她已经主动说过几次，正等你接话';
   if (!report.tasks.length) return '目前还没有留下后续话题；说过几句不代表一定会主动来信';
   if (!report.environment.online) return '当前离线，来信会等网络恢复后继续';
   const pending = report.tasks.find(

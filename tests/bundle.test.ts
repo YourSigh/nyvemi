@@ -1,3 +1,4 @@
+import { recoverReconnects } from '../src/proactive/reconnect';
 import { defaultPreference } from '../src/theme/model';
 import { it, expect } from 'vitest';
 import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
@@ -293,4 +294,61 @@ it('restores every bubble in a multi-part proactive notification and does not re
   for (const mid of notification.messageIds!)
     expect((await b.store.get('messages', mid))?.characterId).toBe(imported.id);
   expect((await b.store.list('intentions', imported.id))[0].status).toBe('expired');
+});
+
+it('expires a transferred silence trigger and does not revive it when restoring autonomous messaging', async () => {
+  const a = await setup();
+  const b = await setup();
+  const now = Date.now();
+  await a.store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    state: { energy: 0.7, relationshipCloseness: 0.1, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: now,
+  });
+  await a.store.put('settings', { ...defaultSettings('c'), proactiveEnabled: true });
+  await a.store.put('messages', {
+    id: 'u',
+    characterId: 'c',
+    role: 'user',
+    content: '今天又是忙了一整天',
+    createdAt: now,
+    status: 'complete',
+    origin: 'chat',
+    replyDisposition: 'reply',
+  });
+  await a.store.put('messages', {
+    id: 'a',
+    characterId: 'c',
+    role: 'assistant',
+    content: '累坏了吧',
+    createdAt: now + 1,
+    status: 'complete',
+    origin: 'chat',
+    groupId: 'u',
+  });
+  await a.store.put('intentions', {
+    id: 'r',
+    characterId: 'c',
+    type: 'reconnect',
+    sourceMessageId: 'u',
+    topic: '今天的事',
+    reason: '稍后看看',
+    importance: 0.6,
+    createdAt: now,
+    earliestAt: now + 900000,
+    latestAt: now + 7200000,
+    status: 'pending',
+  });
+  const imported = await b.service.importCharacter(await a.service.exportCharacter('c'));
+  const task = (await b.store.list('intentions', imported.id))[0];
+  expect(task.status).toBe('expired');
+  const source = await b.store.get('messages', task.sourceMessageId!);
+  expect(source?.characterId).toBe(imported.id);
+  const settings = (await b.store.get('settings', imported.id))!;
+  await b.store.put('settings', { ...settings, proactiveEnabled: true });
+  await recoverReconnects(b.store, now + 60000);
+  expect(await b.store.list('intentions', imported.id)).toHaveLength(1);
+  expect((await b.store.get('intentions', task.id))?.status).toBe('expired');
 });
