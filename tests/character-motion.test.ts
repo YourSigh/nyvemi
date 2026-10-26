@@ -15,3 +15,23 @@ it('blinks at variable 2–6 second intervals and never catches up with a burst 
   expect(scheduler.nextAt()).toBe(106000);
   expect(scheduler.tick(100000)).toBeUndefined();
 });
+
+it('spaces optional gestures far apart and suppresses them while listening or thinking', () => {
+  const scheduler = new CharacterMotionScheduler(() => 0);
+  scheduler.start(0);
+  const gestures: number[] = [];
+  for (let t = 0; t <= 90000; t += 100) {
+    const action = scheduler.tick(t);
+    if (action && action !== 'blink') gestures.push(t);
+  }
+  expect(gestures.length).toBeGreaterThan(0);
+  for (let i = 1; i < gestures.length; i++)
+    expect(gestures[i] - gestures[i - 1]).toBeGreaterThanOrEqual(18000);
+  const focused = new CharacterMotionScheduler(() => 0);
+  focused.start(0);
+  for (let t = 0; t < 60000; t += 100)
+    expect(['blink', undefined]).toContain(focused.tick(t, 'thinking'));
+  focused.occupy(60000, 850);
+  expect(focused.tick(60001)).toBeUndefined();
+  expect(focused.nextAt()).toBeGreaterThanOrEqual(60850);
+});

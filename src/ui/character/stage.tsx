@@ -1,3 +1,5 @@
+import type { MotionCommand } from '../../character/motion-scheduler';
+import { Pressable } from 'react-native';
 import type { CharacterInteractionState } from '../../character/interaction';
 import { Text } from 'react-native';
 import { useState } from 'react';
@@ -10,21 +12,21 @@ export function CharacterStage({
   height,
   state = 'idle',
   intensity = 0.5,
+  command,
 }: {
   name: string;
   height: number;
   state?: CharacterInteractionState;
   intensity?: number;
+  command?: MotionCommand;
 }) {
-  const motion = useCharacterMotion(state, intensity);
+  const motion = useCharacterMotion(state, intensity, command);
   const palette = usePalette();
   const [width, setWidth] = useState(360);
   const artHeight = Math.max(0, Math.min(height - 12, width * 1.03, 420));
   return (
     <View
       testID="character-stage"
-      accessible
-      accessibilityLabel={`${name}在这里`}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{
         height,
@@ -46,15 +48,24 @@ export function CharacterStage({
           opacity: 0.28,
         }}
       />
-      <Animated.View style={motion.style}>
-        <MockCharacter
-          palette={palette}
-          width={(artHeight * 240) / 340}
-          height={artHeight}
-          eyesClosed={motion.eyesClosed}
-          mouthOpen={motion.mouthOpen}
-        />
-      </Animated.View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${name}在这里，点按挥手`}
+        onPress={() => motion.play('wave')}
+      >
+        <Animated.View style={motion.style}>
+          <MockCharacter
+            palette={palette}
+            width={(artHeight * 240) / 340}
+            height={artHeight}
+            eyesClosed={motion.eyesClosed}
+            mouthOpen={motion.mouthOpen}
+            state={state}
+            headStyle={motion.headStyle}
+            armStyle={motion.armStyle}
+          />
+        </Animated.View>
+      </Pressable>
       {state === 'thinking' || state === 'talking' || state === 'listening' ? (
         <Text
           accessibilityLiveRegion="polite"
