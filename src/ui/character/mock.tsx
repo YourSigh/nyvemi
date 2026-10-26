@@ -6,11 +6,13 @@ export function MockCharacter({
   width,
   height,
   eyesClosed = false,
+  mouthOpen = false,
 }: {
   palette: Palette;
   width: number;
   height: number;
   eyesClosed?: boolean;
+  mouthOpen?: boolean;
 }) {
   return (
     <Svg width={width} height={height} viewBox="0 0 240 340">
@@ -92,13 +94,17 @@ export function MockCharacter({
         )}
         <Ellipse cx="78" cy="130" rx="10" ry="5" fill={palette.tint} />
         <Ellipse cx="162" cy="130" rx="10" ry="5" fill={palette.tint} />
-        <Path
-          d="M113 136Q120 141 127 136"
-          fill="none"
-          stroke={palette.ink}
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
+        {mouthOpen ? (
+          <Ellipse cx="120" cy="137" rx="5" ry="6" fill={palette.ink} />
+        ) : (
+          <Path
+            d="M113 136Q120 141 127 136"
+            fill="none"
+            stroke={palette.ink}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        )}
         <Path d="M168 72L172 107Q183 93 180 77Z" fill={palette.accent} />
         <Path d="M74 72L69 113Q58 99 62 82Z" fill={palette.accent} />
       </G>

@@ -1,3 +1,4 @@
+import { expressionFields } from '../../character/interaction';
 import { autonomousBlock, reconnectBlock } from '../reconnect';
 import { conversationContext } from '../../conversation/context';
 import { continuationBlock } from '../continuations';
@@ -144,6 +145,7 @@ export class HeartbeatEngine {
             ).structuredOutput(
               prompt,
               z.object({
+                ...expressionFields,
                 messages: z
                   .array(z.string().trim().min(1).max(800))
                   .min(kind === 'requested' ? 1 : 0)
@@ -187,6 +189,8 @@ export class HeartbeatEngine {
                   origin: 'proactive',
                   status: 'pending',
                   groupId: recordId,
+                  emotion: result.emotion,
+                  intensity: result.intensity,
                 });
               await tx.put('notifications', outbox);
             });
@@ -361,7 +365,10 @@ export class HeartbeatEngine {
             await this.provider()
           ).structuredOutput(
             prompt,
-            z.object({ messages: z.array(z.string().trim().min(1).max(800)).max(2) }),
+            z.object({
+              ...expressionFields,
+              messages: z.array(z.string().trim().min(1).max(800)).max(2),
+            }),
             'proactive_generation',
           );
           if (!result.messages.length) {
@@ -413,6 +420,8 @@ export class HeartbeatEngine {
               characterId: cid,
               role: 'assistant',
               content: record.body,
+              emotion: result.emotion,
+              intensity: result.intensity,
               createdAt: freshNow,
               origin: 'proactive',
               status: 'pending',
@@ -447,10 +456,16 @@ export class HeartbeatEngine {
   private async deliver(record: NotificationRecord, character: Character): Promise<void> {
     await this.notifications.show(record, character);
     this.activity('sent', character.id);
-    await this.store.put('notifications', {
-      ...record,
-      status: 'delivered',
-      deliveredAt: record.deliveredAt ?? this.clock(),
+    await this.store.atomic(async (tx) => {
+      await tx.put('notifications', {
+        ...record,
+        status: 'delivered',
+        deliveredAt: record.deliveredAt ?? this.clock(),
+      });
+      for (const mid of record.messageIds ?? [record.messageId]) {
+        const message = await tx.get('messages', mid);
+        if (message) await tx.put('messages', { ...message, status: 'complete' });
+      }
     });
   }
   async openNotification(notificationId: string): Promise<string | undefined> {

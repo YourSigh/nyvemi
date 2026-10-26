@@ -139,7 +139,7 @@ it('generates once, delivers once and turns notification into a real chat messag
   expect(calls).toBe(1);
   expect(shown).toHaveLength(1);
   const message = (await store.list('messages', 'c'))[0];
-  expect(message.status).toBe('pending');
+  expect(message.status).toBe('complete');
   expect(await engine.openNotification(shown[0].id)).toBe('c');
   await engine.openNotification(shown[0].id);
   expect(await store.list('messages', 'c')).toHaveLength(1);

@@ -1,4 +1,5 @@
 import { characterChatLayout } from '../character/layout';
+import { useCharacterInteraction } from './character/interaction';
 import { CharacterStage } from './character/stage';
 import { cancelRequestedWork } from '../proactive/requested-delivery';
 import { useTheme } from '../theme/context';
@@ -71,6 +72,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
   const [draft, setDraft] = useState('');
+  const interaction = useCharacterInteraction(runtime.chat, cid, Boolean(draft.trim()));
   const seen = useRef(new Set<string>());
   const arrivals = useRef(new Set<string>());
   const loaded = useRef(false);
@@ -87,8 +89,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         !seen.current.has(message.id) &&
         message.role === 'assistant' &&
         Date.now() - message.createdAt < 10000
-      )
+      ) {
         arrivals.current.add(message.id);
+        if (message.origin === 'proactive') interaction.incoming(message);
+      }
       seen.current.add(message.id);
     }
     loaded.current = true;
@@ -108,7 +112,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     );
 
     if (!c) setError('这个角色已被清空，请重新创建。');
-  }, [runtime, cid, historyLimit]);
+  }, [runtime, cid, historyLimit, interaction.incoming]);
   useFocusEffect(
     useCallback(() => {
       void (async () => {
@@ -209,7 +213,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             </Text>
             <View style={{ width: 52 }} />
           </View>
-          <CharacterStage name={character?.persona.name ?? '她'} height={layout.character} />
+          <CharacterStage
+            name={character?.persona.name ?? '她'}
+            height={layout.character}
+            state={interaction.state}
+            intensity={interaction.intensity}
+          />
           <View testID="conversation-area" style={{ flex: 1, minHeight: 0 }}>
             <View style={{ maxHeight: 42 }}>
               {requested.map((task) => (

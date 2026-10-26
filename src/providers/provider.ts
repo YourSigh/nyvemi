@@ -20,7 +20,11 @@ export interface LLMProvider {
     onDelta: (delta: string) => void,
     signal?: AbortSignal,
   ): Promise<LLMResult>;
-  structuredOutput<T>(messages: ChatTurn[], schema: z.ZodType<T>, purpose: string): Promise<T>;
+  structuredOutput<T>(
+    messages: ChatTurn[],
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+    purpose: string,
+  ): Promise<T>;
 }
 export interface SecretStore {
   get(): Promise<string | null>;

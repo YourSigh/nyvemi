@@ -1,3 +1,4 @@
+import { ChatActivityBus, type ChatActivity } from '../character/interaction';
 import { planReconnect } from '../proactive/reconnect';
 import { conversationContext } from '../conversation/context';
 import { parseChatOutcome, conversationActions } from './outcome';
@@ -30,6 +31,10 @@ export interface ChatHooks {
 const noHooks: ChatHooks = { retrieve: async () => [], afterRound: async () => {} };
 export class ChatService {
   private active = new Set<string>();
+  private activities = new ChatActivityBus();
+  subscribe(characterId: string, listener: (activity: ChatActivity) => void) {
+    return this.activities.subscribe(characterId, listener);
+  }
   constructor(
     private store: Storage,
     private provider: () => Promise<LLMProvider>,
@@ -116,6 +121,7 @@ export class ChatService {
     if (!(await this.store.lease(lease, Date.now(), 180000)))
       throw new Error('这一轮还没聊完，请稍候');
     this.active.add(characterId);
+    this.activities.publish(characterId, { phase: 'thinking' });
     let user: Message | undefined;
     let hasReply = false;
     try {
@@ -164,6 +170,7 @@ export class ChatService {
           });
         });
         hasReply = true;
+        this.activities.publish(characterId, { phase: 'complete', hasMessages: true });
         onSaved();
       };
       const delay = requestedDelay(content);
@@ -184,11 +191,16 @@ export class ChatService {
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';
+      let firstToken = true;
       const result = await (
         await this.provider()
       ).streamChat(
         prompt,
         (delta) => {
+          if (firstToken && delta.length) {
+            firstToken = false;
+            this.activities.publish(characterId, { phase: 'talking' });
+          }
           raw += delta;
           onPreview(streamingPreview(raw));
         },
@@ -216,6 +228,8 @@ export class ChatService {
         origin: 'chat',
         status: 'pending',
         groupId: user!.id,
+        emotion: outcome.emotion,
+        intensity: outcome.intensity,
       }));
       user = {
         ...user,
@@ -240,6 +254,12 @@ export class ChatService {
         onPreview('');
         onSaved();
       }
+      this.activities.publish(characterId, {
+        phase: 'complete',
+        hasMessages: replies.length > 0,
+        emotion: outcome.emotion,
+        intensity: outcome.intensity,
+      });
       if (themeDescription && onThemeChange) await onThemeChange(themeDescription);
       // Hooks persist their durable work before returning; actual extraction does not block the composer.
       try {
@@ -248,6 +268,7 @@ export class ChatService {
         await this.diagnostics.error(characterId, 'post_round');
       }
     } catch (error) {
+      this.activities.publish(characterId, { phase: 'error' });
       if (user && !hasReply) await this.store.put('messages', { ...user, status: 'error' });
       onPreview('');
       onSaved();

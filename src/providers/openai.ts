@@ -146,7 +146,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
   }
   async structuredOutput<T>(
     messages: ChatTurn[],
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     purpose: string,
   ): Promise<T> {
     const result = await this.chat(

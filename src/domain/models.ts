@@ -1,3 +1,4 @@
+import { expressionFields } from '../character/interaction';
 import { z } from 'zod';
 import type { ThemeRecord, ThemeOpening } from '../theme/model';
 import type { InterviewDraft } from '../characters/interview';
@@ -83,6 +84,7 @@ export type Memory = z.infer<typeof MemorySchema>;
 export type MemoryType = Memory['type'];
 export const MessageSchema = z
   .object({
+    ...expressionFields,
     id: z.string(),
     characterId: z.string(),
     role: z.enum(['user', 'assistant']),

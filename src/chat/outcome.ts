@@ -1,3 +1,4 @@
+import { expressionFields } from '../character/interaction';
 import { z } from 'zod';
 export const ContinuationSchema = z.object({
   topic: z.string().trim().min(3).max(300),
@@ -7,6 +8,7 @@ export const ContinuationSchema = z.object({
 export type Continuation = z.infer<typeof ContinuationSchema>;
 const OutcomeSchema = z
   .object({
+    ...expressionFields,
     messages: z.array(z.string().trim().min(1).max(6000)).max(6),
     continuation: ContinuationSchema.nullable().optional(),
     theme: z
