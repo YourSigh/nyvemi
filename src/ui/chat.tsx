@@ -1,3 +1,5 @@
+import { characterChatLayout } from '../character/layout';
+import { CharacterStage } from './character/stage';
 import { cancelRequestedWork } from '../proactive/requested-delivery';
 import { useTheme } from '../theme/context';
 import { closeKeyboard } from './keyboard';
@@ -59,6 +61,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [viewport, setViewport] = useState(760);
+  const [composerHeight, setComposerHeight] = useState(72);
+  const layout = characterChatLayout(viewport, composerHeight);
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -183,183 +188,184 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   };
   return (
     <SafeAreaView edges={['top', 'bottom']} style={s.root}>
-      <View style={s.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="打开设置"
-          onPress={() => navigation.navigate('Settings', { characterId: cid })}
-          style={{ padding: 8 }}
-        >
-          <Text style={{ fontSize: 25, color: palette.accent }}>⚙</Text>
-        </Pressable>
-        <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="角色设置"
-          onPress={() => navigation.navigate('Settings', { characterId: cid })}
-          style={{ flex: 1 }}
-        >
-          <Text style={s.name}>{character?.persona.name ?? '正在载入'}</Text>
-          <Text style={s.sub} accessibilityLiveRegion="polite">
-            {busy ? '正在输入…' : '此刻，以及对话之外'}
-          </Text>
-        </Pressable>
-      </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
-        {needsSetup ? (
-          <View style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+        <View style={{ flex: 1 }} onLayout={(e) => setViewport(e.nativeEvent.layout.height)}>
+          <View style={[s.header, { height: layout.header }]}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={needsSetup ? '设置，通知尚未开启' : '打开设置'}
               onPress={() => navigation.navigate('Settings', { characterId: cid })}
+              style={s.settingsButton}
             >
-              <Text style={{ color: palette.accent }}>主动来信还未就绪 · 点此开启通知与陪伴</Text>
+              <Text style={{ color: palette.accent, fontSize: 15 }}>设置</Text>
+              {needsSetup ? (
+                <View
+                  style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.accent }}
+                />
+              ) : null}
             </Pressable>
-          </View>
-        ) : null}
-        {requested.map((task) => (
-          <View
-            key={task.id}
-            style={{
-              paddingHorizontal: 16,
-              paddingVertical: 6,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
-              约好{' '}
-              {new Date(task.requestedDueAt ?? task.earliestAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-              })}{' '}
-              来找你
-              {!bridge().canNotify()
-                ? ' · 通知未开启'
-                : Date.now() >= task.earliestAt
-                  ? ' · 正在等待送达'
-                  : task.requestedDueAt && task.earliestAt > task.requestedDueAt
-                    ? ' · 稍后重试'
-                    : ''}
+            <Text style={s.name} numberOfLines={1}>
+              {character?.persona.name ?? '正在载入'}
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="取消这次约定来信"
-              onPress={() => {
-                void cancelRequestedWork(runtime.store, bridge(), task.id)
-                  .then(refresh)
-                  .catch(() => setError('取消未完成，请稍后重试'));
-              }}
-            >
-              <Text style={{ color: palette.accent, padding: 6 }}>取消</Text>
-            </Pressable>
+            <View style={{ width: 52 }} />
           </View>
-        ))}
-        <FlatList
-          ref={list}
-          data={[...messages].reverse()}
-          inverted
-          maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: 80 }}
-          keyExtractor={(m) => m.id}
-          contentContainerStyle={s.messages}
-          onLayout={() => {
-            // Keyboard changes the viewport, not the message content size.
-            if (autoScroll.current)
-              requestAnimationFrame(() =>
-                list.current?.scrollToOffset({ offset: 0, animated: false }),
-              );
-          }}
-          onContentSizeChange={() => {
-            if (autoScroll.current) list.current?.scrollToOffset({ offset: 0, animated: true });
-          }}
-          onScrollBeginDrag={() => {
-            autoScroll.current = false;
-          }}
-          onScrollEndDrag={({ nativeEvent: { contentOffset } }) => {
-            autoScroll.current = contentOffset.y < 80;
-          }}
-          onMomentumScrollEnd={({ nativeEvent: { contentOffset } }) => {
-            autoScroll.current = contentOffset.y < 80;
-          }}
-          scrollEventThrottle={16}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          ListFooterComponent={
-            hasMore ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  autoScroll.current = false;
-                  setHistoryLimit((n) => n + 100);
-                }}
-              >
-                <Text style={s.empty}>查看更早的消息</Text>
-              </Pressable>
-            ) : null
-          }
-          ListEmptyComponent={<Text style={s.empty}>从一句随便的话开始吧。</Text>}
-          renderItem={({ item: m }) => (
-            <Arrival messageId={m.id} arrivals={arrivals.current}>
-              <View style={[s.row, m.role === 'user' && s.mine]}>
-                {m.role === 'assistant' ? (
-                  <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={32} />
-                ) : null}
-                <View style={{ maxWidth: '80%', gap: 5 }}>
-                  <Text style={s.time}>
-                    {new Date(m.createdAt).toLocaleTimeString([], {
+          <CharacterStage name={character?.persona.name ?? '她'} height={layout.character} />
+          <View testID="conversation-area" style={{ flex: 1, minHeight: 0 }}>
+            <View style={{ maxHeight: 42 }}>
+              {requested.map((task) => (
+                <View
+                  key={task.id}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 6,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                >
+                  <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
+                    约好{' '}
+                    {new Date(task.requestedDueAt ?? task.earliestAt).toLocaleTimeString([], {
                       hour: '2-digit',
                       minute: '2-digit',
-                    })}
+                      second: '2-digit',
+                    })}{' '}
+                    来找你
+                    {!bridge().canNotify()
+                      ? ' · 通知未开启'
+                      : Date.now() >= task.earliestAt
+                        ? ' · 正在等待送达'
+                        : task.requestedDueAt && task.earliestAt > task.requestedDueAt
+                          ? ' · 稍后重试'
+                          : ''}
                   </Text>
-                  <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
-                    <Text selectable style={s.message}>
-                      {m.content}
-                    </Text>
-                  </View>
-                  {m.status === 'error' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="重试消息"
-                      disabled={busy}
-                      onPress={() => void send(m)}
-                    >
-                      <Text style={{ color: palette.error, fontSize: 12 }}>
-                        未收到回复 · 点此重试
-                      </Text>
-                    </Pressable>
-                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="取消这次约定来信"
+                    onPress={() => {
+                      void cancelRequestedWork(runtime.store, bridge(), task.id)
+                        .then(refresh)
+                        .catch(() => setError('取消未完成，请稍后重试'));
+                    }}
+                  >
+                    <Text style={{ color: palette.accent, padding: 6 }}>取消</Text>
+                  </Pressable>
                 </View>
-              </View>
-            </Arrival>
-          )}
-        />
-        <View style={s.footer}>
-          <ErrorText text={error} />
-          <View style={s.composer}>
-            <TextInput
-              accessibilityLabel="消息"
-              style={s.input}
-              placeholder="说点什么…"
-              placeholderTextColor={palette.muted}
-              selectionColor={palette.accent}
-              cursorColor={palette.accent}
-              value={draft}
-              onChangeText={setDraft}
-              onFocus={() => {
-                autoScroll.current = true;
-                requestAnimationFrame(() =>
-                  list.current?.scrollToOffset({ offset: 0, animated: false }),
-                );
+              ))}
+            </View>
+            <FlatList
+              ref={list}
+              data={[...messages].reverse()}
+              inverted
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 0,
+                autoscrollToTopThreshold: 80,
               }}
-              multiline
-              maxLength={6000}
+              keyExtractor={(m) => m.id}
+              contentContainerStyle={s.messages}
+              onLayout={() => {
+                // Keyboard changes the viewport, not the message content size.
+                if (autoScroll.current)
+                  requestAnimationFrame(() =>
+                    list.current?.scrollToOffset({ offset: 0, animated: false }),
+                  );
+              }}
+              onContentSizeChange={() => {
+                if (autoScroll.current) list.current?.scrollToOffset({ offset: 0, animated: true });
+              }}
+              onScrollBeginDrag={() => {
+                autoScroll.current = false;
+              }}
+              onScrollEndDrag={({ nativeEvent: { contentOffset } }) => {
+                autoScroll.current = contentOffset.y < 80;
+              }}
+              onMomentumScrollEnd={({ nativeEvent: { contentOffset } }) => {
+                autoScroll.current = contentOffset.y < 80;
+              }}
+              scrollEventThrottle={16}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              ListFooterComponent={
+                hasMore ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      autoScroll.current = false;
+                      setHistoryLimit((n) => n + 100);
+                    }}
+                  >
+                    <Text style={s.empty}>查看更早的消息</Text>
+                  </Pressable>
+                ) : null
+              }
+              ListEmptyComponent={<Text style={s.empty}>从一句随便的话开始吧。</Text>}
+              renderItem={({ item: m }) => (
+                <Arrival messageId={m.id} arrivals={arrivals.current}>
+                  <View style={[s.row, m.role === 'user' && s.mine]}>
+                    {m.role === 'assistant' ? (
+                      <Avatar
+                        name={character?.persona.name ?? 'N'}
+                        uri={character?.avatar}
+                        size={32}
+                      />
+                    ) : null}
+                    <View style={{ maxWidth: '80%', gap: 5 }}>
+                      <Text style={s.time}>
+                        {new Date(m.createdAt).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                      <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
+                        <Text selectable style={s.message}>
+                          {m.content}
+                        </Text>
+                      </View>
+                      {m.status === 'error' ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="重试消息"
+                          disabled={busy}
+                          onPress={() => void send(m)}
+                        >
+                          <Text style={{ color: palette.error, fontSize: 12 }}>
+                            未收到回复 · 点此重试
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                </Arrival>
+              )}
             />
-            <Button
-              title={busy ? '…' : '发送'}
-              disabled={busy || !draft.trim()}
-              onPress={() => void send()}
-            />
+          </View>
+          <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
+            <ErrorText text={error} />
+            <View style={s.composer}>
+              <TextInput
+                accessibilityLabel="消息"
+                style={s.input}
+                placeholder="说点什么…"
+                placeholderTextColor={palette.muted}
+                selectionColor={palette.accent}
+                cursorColor={palette.accent}
+                value={draft}
+                onChangeText={setDraft}
+                onFocus={() => {
+                  autoScroll.current = true;
+                  requestAnimationFrame(() =>
+                    list.current?.scrollToOffset({ offset: 0, animated: false }),
+                  );
+                }}
+                multiline
+                maxLength={6000}
+              />
+              <Button
+                title={busy ? '…' : '发送'}
+                disabled={busy || !draft.trim()}
+                onPress={() => void send()}
+              />
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -370,15 +376,20 @@ const createStyles = (palette: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: palette.background },
     header: {
-      paddingHorizontal: 20,
-      paddingVertical: 14,
-      gap: 12,
+      paddingHorizontal: 16,
+      gap: 8,
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: 1,
-      borderColor: palette.line,
+      justifyContent: 'space-between',
     },
-    name: { fontSize: 19, fontWeight: '600', color: palette.ink },
+    settingsButton: {
+      width: 52,
+      minHeight: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    name: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: palette.ink },
     sub: { fontSize: 12, color: palette.muted, marginTop: 4 },
     more: { fontSize: 26, padding: 8, color: palette.accent },
     messages: { padding: 18, gap: 20, flexGrow: 1 },
