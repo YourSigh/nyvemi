@@ -1,3 +1,7 @@
+import { imageAssets, imageHash, imageSecret } from '../appearance/native';
+import { defaultImageSettings } from '../appearance/model';
+import { MockImageProvider, VisualCreationService } from '../appearance/service';
+import { SeedreamImageProvider } from '../appearance/seedream';
 import { CharacterDebugController } from '../character/debug';
 import { reconcileIntentionWork } from '../proactive/requested-delivery';
 import { fetch as nativeFetch } from 'expo/fetch';
@@ -77,6 +81,23 @@ async function createRuntime() {
   const characters = new CharacterService(store, provider);
   return {
     store,
+    visuals: new VisualCreationService(
+      store,
+      async () => {
+        const settings = (await store.get('imageSettings', 'images')) ?? defaultImageSettings;
+        return settings.provider === 'mock'
+          ? new MockImageProvider()
+          : new SeedreamImageProvider(
+              settings,
+              imageSecret.get,
+              store,
+              imageAssets,
+              imageHash,
+              nativeFetch as unknown as typeof fetch,
+            );
+      },
+      imageAssets,
+    ),
     characterDebug: new CharacterDebugController(),
     syncIntentionWork,
     diagnostics,

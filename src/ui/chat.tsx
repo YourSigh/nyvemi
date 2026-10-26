@@ -224,6 +224,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             <View style={{ width: 52 }} />
           </View>
           <CharacterStage
+            rig={character?.rig}
             name={character?.persona.name ?? '她'}
             height={layout.character}
             state={debug?.state ?? interaction.state}

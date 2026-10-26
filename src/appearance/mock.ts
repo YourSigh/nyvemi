@@ -16,7 +16,7 @@ export function mockRig(seed: string): CharacterRig {
       svg: `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="340" viewBox="0 0 240 340">${shape}</svg>`,
     },
   });
-  return {
+  const rig: CharacterRig = {
     version: 1,
     source: 'mock',
     width: 240,
@@ -54,6 +54,25 @@ export function mockRig(seed: string): CharacterRig {
       ),
     ],
   };
+  for (const layer of rig.layers) {
+    const box =
+      layer.role === 'eyes'
+        ? [77, 100, 88, 36]
+        : layer.role === 'mouth'
+          ? [105, 145, 35, 35]
+          : undefined;
+    if (box) {
+      const [x, y, w, h] = box;
+      layer.bounds = [x / 240, y / 340, w / 240, h / 340] as [number, number, number, number];
+      layer.asset = {
+        ...layer.asset,
+        width: w,
+        height: h,
+        svg: layer.asset.svg!.replace('viewBox="0 0 240 340"', `viewBox="${x} ${y} ${w} ${h}"`),
+      };
+    }
+  }
+  return rig;
 }
 export function mockCandidate(seed: string): ImageAsset {
   const rig = mockRig(seed);

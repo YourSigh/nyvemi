@@ -1,9 +1,9 @@
 import type { MotionCommand } from '../../character/motion-scheduler';
-import { Pressable } from 'react-native';
+import type { CharacterRig } from '../../appearance/model';
+import { RigCharacter } from './rig';
+import { Pressable, Text, Animated, View } from 'react-native';
 import type { CharacterInteractionState } from '../../character/interaction';
-import { Text } from 'react-native';
 import { useState } from 'react';
-import { Animated, View } from 'react-native';
 import { useCharacterTheme } from './theme';
 import { useCharacterMotion } from './motion';
 import { MockCharacter } from './mock';
@@ -13,7 +13,11 @@ export function CharacterStage({
   state = 'idle',
   intensity = 0.5,
   command,
+  rig,
+  forceEyesClosed = false,
 }: {
+  rig?: CharacterRig;
+  forceEyesClosed?: boolean;
   name: string;
   height: number;
   state?: CharacterInteractionState;
@@ -23,7 +27,10 @@ export function CharacterStage({
   const motion = useCharacterMotion(state, intensity, command);
   const theme = useCharacterTheme();
   const [width, setWidth] = useState(360);
-  const artHeight = Math.max(0, Math.min(height - 12, width * 1.03, 420));
+  const artHeight = Math.max(
+    0,
+    Math.min(height - 12, width * 1.03, rig ? (width * rig.height) / rig.width : 420),
+  );
   return (
     <View
       testID="character-stage"
@@ -54,16 +61,29 @@ export function CharacterStage({
         onPress={() => motion.play('wave')}
       >
         <Animated.View style={motion.style}>
-          <MockCharacter
-            theme={theme}
-            width={(artHeight * 240) / 340}
-            height={artHeight}
-            eyesClosed={motion.eyesClosed}
-            mouthOpen={motion.mouthOpen}
-            state={state}
-            headStyle={motion.headStyle}
-            armStyle={motion.armStyle}
-          />
+          {rig ? (
+            <RigCharacter
+              rig={rig}
+              width={(artHeight * rig.width) / rig.height}
+              height={artHeight}
+              eyesClosed={motion.eyesClosed || forceEyesClosed}
+              mouthOpen={motion.mouthOpen}
+              state={state}
+              headStyle={motion.headStyle}
+              armStyle={motion.armStyle}
+            />
+          ) : (
+            <MockCharacter
+              theme={theme}
+              width={(artHeight * 240) / 340}
+              height={artHeight}
+              eyesClosed={motion.eyesClosed || forceEyesClosed}
+              mouthOpen={motion.mouthOpen}
+              state={state}
+              headStyle={motion.headStyle}
+              armStyle={motion.armStyle}
+            />
+          )}
         </Animated.View>
       </Pressable>
       {state === 'thinking' || state === 'talking' || state === 'listening' ? (
