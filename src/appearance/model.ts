@@ -66,6 +66,7 @@ export interface VisualDraft {
   selected?: ImageAsset;
   rig?: CharacterRig;
   saved?: boolean;
+  bodyRepairApplied?: boolean;
 }
 export interface ImageRequestCache {
   id: string;

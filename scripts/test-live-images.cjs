@@ -22,7 +22,13 @@ const result = spawnSync(
   ['node_modules/vitest/vitest.mjs', 'run', 'tests/live-images.test.ts'],
   {
     stdio: 'inherit',
-    env: { ...process.env, ...selected, EXPO_NO_DOTENV: '1', NYVEMI_RUN_LIVE_IMAGES: '1' },
+    env: {
+      ...process.env,
+      ...selected,
+      EXPO_NO_DOTENV: '1',
+      NYVEMI_RUN_LIVE_IMAGES: '1',
+      NYVEMI_ARK_REPAIR_BODY: process.argv.includes('--repair-body') ? '1' : '0',
+    },
   },
 );
 process.exit(result.status ?? 1);

@@ -1,3 +1,4 @@
+import { exportLook } from '../src/appearance/bundle';
 import { it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -42,13 +43,18 @@ it.skipIf(!live)(
     const db = new TestDatabase(resolve(root, 'cache.sqlite'));
     await migrate(db);
     const store = new SQLiteStore(db);
-    const budget = Math.min(2, Math.max(0, Number(process.env.NYVEMI_ARK_LIVE_MAX_REQUESTS) || 0));
+    let budget = Math.min(
+      process.env.NYVEMI_ARK_REPAIR_BODY === '1' ? 3 : 2,
+      Math.max(0, Number(process.env.NYVEMI_ARK_LIVE_MAX_REQUESTS) || 0) +
+        (process.env.NYVEMI_ARK_REPAIR_BODY === '1' ? 1 : 0),
+    );
     const budgetPath = resolve(root, 'budget.json');
     const prior = existsSync(budgetPath)
       ? JSON.parse(readFileSync(budgetPath, 'utf8'))
       : existsSync(resolve(root, 'result.json'))
         ? JSON.parse(readFileSync(resolve(root, 'result.json'), 'utf8'))
         : { requests: 0 };
+    budget = Math.max(budget, Math.min(3, Number(prior.limit) || 0));
     let requests = Number(prior.requests) || 0;
     const http: typeof fetch = async (url, init) => {
       if (requests >= budget) throw new Error('已达到本次付费请求上限');
@@ -84,8 +90,14 @@ it.skipIf(!live)(
       http,
     );
     try {
-      const rig = await provider.split({ uri: reference, ...size(readFileSync(reference)) });
+      let rig = await provider.split({ uri: reference, ...size(readFileSync(reference)) });
+      if (process.env.NYVEMI_ARK_REPAIR_BODY === '1')
+        rig = await provider.repairBody({ uri: reference, ...size(readFileSync(reference)) }, rig);
       writeFileSync(resolve(root, 'rig.json'), JSON.stringify(rig, null, 2));
+      writeFileSync(
+        resolve('artifacts', 'reference-character.nyvemi-look'),
+        await exportLook(rig, async (uri) => new Uint8Array(readFileSync(uri))),
+      );
       expect(rig.layers.some((l) => l.role === 'eyes')).toBe(true);
       await provider.split({ uri: reference, ...size(readFileSync(reference)) });
       expect(requests).toBeLessThanOrEqual(budget);

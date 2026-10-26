@@ -17,6 +17,7 @@ export interface ImageProvider {
   identity: string;
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
   split(image: ImageAsset): Promise<CharacterRig>;
+  repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
 }
 export class MockImageProvider implements ImageProvider {
   identity = 'mock-v1';
@@ -96,12 +97,44 @@ export class VisualCreationService {
       const image = index === undefined ? draft.selected : draft.candidates[index];
       if (!image) throw new Error('请选择一张形象');
       const reuse = draft.selected?.uri === image.uri && draft.rig;
+      draft.bodyRepairApplied = reuse ? draft.bodyRepairApplied : false;
       draft.selected = image;
       draft.rig = undefined;
       await this.store.put('visualDrafts', draft);
       draft.rig = reuse || validateRig(await provider.split(image));
       await this.store.put('visualDrafts', draft);
       return draft.rig;
+    } finally {
+      await this.store.release(lock);
+      await this.store.release('visual-assets');
+    }
+  }
+  async repairBody(characterId: string) {
+    const lock = `visual:${characterId}`;
+    if (!(await this.store.lease(lock, Date.now(), 45 * 60_000))) throw new Error('形象正在处理中');
+    if (!(await this.store.lease('visual-assets', Date.now(), 45 * 60_000))) {
+      await this.store.release(lock);
+      throw new Error('图像资源正在处理中');
+    }
+    try {
+      const draft = await this.store.get('visualDrafts', characterId);
+      if (draft?.bodyRepairApplied && draft.rig) return draft.rig;
+      const provider = await this.provider();
+      if (
+        !draft?.rig ||
+        !draft.selected ||
+        !provider.repairBody ||
+        draft.providerId !== provider.identity
+      )
+        throw new Error('请先使用豆包创建形象，导入形象不能直接重复付费修复');
+      const rig = await provider.repairBody(draft.selected, draft.rig);
+      await this.store.put('visualDrafts', {
+        ...draft,
+        rig,
+        saved: false,
+        bodyRepairApplied: true,
+      });
+      return rig;
     } finally {
       await this.store.release(lock);
       await this.store.release('visual-assets');

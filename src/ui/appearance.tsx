@@ -13,7 +13,7 @@ import {
   type ImageSettings,
   type VisualDraft,
 } from '../appearance/model';
-import { imageSecret, pickReference } from '../appearance/native';
+import { imageSecret, pickReference, pickLayeredLook } from '../appearance/native';
 import { validateImageSettings } from '../appearance/service';
 import { awakeningAt, awakeningDuration } from '../appearance/awakening';
 import { CharacterImage } from './character/rig';
@@ -66,7 +66,9 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
-          setEditing(d.input.mode !== 'animate' ? d.candidates.length !== 3 : !d.selected);
+          setEditing(
+            d.rig ? false : d.input.mode !== 'animate' ? d.candidates.length !== 3 : !d.selected,
+          );
           setRig(d.rig);
         }
         setLoaded(true);
@@ -150,9 +152,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
       <Note>
-        {config.provider === 'mock'
-          ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
-          : '豆包 / Seedream'}
+        {rig?.source === 'seedream'
+          ? '分层形象已就绪'
+          : config.provider === 'mock'
+            ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
+            : '豆包 / Seedream'}
       </Note>
       <ErrorText text={error} />
       {!loaded ? <Busy label="读取形象…" /> : null}
@@ -203,6 +207,21 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             </>
           ) : null}
+          <Button
+            secondary
+            title="导入分层形象文件"
+            disabled={Boolean(busy)}
+            onPress={() =>
+              void run('读取分层形象', async () => {
+                const next = await pickLayeredLook(runtime.store, cid);
+                if (next) {
+                  setRig(next);
+                  setEditing(false);
+                  setPreviewState('idle');
+                }
+              })
+            }
+          />
           <Button
             secondary
             title={configure ? '收起生图设置' : '生图设置'}
@@ -340,6 +359,20 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             ))}
           </View>
+          {rig.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
+            <Button
+              secondary
+              title={draft.bodyRepairApplied ? '身体已补全' : '重新补全身体（付费）'}
+              disabled={draft.bodyRepairApplied || !awake.complete || Boolean(busy)}
+              onPress={() =>
+                void run('正在补全身体', async () => {
+                  setRig(await runtime.visuals.repairBody(cid));
+                  setDraft(await runtime.store.get('visualDrafts', cid));
+                  setPreviewState('idle');
+                })
+              }
+            />
+          ) : null}
           <Button
             title={route.params.onboarding ? '保存，开始聊天' : '保存新形象'}
             disabled={!awake.complete || Boolean(busy)}

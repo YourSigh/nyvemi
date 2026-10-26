@@ -134,13 +134,22 @@ export class SeedreamImageProvider implements ImageProvider {
       },
     );
   }
+  private async decompositionImage(image: ImageAsset) {
+    if (image.width * image.height < 262144)
+      throw new Error('拆层图片至少需要 26 万像素，请选择更清晰的原图');
+    const data = await this.assets.dataUrl(image);
+    if (!/^data:image\/(png|jpeg);base64,/.test(data))
+      throw new Error('拆层暂时只支持 PNG 或 JPEG，请转换原图格式后再试');
+    return data;
+  }
   async split(image: ImageAsset): Promise<CharacterRig> {
+    const dataUrl = await this.decompositionImage(image);
     return this.cached(
       'split',
       await this.assets.fingerprint(image),
       {
         model: this.config.layerModel,
-        image: await this.assets.dataUrl(image),
+        image: dataUrl,
         prompt: decompositionPrompt,
         layer_decomposition: true,
         size: '2K',
@@ -156,8 +165,7 @@ export class SeedreamImageProvider implements ImageProvider {
         for (const [i, item] of response.data.entries()) {
           // Base backgrounds are intentionally omitted: character stage must stay transparent.
           if (!item.bounding_box) continue;
-          const name =
-            `${item.name ?? item.bounding_box.name ?? ''} ${item.description ?? item.bounding_box.description ?? ''}`.toLowerCase();
+          const name = (item.name ?? item.bounding_box.name ?? '').toLowerCase();
           const role = /eye|眼/.test(name)
             ? 'eyes'
             : /mouth|嘴|口部/.test(name)
@@ -180,6 +188,45 @@ export class SeedreamImageProvider implements ImageProvider {
           });
         }
         return validateRig({ version: 1, source: 'seedream', width, height, layers });
+      },
+    );
+  }
+  async repairBody(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig> {
+    const dataUrl = await this.decompositionImage(image);
+    const prompt =
+      '只分离并重建一个完整身体图层，命名 body。包含从颈根到腰部连续完整的上衣胸口、躯干、裙子、双腿、袜子和鞋。必须把被玩偶、手臂、头发挡住的胸口与上衣补画完整，上衣覆盖范围必须连续不透明，不要在胸口挖透明洞。保留原角色服装风格、姿势与对齐。不要把头部、头发、五官、手臂、玩偶放在身体层。只输出背景底图和 body 图层。';
+    return this.cached(
+      'repair-body-v1',
+      [await this.assets.fingerprint(image), rig],
+      {
+        model: this.config.layerModel,
+        image: dataUrl,
+        prompt,
+        layer_decomposition: true,
+        size: '2K',
+        response_format: 'url',
+        watermark: false,
+      },
+      async (value, cacheId) => {
+        const response = ResponseSchema.parse(value);
+        const item = response.data.find(
+          (d) => d.bounding_box && /body|身体|躯干/.test(d.name ?? d.bounding_box.name ?? ''),
+        );
+        if (!item?.bounding_box) throw new Error('修复结果没有可用身体层，已保留原形象');
+        const [left, top, right, bottom] = item.bounding_box.normalized.map((n) => n / 1000);
+        const asset = await this.assets.download(item.url, `${cacheId}-body`);
+        return validateRig({
+          ...rig,
+          layers: [
+            ...rig.layers.filter((l) => l.role !== 'body'),
+            {
+              role: 'body',
+              asset,
+              bounds: [left, top, right - left, bottom - top],
+              z: rig.layers.find((l) => l.role === 'body')!.z,
+            },
+          ],
+        });
       },
     );
   }

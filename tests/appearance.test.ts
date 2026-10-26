@@ -150,6 +150,7 @@ it('maps normalized 0..1000 layer bounds and requires functional facial layers',
       size: '512x512',
       z_index: i + 1,
       name,
+      description: 'Exclude eyes, mouth and head from this body layer',
       bounding_box: { normalized: [100, 200, 600, 700] },
     })),
   ];
@@ -165,6 +166,7 @@ it('maps normalized 0..1000 layer bounds and requires functional facial layers',
   const rig = await provider.split({ uri: 'file://ref', width: 1024, height: 1024 });
   rig.layers[0].bounds.forEach((n, i) => expect(n).toBeCloseTo([0.1, 0.2, 0.5, 0.5][i]));
   expect(rig.layers).toHaveLength(4);
+  expect(rig.layers.map((l) => l.role)).toEqual(['body', 'head', 'eyes', 'mouth']);
   const request = JSON.parse(http.mock.calls[0]?.[1]?.body as string);
   expect(request.layer_decomposition).toBe(true);
 });
@@ -209,4 +211,66 @@ it('recovers locks after process restart but keeps ambiguous payment receipts', 
   expect(await store.lease('visual-assets', now, 1000)).toBe(true);
   expect(await store.lease('visual:c', now, 1000)).toBe(true);
   expect(await store.get('imageRequests', 'paid')).toMatchObject({ status: 'started' });
+});
+it('repairs only the body and keeps the other paid layers without another split', async () => {
+  const { store, assets } = await setup();
+  const http = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              url: 'https://cdn.example/body',
+              size: '1000x1000',
+              z_index: 1,
+              name: 'body',
+              description: 'no eyes, head or mouth',
+              bounding_box: { normalized: [100, 200, 900, 1000] },
+            },
+          ],
+        }),
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'secret',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  const original = mockRig('original');
+  original.source = 'seedream';
+  const next = await provider.repairBody(
+    { uri: 'file://ref', width: 1024, height: 1024 },
+    original,
+  );
+  expect(next.layers.filter((l) => l.role !== 'body')).toEqual(
+    original.layers.filter((l) => l.role !== 'body'),
+  );
+  expect(next.layers.find((l) => l.role === 'body')!.asset.uri).not.toEqual(
+    original.layers.find((l) => l.role === 'body')!.asset.uri,
+  );
+  await provider.repairBody({ uri: 'file://ref', width: 1024, height: 1024 }, original);
+  expect(http).toHaveBeenCalledTimes(1);
+});
+it('does not charge another body repair for the same selected appearance', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const repairBody = vi.fn(async (_image: unknown, rig: ReturnType<typeof mockRig>) => rig);
+  const provider = {
+    identity: mock.identity,
+    candidate: mock.candidate.bind(mock),
+    split: mock.split.bind(mock),
+    repairBody,
+  };
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  await service.select('c', 0);
+  await service.repairBody('c');
+  await service.repairBody('c');
+  expect(repairBody).toHaveBeenCalledTimes(1);
+  await service.select('c', 1);
+  await service.repairBody('c');
+  expect(repairBody).toHaveBeenCalledTimes(2);
 });

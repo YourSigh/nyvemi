@@ -1,3 +1,4 @@
+import { importRigImage } from '../appearance/native';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import type { Storage } from '../storage/store';
@@ -9,6 +10,7 @@ const avatars = () => {
   return dir;
 };
 export const bundleAssets: BundleAssets = {
+  writeImage: importRigImage,
   readAvatar: (uri) => new File(uri).bytes(),
   writeAvatar: async (cid, bytes) => {
     const file = new File(avatars(), `${cid}-${id()}.bin`);

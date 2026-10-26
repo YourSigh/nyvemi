@@ -49,6 +49,7 @@ export type BundleManifest = z.infer<typeof ManifestSchema>;
 export interface BundleAssets {
   readAvatar(uri: string): Promise<Uint8Array>;
   writeAvatar(characterId: string, bytes: Uint8Array): Promise<string>;
+  writeImage?(characterId: string, bytes: Uint8Array): Promise<string>;
   removeAvatar(uri: string): Promise<void>;
 }
 const MAX_ZIP = 100 * 1024 * 1024,
@@ -253,7 +254,7 @@ export class CharacterBundleService {
       if (m.character.rig) {
         const mapped = new Map<string, string>();
         for (const [name, data] of Object.entries(images)) {
-          const uri = await this.assets.writeAvatar(cid, data);
+          const uri = await (this.assets.writeImage ?? this.assets.writeAvatar)(cid, data);
           imageUris.push(uri);
           mapped.set(name, uri);
         }

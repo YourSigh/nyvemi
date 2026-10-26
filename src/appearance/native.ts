@@ -1,3 +1,4 @@
+import { id } from '../domain/models';
 import { imageSecrets } from './secrets';
 import { pruneVisualAssets } from './cleanup';
 import type { Storage } from '../storage/store';
@@ -95,3 +96,68 @@ export const cleanupVisualAssets = (store: Storage) =>
       if (f.exists) f.delete();
     },
   });
+
+export async function importRigImage(characterId: string, bytes: Uint8Array): Promise<string> {
+  const file = new File(directory(), `import-${characterId}-${id()}.png`);
+  file.write(bytes);
+  try {
+    await inspect(file);
+    return file.uri;
+  } catch (error) {
+    if (file.exists) file.delete();
+    throw error;
+  }
+}
+
+export async function pickLayeredLook(store: Storage, characterId: string) {
+  const { getDocumentAsync } = await import('expo-document-picker');
+  const { importLook } = await import('./bundle');
+  const result = await getDocumentAsync({
+    type: '*/*',
+    copyToCacheDirectory: true,
+    multiple: false,
+  });
+  if (result.canceled) return;
+  const file = new File(result.assets[0].uri);
+  if (file.size > 100 * 1024 * 1024) throw new Error('形象文件超过 100 MB');
+  const lock = `visual:${characterId}`;
+  if (!(await store.lease(lock, Date.now(), 45 * 60_000))) throw new Error('形象正在处理中');
+  if (!(await store.lease('visual-assets', Date.now(), 45 * 60_000))) {
+    await store.release(lock);
+    throw new Error('图像资源正在处理中');
+  }
+  const written: string[] = [];
+  const remove = async (uri: string) => {
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  };
+  try {
+    const c = await store.get('characters', characterId);
+    if (!c) throw new Error('角色不存在');
+    const rig = await importLook(
+      await file.bytes(),
+      async (bytes) => {
+        const uri = await importRigImage(characterId, bytes);
+        written.push(uri);
+        return uri;
+      },
+      remove,
+    );
+    await store.put('visualDrafts', {
+      id: characterId,
+      characterId,
+      createdAt: Date.now(),
+      providerId: 'import',
+      input: { description: c.persona.appearance || '导入形象', mode: 'animate' },
+      candidates: [],
+      rig,
+    });
+    return rig;
+  } catch (error) {
+    for (const uri of written) await remove(uri).catch(() => undefined);
+    throw error;
+  } finally {
+    await store.release(lock);
+    await store.release('visual-assets');
+  }
+}
