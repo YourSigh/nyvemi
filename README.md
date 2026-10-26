@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.6.0** reorganizes chat around a persistent character stage above a bounded conversation area. The current original vector mock supports breathing, blinking, semantic chat states, mouth motion and short reactions. It is a replaceable stand-in, not a Live2D model. An isolated Android emulator using a local HTTP fixture has checked layout, keyboard handling, the streaming interaction cycle, long replies and manual state controls; no paid model or physical-device test was used in this revision. See [character implementation and acceptance](docs/CHARACTER_PRESENCE.md).
+This is an early MVP implementation. **0.7.0** adds first-run appearance creation, three candidate selection, layered cutout animation and a wake-up preview on the existing character-first chat Runtime. Mock is the default; real Seedream generation and decomposition require explicit setup. After account activation, real Tongza decomposition produced six independent transparent parts; an explicitly authorized body-only repair filled a torso gap found during composite review. Both paid responses and a portable appearance file are cached locally. Real three-candidate generation has not been paid-tested. No physical-device test was performed for this revision. See [creation workflow and validation](docs/CHARACTER_CREATION.md) and [existing character Runtime](docs/CHARACTER_PRESENCE.md).
 
 ## Local-first and BYOK
 
@@ -24,7 +24,7 @@ API keys use Expo SecureStore backed by Android Keystore. They do not belong in 
 
 ## Provider setup
 
-On first launch: Welcome → Provider → character questions → generation → Chat.
+On first launch: Welcome → Provider → character questions → persona generation → appearance creation → wake preview → Chat.
 
 - Provider: OpenAI-compatible.
 - Base URL: the API root, often `https://provider.example/v1`; do not append `/chat/completions`.
@@ -32,7 +32,7 @@ On first launch: Welcome → Provider → character questions → generation →
 - Model: the service's model identifier.
 - Use **Test connection** to make one small request; model usage is billable by your provider.
 
-The adapter exposes `chat`, `streamChat`, and schema-validated `structuredOutput<T>`. Native streaming uses `expo/fetch`. Provider requests have timeouts, bounded output, sanitized errors and usage metrics. Adapters for Gemini and image generation are future work; `ImageProvider` is reserved. OpenRouter or a compatible local service can use the existing adapter.
+The adapter exposes `chat`, `streamChat`, and schema-validated `structuredOutput<T>`. Native streaming uses `expo/fetch`. Provider requests have timeouts, bounded output, sanitized errors and usage metrics. Gemini remains future work; appearance creation has interchangeable Mock and Seedream `ImageProvider` implementations. OpenRouter or a compatible local service can use the existing adapter.
 
 ### DeepSeek
 
@@ -102,7 +102,7 @@ Upload a local avatar in character settings; otherwise an initial-based placehol
 
 A `.nyvemi` v1 file is a ZIP containing `manifest.json` and, optionally, `avatar.bin`. It includes Persona, relationship memories/state, interests, conversation, memory, open loops, future intentions, experiences, notification history, queued extraction and character settings. It excludes Provider config, API keys, diagnostics and device-specific paths.
 
-The UI supports one current companion. Import is available after confirming a reset of the existing companion; it never silently overwrites one. The underlying bundle importer validates ownership/references and writes transactionally. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 20 MB ZIP, 12 MB JSON, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
+The UI supports one current companion. Import is available after confirming a reset of the existing companion; it never silently overwrites one. The underlying bundle importer validates ownership/references and writes transactionally. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 100 MB ZIP/uncompressed total, 12 MB JSON, 12 MB per image layer, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
 
 ## Architecture
 
@@ -172,7 +172,7 @@ The generated Expo project's release build currently uses the development signin
 
 Real-device background reliability/acceptance → release signing → retrieval quality/local embeddings → richer experience appraisal → optional encrypted bundles → additional provider/image adapters.
 
-Live2D, 3D, real-time voice, QQ/WeChat, phone-control agents, browser agents, social networks, accounts, payments, servers, cloud sync, agent swarms and dynamic APK generation are outside this MVP.
+Official Cubism models, 3D, real-time voice, QQ/WeChat, phone-control agents, browser agents, social networks, accounts, payments, servers, cloud sync, agent swarms and dynamic APK generation are outside this MVP.
 
 ## Settings and restarting a companion
 
@@ -218,4 +218,8 @@ The character occupies approximately half the usable phone screen, with a restra
 
 The model response can include optional `emotion` and `intensity` alongside its messages. The renderer receives semantic states rather than business code manipulating animations. First stream data switches thinking to talking; message bubbles still wait for the complete response. Missing or invalid optional emotion metadata falls back safely. Local motion scheduling limits gestures and pauses animations offscreen, in background and in reduced-motion mode.
 
-Developer Mode includes a preview of all ten interaction states and individual actions. Overrides are session-only, expire after 60 seconds and never enter persona, memory, export or model prompts. Existing diagonal theme reveal applies to the whole character scene. The composer can launch Android's system speech recognition when available; transcription returns to an editable draft and is not sent automatically. Recognition may use the system provider's network service; Nyvemi does not record audio itself. Attachment upload and Live2D rigging are not included. Existing avatars continue to serve settings and notifications; the character stage currently uses the same original animated mock until dedicated artwork is supplied.
+Developer Mode includes a preview of all ten interaction states and individual actions. Overrides are session-only, expire after 60 seconds and never enter persona, memory, export or model prompts. Existing diagonal theme reveal applies to the whole character scene. The composer can launch Android's system speech recognition when available; transcription returns to an editable draft and is not sent automatically. Recognition may use the system provider's network service; Nyvemi does not record audio itself. Chat attachments and official Cubism rigging are not included. Existing avatars continue to serve settings and notifications. From 0.7.0, the stage can render a saved layered cutout rig; older characters retain the original mock until an appearance is created.
+
+## Character creation (0.7.0)
+
+First creation includes appearance setup before Chat. Choose text, text plus reference, or direct reference animation. Later use Settings → 角色形象 to change only the appearance. Mock art is a free pipeline demonstration, not a decomposition of the uploaded reference. Real Seedream calls are separate opt-in operations with secure keys and a persistent cache. Incomplete facial layers stop the process instead of silently saving an invalid rig. The existing state Runtime handles breathing, blinking, thinking, talking, happy and sleepy, including the wake preview. Bundle v3 transfers raster layers alongside the person. See [setup, cost, recovery and current limitations](docs/CHARACTER_CREATION.md).
