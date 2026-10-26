@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.7.0** adds first-run appearance creation, three candidate selection, layered cutout animation and a wake-up preview on the existing character-first chat Runtime. Mock is the default; real Seedream generation and decomposition require explicit setup. After account activation, real Tongza decomposition produced six independent transparent parts; an explicitly authorized body-only repair filled a torso gap found during composite review. Both paid responses and a portable appearance file are cached locally. Real three-candidate generation has not been paid-tested. No physical-device test was performed for this revision. See [creation workflow and validation](docs/CHARACTER_CREATION.md) and [existing character Runtime](docs/CHARACTER_PRESENCE.md).
+This is an early MVP implementation. **0.8.0** adds a real PSD2Live mesh/deformer/physics runtime to Android and reduces the character stage to roughly one third of the screen. A simplified Tongza reference has passed the actual Seedream → source layers → layered PSD → automatic rig → offline WASM/WebGL playback chain. The included sample has 17 meshes, 6,980 vertices, 24 deformers, 26 parameters and 7 physics groups. **Rig compilation currently runs on the local development computer, not on the phone.** Android can preview the bundled sample or import a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [pipeline, reproduction and limitations](docs/VTUBER_PIPELINE.md). No physical-device test was performed.
 
 ## Local-first and BYOK
 
@@ -102,7 +102,7 @@ Upload a local avatar in character settings; otherwise an initial-based placehol
 
 A `.nyvemi` v1 file is a ZIP containing `manifest.json` and, optionally, `avatar.bin`. It includes Persona, relationship memories/state, interests, conversation, memory, open loops, future intentions, experiences, notification history, queued extraction and character settings. It excludes Provider config, API keys, diagnostics and device-specific paths.
 
-The UI supports one current companion. Import is available after confirming a reset of the existing companion; it never silently overwrites one. The underlying bundle importer validates ownership/references and writes transactionally. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 100 MB ZIP/uncompressed total, 12 MB JSON, 12 MB per image layer, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
+The UI supports one current companion. Import is available after confirming a reset of the existing companion; it never silently overwrites one. The underlying bundle importer validates ownership/references and writes transactionally. IDs are remapped, the avatar becomes app-private, and proactive behavior is paused until you configure the new device. Current limits: 100 MB ZIP/uncompressed total, 12 MB JSON, 12 MB per image layer, 48 MB mesh model, 5 MB avatar, and 100,000 records per entity collection. Bundles are **not encrypted**; protect them like private chat backups.
 
 ## Architecture
 
@@ -223,3 +223,9 @@ Developer Mode includes a preview of all ten interaction states and individual a
 ## Character creation (0.7.0)
 
 First creation includes appearance setup before Chat. Choose text, text plus reference, or direct reference animation. Later use Settings → 角色形象 to change only the appearance. Mock art is a free pipeline demonstration, not a decomposition of the uploaded reference. Real Seedream calls are separate opt-in operations with secure keys and a persistent cache. Incomplete facial layers stop the process instead of silently saving an invalid rig. The existing state Runtime handles breathing, blinking, thinking, talking, happy and sleepy, including the wake preview. Bundle v3 transfers raster layers alongside the person. See [setup, cost, recovery and current limitations](docs/CHARACTER_CREATION.md).
+
+## Parameter-driven mesh avatars (0.8.0)
+
+Settings → 角色形象 → 试试简化桶砸皮套 previews a bundled real mesh rig, then saves it without changing the person or chat history. `.p2lrt` import works for other characters. Head X/Y/Z, independent gaze/blink, mouth opening/form, body angle, breath and separate ponytail/accessory/outfit physics run inside PSD2Live's MIT runtime. Chat states set parameter targets and never rotate or scale the whole model View. Existing cutout rigs remain compatible but are not described as VTuber models.
+
+The automatic source-to-rig toolchain is local desktop tooling (`npm run avatar:setup`, `avatar:candidates`, `avatar:split`, `avatar:rig`), with an optional reference and cached paid image responses. The phone plays its outputs offline; it does not contain the desktop compiler. Character bundles with mesh avatars use v4. See [full implementation and validation](docs/VTUBER_PIPELINE.md).

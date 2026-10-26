@@ -20,15 +20,17 @@ export function validateP2lrt(bytes: Uint8Array) {
     table = view.getUint32(20, true);
   if (count < 7 || count > 128 || table < 32 || table + count * 40 > bytes.length)
     throw new Error('网格模型目录损坏');
+  const read64 = (at: number) =>
+    view.getUint32(at + 4, true) === 0 ? view.getUint32(at, true) : Number.POSITIVE_INFINITY;
   const tags = new Set<string>(),
     ranges: [number, number][] = [];
   let total = 0;
   for (let i = 0; i < count; i++) {
     const at = table + i * 40,
       tag = String.fromCharCode(...bytes.slice(at, at + 4));
-    const offset = Number(view.getBigUint64(at + 8, true)),
-      length = Number(view.getBigUint64(at + 16, true)),
-      raw = Number(view.getBigUint64(at + 24, true));
+    const offset = read64(at + 8),
+      length = read64(at + 16),
+      raw = read64(at + 24);
     if (
       tags.has(tag) ||
       !Number.isSafeInteger(offset) ||
