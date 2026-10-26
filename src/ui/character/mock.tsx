@@ -5,10 +5,12 @@ export function MockCharacter({
   palette,
   width,
   height,
+  eyesClosed = false,
 }: {
   palette: Palette;
   width: number;
   height: number;
+  eyesClosed?: boolean;
 }) {
   return (
     <Svg width={width} height={height} viewBox="0 0 240 340">
@@ -72,10 +74,22 @@ export function MockCharacter({
           strokeWidth="2"
           strokeLinecap="round"
         />
-        <Ellipse cx="92" cy="116" rx="5" ry="8" fill={palette.ink} />
-        <Ellipse cx="149" cy="116" rx="5" ry="8" fill={palette.ink} />
-        <Circle cx="94" cy="113" r="1.8" fill={palette.paper} />
-        <Circle cx="151" cy="113" r="1.8" fill={palette.paper} />
+        {eyesClosed ? (
+          <Path
+            d="M85 118Q92 121 99 117M142 117Q149 121 156 118"
+            fill="none"
+            stroke={palette.ink}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        ) : (
+          <>
+            <Ellipse cx="92" cy="116" rx="5" ry="8" fill={palette.ink} />
+            <Ellipse cx="149" cy="116" rx="5" ry="8" fill={palette.ink} />
+            <Circle cx="94" cy="113" r="1.8" fill={palette.paper} />
+            <Circle cx="151" cy="113" r="1.8" fill={palette.paper} />
+          </>
+        )}
         <Ellipse cx="78" cy="130" rx="10" ry="5" fill={palette.tint} />
         <Ellipse cx="162" cy="130" rx="10" ry="5" fill={palette.tint} />
         <Path
