@@ -109,10 +109,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     const next = validateImageSettings(config);
     if (next.provider === 'seedream') {
       if (key.trim()) {
-        await imageSecret.set(key.trim());
+        await imageSecret.set(key.trim(), next.baseUrl);
         setKey('');
         setHasKey(true);
-      } else if (!(await imageSecret.get())) throw new Error('请先填写豆包 API Key');
+      } else if (!(await imageSecret.get(next.baseUrl)))
+        throw new Error('请填写当前服务的 API Key；更换接口地址需重新填写');
     }
     await runtime.store.put('imageSettings', next);
   };

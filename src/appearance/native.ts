@@ -1,3 +1,4 @@
+import { imageSecrets } from './secrets';
 import { pruneVisualAssets } from './cleanup';
 import type { Storage } from '../storage/store';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -15,13 +16,14 @@ const directory = () => {
   dir.create({ idempotent: true, intermediates: true });
   return dir;
 };
-export const imageSecret = {
+export const imageSecret = imageSecrets({
   get: () => SecureStore.getItemAsync('nyvemi.images.api-key'),
   set: (key: string) =>
     SecureStore.setItemAsync('nyvemi.images.api-key', key, {
       keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
     }),
-};
+  remove: () => SecureStore.deleteItemAsync('nyvemi.images.api-key'),
+});
 async function inspect(file: File): Promise<ImageAsset> {
   if (!file.exists || file.size > 12 * 1024 * 1024) throw new Error('请使用小于 12 MB 的图片');
   const bytes = await file.bytes();

@@ -91,7 +91,7 @@ async function createRuntime() {
           ? new MockImageProvider()
           : new SeedreamImageProvider(
               settings,
-              imageSecret.get,
+              () => imageSecret.get(settings.baseUrl),
               store,
               imageAssets,
               imageHash,
