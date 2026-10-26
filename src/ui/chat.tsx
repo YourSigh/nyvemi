@@ -7,7 +7,7 @@ import { CharacterStage } from './character/stage';
 import { cancelRequestedWork } from '../proactive/requested-delivery';
 import { useTheme } from '../theme/context';
 import { closeKeyboard } from './keyboard';
-import type { Palette } from '../theme/model';
+import { characterTheme, type CharacterTheme } from '../character/theme';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -61,7 +61,8 @@ function Arrival({
 }
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const { palette, apply } = useTheme();
-  const s = useMemo(() => createStyles(palette), [palette]);
+  const theme = useMemo(() => characterTheme(palette), [palette]);
+  const s = useMemo(() => createStyles(theme), [theme]);
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -206,10 +207,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               onPress={() => navigation.navigate('Settings', { characterId: cid })}
               style={s.settingsButton}
             >
-              <Text style={{ color: palette.accent, fontSize: 15 }}>设置</Text>
+              <Text style={{ color: theme.primary, fontSize: 15 }}>设置</Text>
               {needsSetup ? (
                 <View
-                  style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: palette.accent }}
+                  style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: theme.primary }}
                 />
               ) : null}
             </Pressable>
@@ -300,7 +301,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                           disabled={busy}
                           onPress={() => void send(m)}
                         >
-                          <Text style={{ color: palette.error, fontSize: 12 }}>
+                          <Text style={{ color: theme.error, fontSize: 12 }}>
                             未收到回复 · 点此重试
                           </Text>
                         </Pressable>
@@ -339,7 +340,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   <Path
                     d="M9 6a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0V6Zm-4 7v2a7 7 0 0 0 14 0v-2M12 22v4M8 26h8"
                     fill="none"
-                    stroke={palette.muted}
+                    stroke={theme.textSecondary}
                     strokeWidth={1.7}
                     strokeLinecap="round"
                   />
@@ -349,9 +350,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 accessibilityLabel="消息"
                 style={s.input}
                 placeholder="说点什么…"
-                placeholderTextColor={palette.muted}
-                selectionColor={palette.accent}
-                cursorColor={palette.accent}
+                placeholderTextColor={theme.textSecondary}
+                selectionColor={theme.primary}
+                cursorColor={theme.primary}
                 value={draft}
                 onChangeText={setDraft}
                 onFocus={() => {
@@ -375,9 +376,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     </SafeAreaView>
   );
 }
-const createStyles = (palette: Palette) =>
+const createStyles = (theme: CharacterTheme) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: palette.background },
+    root: { flex: 1, backgroundColor: theme.background },
     header: {
       paddingHorizontal: 16,
       gap: 8,
@@ -392,33 +393,33 @@ const createStyles = (palette: Palette) =>
       alignItems: 'center',
       gap: 4,
     },
-    name: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: palette.ink },
-    sub: { fontSize: 12, color: palette.muted, marginTop: 4 },
-    more: { fontSize: 26, padding: 8, color: palette.accent },
+    name: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: theme.text },
+    sub: { fontSize: 12, color: theme.textSecondary, marginTop: 4 },
+    more: { fontSize: 26, padding: 8, color: theme.primary },
     messages: { paddingHorizontal: 20, paddingVertical: 12, gap: 12, flexGrow: 1 },
     row: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
     mine: { justifyContent: 'flex-end' },
     bubble: {
       padding: 11,
-      backgroundColor: palette.tint,
+      backgroundColor: theme.primarySoft,
       borderRadius: 16,
       borderTopLeftRadius: 5,
       flexShrink: 1,
     },
     userBubble: {
-      backgroundColor: palette.paper,
+      backgroundColor: theme.surface,
       borderTopLeftRadius: 16,
       borderTopRightRadius: 5,
     },
-    message: { fontSize: 15, lineHeight: 23, color: palette.ink },
-    time: { fontSize: 10, color: palette.muted, marginHorizontal: 3 },
-    empty: { textAlign: 'center', color: palette.muted, marginTop: 16 },
+    message: { fontSize: 15, lineHeight: 23, color: theme.text },
+    time: { fontSize: 10, color: theme.textSecondary, marginHorizontal: 3 },
+    empty: { textAlign: 'center', color: theme.textSecondary, marginTop: 16 },
     footer: {
       paddingHorizontal: 12,
       paddingVertical: 10,
       gap: 8,
       borderTopWidth: 1,
-      borderColor: palette.line,
+      borderColor: theme.border,
     },
     composer: { flexDirection: 'row', gap: 9, alignItems: 'flex-end' },
     input: {
@@ -426,9 +427,9 @@ const createStyles = (palette: Palette) =>
       maxHeight: 100,
       minHeight: 44,
       padding: 10,
-      backgroundColor: palette.paper,
+      backgroundColor: theme.surface,
       borderRadius: 14,
       fontSize: 15,
-      color: palette.ink,
+      color: theme.text,
     },
   });

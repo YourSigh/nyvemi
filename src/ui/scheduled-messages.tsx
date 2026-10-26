@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { usePalette } from '../theme/context';
+import { useCharacterTheme } from './character/theme';
 import type { Intention } from '../domain/models';
 import { closeKeyboard } from './keyboard';
 export function ScheduledMessages({
@@ -13,7 +13,7 @@ export function ScheduledMessages({
   onCancel(id: string): Promise<void>;
   onError(): void;
 }) {
-  const palette = usePalette();
+  const theme = useCharacterTheme();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string>();
@@ -33,7 +33,7 @@ export function ScheduledMessages({
         }}
         style={{ paddingHorizontal: 20, paddingVertical: 6 }}
       >
-        <Text style={{ color: palette.muted, fontSize: 11 }}>
+        <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
           约好 {time(tasks[0])} 来信{tasks.length > 1 ? ` · 共 ${tasks.length} 次` : ''}　›
         </Text>
       </Pressable>
@@ -49,13 +49,13 @@ export function ScheduledMessages({
               left: 0,
               right: 0,
               bottom: 0,
-              backgroundColor: palette.ink,
+              backgroundColor: theme.text,
               opacity: 0.16,
             }}
           />
           <View
             style={{
-              backgroundColor: palette.background,
+              backgroundColor: theme.background,
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
               padding: 24,
@@ -63,14 +63,14 @@ export function ScheduledMessages({
               maxHeight: '55%',
             }}
           >
-            <Text style={{ color: palette.ink, fontSize: 18, marginBottom: 16 }}>约定来信</Text>
+            <Text style={{ color: theme.text, fontSize: 18, marginBottom: 16 }}>约定来信</Text>
             <ScrollView>
               {tasks.map((task) => (
                 <View
                   key={task.id}
                   style={{ flexDirection: 'row', alignItems: 'center', minHeight: 56, gap: 12 }}
                 >
-                  <Text style={{ flex: 1, color: palette.ink }}>
+                  <Text style={{ flex: 1, color: theme.text }}>
                     {time(task)}
                     {Date.now() >= task.earliestAt ? ' · 等待送达' : ''}
                   </Text>
@@ -86,7 +86,7 @@ export function ScheduledMessages({
                     }}
                     style={{ padding: 12 }}
                   >
-                    <Text style={{ color: palette.accent }}>{busy === task.id ? '…' : '取消'}</Text>
+                    <Text style={{ color: theme.primary }}>{busy === task.id ? '…' : '取消'}</Text>
                   </Pressable>
                 </View>
               ))}

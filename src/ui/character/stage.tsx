@@ -4,7 +4,7 @@ import type { CharacterInteractionState } from '../../character/interaction';
 import { Text } from 'react-native';
 import { useState } from 'react';
 import { Animated, View } from 'react-native';
-import { usePalette } from '../../theme/context';
+import { useCharacterTheme } from './theme';
 import { useCharacterMotion } from './motion';
 import { MockCharacter } from './mock';
 export function CharacterStage({
@@ -21,7 +21,7 @@ export function CharacterStage({
   command?: MotionCommand;
 }) {
   const motion = useCharacterMotion(state, intensity, command);
-  const palette = usePalette();
+  const theme = useCharacterTheme();
   const [width, setWidth] = useState(360);
   const artHeight = Math.max(0, Math.min(height - 12, width * 1.03, 420));
   return (
@@ -44,7 +44,7 @@ export function CharacterStage({
           height: height * 0.78,
           bottom: 5,
           borderRadius: 1000,
-          backgroundColor: palette.tint,
+          backgroundColor: theme.characterGlow,
           opacity: 0.28,
         }}
       />
@@ -55,7 +55,7 @@ export function CharacterStage({
       >
         <Animated.View style={motion.style}>
           <MockCharacter
-            palette={palette}
+            theme={theme}
             width={(artHeight * 240) / 340}
             height={artHeight}
             eyesClosed={motion.eyesClosed}
@@ -69,7 +69,7 @@ export function CharacterStage({
       {state === 'thinking' || state === 'talking' || state === 'listening' ? (
         <Text
           accessibilityLiveRegion="polite"
-          style={{ position: 'absolute', bottom: 2, fontSize: 11, color: palette.muted }}
+          style={{ position: 'absolute', bottom: 2, fontSize: 11, color: theme.textSecondary }}
         >
           {state === 'thinking' ? '想一想…' : state === 'talking' ? '正在说…' : '听你说'}
         </Text>
