@@ -46,7 +46,7 @@ it('rejects arbitrary files and unsupported mesh versions', () => {
   const bytes = new Uint8Array(32);
   bytes.set(new TextEncoder().encode('P2LRT'));
   new DataView(bytes.buffer).setUint32(8, 2, true);
-  expect(() => validateP2lrt(bytes)).not.toThrow();
+  expect(() => validateP2lrt(bytes)).toThrow('目录');
   new DataView(bytes.buffer).setUint32(8, 99, true);
   expect(() => validateP2lrt(bytes)).toThrow('版本');
 });

@@ -165,7 +165,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         {meshAvatar
           ? '参数网格角色 · 离线播放'
           : rig?.source === 'seedream'
-            ? '分层形象已就绪'
+            ? '分层素材 · 尚未绑定网格'
             : config.provider === 'mock'
               ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
               : '豆包 / Seedream'}
@@ -327,6 +327,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               ) : null}
             </Card>
           ) : null}
+          <Note>立绘素材需要在电脑端绑定网格；可直接试用内置皮套或导入 .p2lrt 模型。</Note>
           <Button
             title={mode === 'animate' ? '使用这张参考图' : '生成 3 张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}

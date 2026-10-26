@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+npm run avatar:bundle
 git status --short
 npm run lint
 npm run typecheck

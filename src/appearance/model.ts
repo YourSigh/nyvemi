@@ -54,7 +54,7 @@ export const defaultImageSettings: ImageSettings = {
   id: 'images',
   provider: 'mock',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-  imageModel: 'doubao-seedream-4-5-251128',
+  imageModel: 'doubao-seedream-5-0-pro-260628',
   layerModel: 'doubao-seedream-5-0-pro-260628',
 };
 export interface VisualDraft {

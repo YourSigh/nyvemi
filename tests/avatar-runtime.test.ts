@@ -62,6 +62,8 @@ it('loads the actual PSD2Live model with all required facial and physics paramet
     'ParamHairBack',
     'ParamSwingAccessory',
     'ParamSwingClothes',
+    'ParamSwingPonyL_1',
+    'ParamSwingPonyR_1',
   ])
     expect(ids).toContain(id);
   expect(meshes).toContain('ArtMeshBackHairL');
