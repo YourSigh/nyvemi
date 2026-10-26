@@ -1,3 +1,4 @@
+import { recoverVisualWork } from '../appearance/recovery';
 import { imageAssets, imageHash, imageSecret } from '../appearance/native';
 import { defaultImageSettings } from '../appearance/model';
 import { MockImageProvider, VisualCreationService } from '../appearance/service';
@@ -28,6 +29,7 @@ import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
 async function createRuntime() {
   const store = await openStore();
+  await recoverVisualWork(store);
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
   const diagnostics = new Diagnostics(store, async (json) => {

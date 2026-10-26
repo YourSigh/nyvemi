@@ -176,3 +176,37 @@ it('rejects insecure or credential-bearing endpoint settings', () => {
     validateImageSettings({ ...defaultImageSettings, baseUrl: 'https://key:secret@example.com' }),
   ).toThrow('HTTPS');
 });
+it('reports missing model activation without exposing server response details', async () => {
+  const { store, assets } = await setup();
+  const http = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({ error: { code: 'ModelNotOpen', message: 'server-private-details' } }),
+        { status: 404 },
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'secret',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  await expect(provider.split({ uri: 'file://ref', width: 1000, height: 1000 })).rejects.toThrow(
+    '模型尚未开通',
+  );
+});
+it('recovers locks after process restart but keeps ambiguous payment receipts', async () => {
+  const { recoverVisualWork } = await import('../src/appearance/recovery');
+  const { store } = await setup();
+  const now = Date.now();
+  await store.lease('visual-assets', now, 100000);
+  await store.lease('visual:c', now, 100000);
+  await store.put('imageRequests', { id: 'paid', createdAt: now, status: 'started' });
+  await store.lease('image-request:paid', now, 100000);
+  await recoverVisualWork(store);
+  expect(await store.lease('visual-assets', now, 1000)).toBe(true);
+  expect(await store.lease('visual:c', now, 1000)).toBe(true);
+  expect(await store.get('imageRequests', 'paid')).toMatchObject({ status: 'started' });
+});

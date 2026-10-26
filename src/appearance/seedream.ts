@@ -50,7 +50,7 @@ export class SeedreamImageProvider implements ImageProvider {
   ): Promise<T> {
     const cacheId = await this.hash(JSON.stringify([this.identity, operation, input]));
     const lock = `image-request:${cacheId}`;
-    if (!(await this.store.lease(lock, Date.now(), 12 * 60_000)))
+    if (!(await this.store.lease(lock, Date.now(), 45 * 60_000)))
       throw new Error('同一图片请求正在处理中');
     try {
       let record = await this.store.get('imageRequests', cacheId);
@@ -84,7 +84,13 @@ export class SeedreamImageProvider implements ImageProvider {
             // Only definitive client rejection can be retried automatically. Never log response bodies or keys.
             if ([400, 401, 403, 404, 422, 429].includes(response.status))
               await this.store.remove('imageRequests', cacheId);
-            throw new Error(`生图接口返回 HTTP ${response.status}`);
+            const body: unknown = await response.json().catch(() => undefined);
+            const code = z.object({ error: z.object({ code: z.string() }) }).safeParse(body);
+            const hint =
+              code.success && code.data.error.code === 'ModelNotOpen'
+                ? '：模型尚未开通，请先在火山方舟控制台开通此模型'
+                : '';
+            throw new Error(`生图接口返回 HTTP ${response.status}${hint}`);
           }
           const payload: unknown = await response.json();
           // Persist before validation/download: retries must not issue another paid POST.

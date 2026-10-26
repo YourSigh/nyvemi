@@ -66,7 +66,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
-          setEditing(!d.candidates.length && !d.selected);
+          setEditing(d.input.mode !== 'animate' ? d.candidates.length !== 3 : !d.selected);
           setRig(d.rig);
         }
         setLoaded(true);
