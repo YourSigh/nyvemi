@@ -9,9 +9,12 @@ export async function pruneVisualAssets(
   const pin = (a?: ImageAsset) => {
     if (a && !a.svg) pinned.add(a.uri);
   };
-  for (const c of await store.list('characters', undefined, 100000))
+  for (const c of await store.list('characters', undefined, 100000)) {
+    if (c.meshAvatar) pinned.add(c.meshAvatar.uri);
     for (const l of c.rig?.layers ?? []) pin(l.asset);
+  }
   for (const d of await store.list('visualDrafts', undefined, 100000)) {
+    if (d.meshAvatar) pinned.add(d.meshAvatar.uri);
     pin(d.input.reference);
     pin(d.selected);
     d.candidates.forEach(pin);

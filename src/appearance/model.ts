@@ -1,3 +1,4 @@
+import type { MeshAvatar } from '../avatar/model';
 import { z } from 'zod';
 export const ImageAssetSchema = z
   .object({
@@ -65,6 +66,7 @@ export interface VisualDraft {
   candidates: ImageAsset[];
   selected?: ImageAsset;
   rig?: CharacterRig;
+  meshAvatar?: MeshAvatar;
   saved?: boolean;
   bodyRepairApplied?: boolean;
 }

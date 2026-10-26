@@ -1,3 +1,4 @@
+import { MeshAvatarSchema } from '../avatar/model';
 import {
   RigSchema,
   type ImageSettings,
@@ -67,6 +68,7 @@ export const CharacterSchema = z
     interests: z.array(InterestSchema),
     avatar: z.string().optional(),
     rig: RigSchema.optional(),
+    meshAvatar: MeshAvatarSchema.optional(),
     appearancePending: z.boolean().optional(),
     createdAt: z.number(),
   })

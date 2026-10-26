@@ -1,3 +1,5 @@
+import { pickMeshAvatar, stageDemoMeshAvatar } from '../avatar/native';
+import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Pressable, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -40,6 +42,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<VisualDraft>();
   const [rig, setRig] = useState<CharacterRig>();
+  const [meshReady, setMeshReady] = useState(false);
+  const [meshAvatar, setMeshAvatar] = useState<MeshAvatar>();
   const [editing, setEditing] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -67,9 +71,14 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           setMode(d.input.mode);
           setReference(d.input.reference);
           setEditing(
-            d.rig ? false : d.input.mode !== 'animate' ? d.candidates.length !== 3 : !d.selected,
+            d.rig || d.meshAvatar
+              ? false
+              : d.input.mode !== 'animate'
+                ? d.candidates.length !== 3
+                : !d.selected,
           );
           setRig(d.rig);
+          setMeshAvatar(d.meshAvatar);
         }
         setLoaded(true);
       })
@@ -80,7 +89,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   }, [runtime, cid]);
   useFocusEffect(
     useCallback(() => {
-      if (!rig || editing) return;
+      if ((!rig && !meshAvatar) || editing || (meshAvatar && !meshReady)) return;
       let total = 0;
       let previous = Date.now();
       setElapsed(0);
@@ -91,7 +100,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         setElapsed(Math.min(total, awakeningDuration));
       }, 50);
       return () => clearInterval(timer);
-    }, [rig, editing]),
+    }, [rig, meshAvatar, editing, meshReady]),
   );
   const run = async (label: string, action: () => Promise<void>) => {
     if (working.current) return;
@@ -141,7 +150,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     });
   const finish = () =>
     void run('正在保存形象', async () => {
-      await runtime.visuals.save(cid);
+      if (meshAvatar) await runtime.visuals.saveMesh(cid);
+      else await runtime.visuals.save(cid);
       const c = await runtime.store.get('characters', cid);
       if (c && (await runtime.store.get('settings', cid))?.proactiveEnabled)
         await startCompanionPresence(c).catch(() => undefined);
@@ -152,11 +162,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
       <Note>
-        {rig?.source === 'seedream'
-          ? '分层形象已就绪'
-          : config.provider === 'mock'
-            ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
-            : '豆包 / Seedream'}
+        {meshAvatar
+          ? '参数网格角色 · 离线播放'
+          : rig?.source === 'seedream'
+            ? '分层形象已就绪'
+            : config.provider === 'mock'
+              ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
+              : '豆包 / Seedream'}
       </Note>
       <ErrorText text={error} />
       {!loaded ? <Busy label="读取形象…" /> : null}
@@ -207,6 +219,36 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             </>
           ) : null}
+          <Button
+            title="试试简化桶砸皮套"
+            disabled={Boolean(busy)}
+            onPress={() =>
+              void run('唤醒网格角色', async () => {
+                const model = await stageDemoMeshAvatar(runtime.store, cid);
+                setMeshAvatar(model);
+                setRig(undefined);
+                setEditing(false);
+                setPreviewState('idle');
+                setElapsed(0);
+              })
+            }
+          />
+          <Button
+            title="导入网格角色 (.p2lrt)"
+            disabled={Boolean(busy)}
+            onPress={() =>
+              void run('读取网格角色', async () => {
+                const model = await pickMeshAvatar(runtime.store, cid);
+                if (model) {
+                  setMeshAvatar(model);
+                  setElapsed(0);
+                  setRig(undefined);
+                  setEditing(false);
+                  setPreviewState('idle');
+                }
+              })
+            }
+          />
           <Button
             secondary
             title="导入分层形象文件"
@@ -322,12 +364,14 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           ) : null}
         </>
       ) : null}
-      {rig && !editing ? (
+      {(rig || meshAvatar) && !editing ? (
         <>
           <CharacterStage
             name={name}
             height={340}
             rig={rig}
+            meshAvatar={meshAvatar}
+            onMeshReady={setMeshReady}
             forceEyesClosed={!awake.complete && awake.eyesClosed}
             state={awake.complete ? previewState : awake.state}
           />
@@ -359,7 +403,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             ))}
           </View>
-          {rig.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
+          {rig?.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
             <Button
               secondary
               title={draft.bodyRepairApplied ? '身体已补全' : '重新补全身体（付费）'}
@@ -375,7 +419,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           ) : null}
           <Button
             title={route.params.onboarding ? '保存，开始聊天' : '保存新形象'}
-            disabled={!awake.complete || Boolean(busy)}
+            disabled={!awake.complete || Boolean(busy) || Boolean(meshAvatar && !meshReady)}
             onPress={finish}
           />
         </>
@@ -388,6 +432,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           onPress={() => {
             setEditing(true);
             setRig(undefined);
+            setMeshAvatar(undefined);
           }}
         />
       ) : null}

@@ -1,3 +1,4 @@
+import { MeshAvatarSchema } from '../avatar/model';
 import type { Storage } from '../storage/store';
 import {
   type CharacterRig,
@@ -139,6 +140,18 @@ export class VisualCreationService {
       await this.store.release(lock);
       await this.store.release('visual-assets');
     }
+  }
+  async saveMesh(characterId: string) {
+    await this.store.atomic(async (tx) => {
+      const draft = await tx.get('visualDrafts', characterId),
+        c = await tx.get('characters', characterId);
+      if (!c || !draft?.meshAvatar) throw new Error('网格角色尚未就绪');
+      const meshAvatar = MeshAvatarSchema.parse(draft.meshAvatar);
+      if (!(await this.assets.exists({ uri: meshAvatar.uri, width: 1, height: 1 })))
+        throw new Error('网格模型文件缺失');
+      await tx.put('characters', { ...c, meshAvatar, appearancePending: false });
+      await tx.put('visualDrafts', { ...draft, saved: true });
+    });
   }
   async save(characterId: string) {
     await this.store.atomic(async (tx) => {

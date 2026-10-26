@@ -1,3 +1,4 @@
+import { URL } from 'node:url';
 import { recoverReconnects } from '../src/proactive/reconnect';
 import { defaultPreference } from '../src/theme/model';
 import { it, expect } from 'vitest';
@@ -391,4 +392,31 @@ it('round-trips a layered rig with portable assets and excludes local image path
   const missing = { ...files };
   delete missing['rig/0.bin'];
   expect(() => readBundle(zipSync(missing))).toThrow('缺失');
+});
+it('round-trips a real embedded mesh model without local paths or provider configuration', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { createHash } = await import('node:crypto');
+  const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+  const a = await setup(),
+    b = await setup();
+  const model = new Uint8Array(
+    readFileSync(new URL('../assets/avatar/tongza.p2lrt', import.meta.url)),
+  );
+  a.assets.set('file://private/avatar.p2lrt', model);
+  await a.store.put('characters', {
+    id: 'mesh',
+    persona: demoPersona('mesh'),
+    state: { energy: 0.5, relationshipCloseness: 0.1, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: 1,
+    meshAvatar: { format: 'p2lrt', version: 1, uri: 'file://private/avatar.p2lrt' },
+  });
+  await a.store.put('settings', defaultSettings('mesh'));
+  const bytes = await a.service.exportCharacter('mesh'),
+    manifest = readBundle(bytes);
+  expect(manifest.manifest.version).toBe(4);
+  expect(manifest.manifest.character.meshAvatar?.uri).toBe('avatar.p2lrt');
+  expect(hash(manifest.model!)).toBe(hash(model));
+  const imported = await b.service.importCharacter(bytes);
+  expect(hash(b.assets.get(imported.meshAvatar!.uri)!)).toBe(hash(model));
 });

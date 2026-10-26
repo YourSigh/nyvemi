@@ -1,3 +1,4 @@
+import { validateP2lrt } from '../avatar/model';
 import { validateRig, type CharacterRig } from '../appearance/model';
 import { z } from 'zod';
 import { ThemeRecordSchema } from '../theme/model';
@@ -30,7 +31,7 @@ const JobSchema = z
 const ManifestSchema = z
   .object({
     format: z.literal('nyvemi'),
-    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
     theme: ThemeRecordSchema.optional(),
     exportedAt: z.number(),
     character: CharacterSchema.omit({ avatar: true }).extend({
@@ -50,6 +51,7 @@ export interface BundleAssets {
   readAvatar(uri: string): Promise<Uint8Array>;
   writeAvatar(characterId: string, bytes: Uint8Array): Promise<string>;
   writeImage?(characterId: string, bytes: Uint8Array): Promise<string>;
+  writeModel?(characterId: string, bytes: Uint8Array): Promise<string>;
   removeAvatar(uri: string): Promise<void>;
 }
 const MAX_ZIP = 100 * 1024 * 1024,
@@ -78,6 +80,7 @@ export function readBundle(bytes: Uint8Array): {
   manifest: BundleManifest;
   avatar?: Uint8Array;
   images: Record<string, Uint8Array>;
+  model?: Uint8Array;
 } {
   if (bytes.byteLength > MAX_ZIP) throw new Error('Bundle 不能超过 100 MB');
   let total = 0;
@@ -85,10 +88,10 @@ export function readBundle(bytes: Uint8Array): {
   const files = unzipSync(bytes, {
     filter: (file) => {
       if (
-        (!['manifest.json', 'avatar.bin'].includes(file.name) &&
+        (!['manifest.json', 'avatar.bin', 'avatar.p2lrt'].includes(file.name) &&
           !/^rig\/\d{1,2}\.bin$/.test(file.name)) ||
         names.has(file.name) ||
-        names.size >= 34
+        names.size >= 35
       )
         throw new Error('Bundle 包含不支持或重复的文件');
       names.add(file.name);
@@ -99,7 +102,9 @@ export function readBundle(bytes: Uint8Array): {
             ? MAX_JSON
             : file.name === 'avatar.bin'
               ? MAX_AVATAR
-              : MAX_IMAGE) ||
+              : file.name === 'avatar.p2lrt'
+                ? 48 * 1024 * 1024
+                : MAX_IMAGE) ||
         total > MAX_ZIP
       )
         throw new Error('Bundle 解压尺寸过大');
@@ -157,7 +162,7 @@ export function readBundle(bytes: Uint8Array): {
   );
   const used = new Set<string>();
   if (manifest.character.rig) {
-    if (manifest.version !== 3) throw new Error('分层形象需要 Bundle v3');
+    if (manifest.version !== 3 && manifest.version !== 4) throw new Error('分层形象需要 Bundle v3');
     const rig = validateRig(manifest.character.rig);
     for (const layer of rig.layers) {
       if (layer.asset.svg) {
@@ -172,7 +177,15 @@ export function readBundle(bytes: Uint8Array): {
   }
   if (Object.keys(images).some((name) => !used.has(name)))
     throw new Error('Bundle 包含未引用的形象文件');
-  return { manifest, avatar, images };
+  const model = files['avatar.p2lrt'];
+  if (Boolean(model) !== Boolean(manifest.character.meshAvatar))
+    throw new Error('网格模型资产与清单不一致');
+  if (model) {
+    if (manifest.version !== 4 || manifest.character.meshAvatar?.uri !== 'avatar.p2lrt')
+      throw new Error('网格模型引用不正确');
+    validateP2lrt(model);
+  }
+  return { manifest, avatar, images, model };
 }
 export class CharacterBundleService {
   constructor(
@@ -187,10 +200,13 @@ export class CharacterBundleService {
       const portable = {
         ...character,
         avatar: character.avatar ? ('avatar.bin' as const) : undefined,
+        meshAvatar: character.meshAvatar
+          ? { ...character.meshAvatar, uri: 'avatar.p2lrt' }
+          : undefined,
       };
       return {
         format: 'nyvemi' as const,
-        version: character.rig ? (3 as const) : (2 as const),
+        version: character.meshAvatar ? (4 as const) : character.rig ? (3 as const) : (2 as const),
         theme: await tx.get('themes', 'app'),
         exportedAt: Date.now(),
         character: portable,
@@ -228,6 +244,11 @@ export class CharacterBundleService {
     if (content.length > MAX_JSON) throw new Error('角色数据超过首版 Bundle 的 12 MB 上限');
     const files: Record<string, Uint8Array> = { 'manifest.json': content, ...rigFiles };
     const character = await this.store.get('characters', characterId);
+    if (character?.meshAvatar) {
+      const data = await this.assets.readAvatar(character.meshAvatar.uri);
+      validateP2lrt(data);
+      files['avatar.p2lrt'] = data;
+    }
     if (character?.avatar) {
       const avatar = await this.assets.readAvatar(character.avatar);
       if (avatar.length > MAX_AVATAR || !isAvatar(avatar)) throw new Error('头像过大或格式不支持');
@@ -238,7 +259,7 @@ export class CharacterBundleService {
     return bytes;
   }
   async importCharacter(bytes: Uint8Array): Promise<Character> {
-    const { manifest: m, avatar, images } = readBundle(bytes);
+    const { manifest: m, avatar, images, model } = readBundle(bytes);
     const cid = id();
     const maps = new Map<string, string>();
     const remap = (kind: string, old: string): string => {
@@ -249,6 +270,7 @@ export class CharacterBundleService {
     let avatarUri: string | undefined;
     const imageUris: string[] = [];
     let rig: CharacterRig | undefined;
+    let meshAvatar: Character['meshAvatar'];
     try {
       if (avatar) avatarUri = await this.assets.writeAvatar(cid, avatar);
       if (m.character.rig) {
@@ -269,6 +291,11 @@ export class CharacterBundleService {
           })),
         });
       }
+      if (model) {
+        const uri = await (this.assets.writeModel ?? this.assets.writeAvatar)(cid, model);
+        imageUris.push(uri);
+        meshAvatar = { format: 'p2lrt', version: 1, uri };
+      }
       const received = new Set(
         m.notifications
           .filter((n) => n.status === 'delivered' || n.openedAt !== undefined)
@@ -280,6 +307,7 @@ export class CharacterBundleService {
         persona: { ...m.character.persona, id: cid },
         avatar: avatarUri,
         rig,
+        meshAvatar,
         appearancePending: false,
       };
       await this.store.atomic(async (tx) => {

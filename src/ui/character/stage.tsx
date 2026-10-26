@@ -1,3 +1,5 @@
+import type { MeshAvatar } from '../../avatar/model';
+import { MeshAvatarStage } from './mesh';
 import type { MotionCommand } from '../../character/motion-scheduler';
 import type { CharacterRig } from '../../appearance/model';
 import { RigCharacter } from './rig';
@@ -7,7 +9,7 @@ import { useState } from 'react';
 import { useCharacterTheme } from './theme';
 import { useCharacterMotion } from './motion';
 import { MockCharacter } from './mock';
-export function CharacterStage({
+function LegacyCharacterStage({
   name,
   height,
   state = 'idle',
@@ -95,5 +97,25 @@ export function CharacterStage({
         </Text>
       ) : null}
     </View>
+  );
+}
+
+export function CharacterStage(
+  props: Parameters<typeof LegacyCharacterStage>[0] & {
+    meshAvatar?: MeshAvatar;
+    onMeshReady?: (ready: boolean) => void;
+  },
+) {
+  return props.meshAvatar ? (
+    <MeshAvatarStage
+      model={props.meshAvatar}
+      onReady={props.onMeshReady}
+      height={props.height}
+      state={props.state ?? 'idle'}
+      intensity={props.intensity ?? 0.5}
+      eyesClosed={props.forceEyesClosed}
+    />
+  ) : (
+    <LegacyCharacterStage {...props} />
   );
 }

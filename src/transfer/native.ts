@@ -1,3 +1,4 @@
+import { writeMeshAvatar } from '../avatar/native';
 import { importRigImage } from '../appearance/native';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,6 +12,7 @@ const avatars = () => {
 };
 export const bundleAssets: BundleAssets = {
   writeImage: importRigImage,
+  writeModel: writeMeshAvatar,
   readAvatar: (uri) => new File(uri).bytes(),
   writeAvatar: async (cid, bytes) => {
     const file = new File(avatars(), `${cid}-${id()}.bin`);

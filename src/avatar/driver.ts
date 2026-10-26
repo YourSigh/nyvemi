@@ -1,0 +1,112 @@
+import type { CharacterInteractionState } from '../character/interaction';
+export interface AvatarParameter {
+  id: string;
+  min: number;
+  max: number;
+  default: number;
+}
+export interface MeshPlayer {
+  parameterRanges(): AvatarParameter[];
+  setParameter(id: string, value: number): void;
+  behaviors(flags: number): void;
+  update(dt: number): void;
+  draw(): void;
+}
+export interface AvatarInput {
+  state: CharacterInteractionState;
+  intensity: number;
+  active: boolean;
+  reducedMotion: boolean;
+  eyesClosed?: boolean;
+}
+export const defaultAvatarInput: AvatarInput = {
+  state: 'idle',
+  intensity: 0.5,
+  active: true,
+  reducedMotion: false,
+};
+export function pose(
+  state: CharacterInteractionState,
+  time: number,
+  intensity = 0.5,
+  reducedMotion = false,
+) {
+  const sway = reducedMotion ? 0 : Math.sin(time * 0.57),
+    drift = reducedMotion ? 0 : Math.sin(time * 0.33);
+  const happy = state === 'happy' || state === 'excited',
+    sleepy = state === 'sleepy',
+    shy = state === 'shy';
+  return {
+    headX: state === 'thinking' ? -7 + drift * 2 : drift * 4,
+    headY: state === 'thinking' ? 3 : shy ? -6 : sleepy ? -5 : sway * 1.8,
+    headZ: state === 'thinking' ? -5 : shy ? 4 : sleepy ? 3 : sway * 1.5,
+    eyeX: state === 'thinking' ? -0.35 : shy ? -0.15 : drift * 0.12,
+    eyeY: state === 'thinking' ? 0.25 : shy ? -0.35 : sleepy ? -0.2 : sway * 0.07,
+    eyeOpen: sleepy ? 0.18 : happy ? 0.78 : 1,
+    mouth: state === 'talking' ? 0.12 + 0.62 * Math.pow(Math.sin(time * 9.3), 2) : happy ? 0.22 : 0,
+    smile: happy ? 0.85 : shy ? 0.35 : state === 'angry' ? -0.55 : 0.05,
+    body: reducedMotion ? 0 : sway * (happy ? 2 : 1) * (0.6 + intensity * 0.4),
+  };
+}
+export function createDriver(player: MeshPlayer, random: () => number = Math.random) {
+  const parameters = player.parameterRanges();
+  const byId = new Map(parameters.map((p) => [p.id, p]));
+  let input: AvatarInput = { ...defaultAvatarInput },
+    elapsed = 0,
+    blinkAt = 2 + random() * 3,
+    blinkRemaining = 0;
+  const current = new Map<string, number>();
+  let lastActive = false;
+  // Hair/clothing parameters deliberately stay untouched: p2lrt evaluates their pendulum physics.
+  const set = (ids: string[], value: number, alpha: number) => {
+    for (const id of ids) {
+      const range = byId.get(id);
+      if (!range) continue;
+      const target = Math.max(range.min, Math.min(range.max, value));
+      const prev = current.get(id) ?? range.default;
+      const next = prev + (target - prev) * alpha;
+      current.set(id, next);
+      player.setParameter(id, next);
+    }
+  };
+  player.behaviors(2); // Runtime breathing only; host owns blink and state-specific gaze/mouth.
+  return {
+    setInput(next: Partial<AvatarInput>) {
+      input = { ...input, ...next };
+      input.intensity = Math.max(0, Math.min(1, input.intensity));
+    },
+    step(dt: number) {
+      if (!input.active) {
+        lastActive = false;
+        return;
+      }
+      const step = Math.max(0, Math.min(0.05, dt));
+      elapsed += step;
+      blinkRemaining = Math.max(0, blinkRemaining - step);
+      if (elapsed >= blinkAt) {
+        blinkRemaining = 0.14;
+        blinkAt = elapsed + 2 + random() * 4;
+      }
+      const p = pose(input.state, elapsed, input.intensity, input.reducedMotion),
+        alpha = lastActive ? 1 - Math.exp(-step * 7) : 1;
+      lastActive = true;
+      const shut = input.eyesClosed || blinkRemaining > 0;
+      set(['ParamAngleX'], p.headX, alpha);
+      set(['ParamAngleY'], p.headY, alpha);
+      set(['ParamAngleZ'], p.headZ, alpha);
+      set(['ParamEyeBallX'], p.eyeX, alpha);
+      set(['ParamEyeBallY'], p.eyeY, alpha);
+      set(['ParamEyeLOpen', 'ParamEyeROpen'], shut ? 0 : p.eyeOpen, shut ? 1 : alpha);
+      set(['ParamMouthOpenY', 'ParamMouthOpen'], p.mouth, Math.min(1, step * 18));
+      set(['ParamMouthForm', 'ParamMouthSmile'], p.smile, alpha);
+      set(['ParamBodyAngleZ', 'ParamBodyAngle'], p.body, alpha);
+      player.update(step);
+      player.draw();
+    },
+    reset() {
+      current.clear();
+      lastActive = false;
+    },
+    parameters,
+  };
+}

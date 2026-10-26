@@ -19,11 +19,15 @@
       "predictiveBackGestureEnabled": false,
       "package": "app.nyvemi.android",
       "allowBackup": false,
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "versionCode": 11
     },
     "scheme": "nyvemi",
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "plugins": [
       "expo-dev-client",
       "expo-sqlite",
@@ -38,7 +42,8 @@
           "cameraPermission": false
         }
       ],
-      "./plugins/withNyvemiAndroid"
+      "./plugins/withNyvemiAndroid",
+      "expo-asset"
     ],
     "primaryColor": "#B94776"
   }
