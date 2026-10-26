@@ -25,6 +25,8 @@ export function useCharacterMotion(
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
   const [eyesClosed, setEyesClosed] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
+  const [manualTalking, setManualTalking] = useState(false);
+  const talkFinish = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const breath = useRef(new Animated.Value(0)).current;
   const bounce = useRef(new Animated.Value(0)).current;
   const shake = useRef(new Animated.Value(0)).current;
@@ -47,6 +49,14 @@ export function useCharacterMotion(
         clearTimeout(reopen.current);
         setEyesClosed(true);
         reopen.current = setTimeout(() => setEyesClosed(false), 120);
+        return;
+      }
+      clearTimeout(talkFinish.current);
+      setManualTalking(false);
+      if (name === 'talking') {
+        setManualTalking(true);
+        talkFinish.current = setTimeout(() => setManualTalking(false), 1000);
+        scheduler.occupy(Date.now(), 1000);
         return;
       }
       action.current?.stop();
@@ -103,6 +113,7 @@ export function useCharacterMotion(
     if (!active) {
       setEyesClosed(false);
       setMouthOpen(false);
+      setManualTalking(false);
       return;
     }
     const breathing = Animated.loop(
@@ -128,6 +139,7 @@ export function useCharacterMotion(
       action.current?.stop();
       clearTimeout(timer);
       clearTimeout(reopen.current);
+      clearTimeout(talkFinish.current);
       for (const value of [breath, bounce, shake, gesture, arm]) {
         value.stopAnimation();
         value.setValue(0);
@@ -163,13 +175,13 @@ export function useCharacterMotion(
     return () => animation.stop();
   }, [state, active, gesture, intensity, play, pose]);
   useEffect(() => {
-    if (state !== 'talking' || !active) {
+    if ((state !== 'talking' && !manualTalking) || !active) {
       setMouthOpen(false);
       return;
     }
     const timer = setInterval(() => setMouthOpen((v) => !v), 180);
     return () => clearInterval(timer);
-  }, [state, active]);
+  }, [state, active, manualTalking]);
   useEffect(() => {
     if (command) play(command.name, command.intensity);
   }, [command, play]);

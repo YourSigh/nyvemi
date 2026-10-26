@@ -1,3 +1,4 @@
+import { CharacterDebugControls } from './character/debug';
 import { conversationContext } from '../conversation/context';
 import { deliveryReport } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
@@ -116,6 +117,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
   return (
     <Page>
       <Heading>她为什么这么做</Heading>
+      <CharacterDebugControls characterId={cid} />
       <Note>
         仅本机调试。Prompt
         和检索日志可能包含私人对话；不包含密钥。普通用户页面不会显示这些数值。最多保留最近 200

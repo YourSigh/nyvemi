@@ -1,3 +1,4 @@
+import { CharacterDebugController } from '../character/debug';
 import { reconcileIntentionWork } from '../proactive/requested-delivery';
 import { fetch as nativeFetch } from 'expo/fetch';
 import { openStore, openDatabase, secretStore } from '../storage/native';
@@ -76,6 +77,7 @@ async function createRuntime() {
   const characters = new CharacterService(store, provider);
   return {
     store,
+    characterDebug: new CharacterDebugController(),
     syncIntentionWork,
     diagnostics,
     activity,

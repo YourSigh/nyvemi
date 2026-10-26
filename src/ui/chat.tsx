@@ -1,3 +1,4 @@
+import { useCharacterDebug } from './character/debug';
 import { appendDictation, timeMarkers } from '../chat/presentation';
 import { ScheduledMessages } from './scheduled-messages';
 import Svg, { Path } from 'react-native-svg';
@@ -66,6 +67,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const runtime = useRuntime();
   const cid = route.params.characterId;
   const [needsSetup, setNeedsSetup] = useState(false);
+  const [developerMode, setDeveloperMode] = useState(false);
+  const debug = useCharacterDebug(runtime.characterDebug, cid, developerMode);
   const [viewport, setViewport] = useState(760);
   const [composerHeight, setComposerHeight] = useState(72);
   const layout = characterChatLayout(viewport, composerHeight);
@@ -110,6 +113,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
     const settings = await runtime.store.get('settings', cid);
+    setDeveloperMode(settings?.developerMode ?? false);
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
     setRequested(
       (await runtime.store.list('intentions', cid, 10000))
@@ -222,7 +226,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           <CharacterStage
             name={character?.persona.name ?? '她'}
             height={layout.character}
-            state={interaction.state}
+            state={debug?.state ?? interaction.state}
+            command={debug?.command}
             intensity={interaction.intensity}
           />
           <View testID="conversation-area" style={{ flex: 1, minHeight: 0 }}>
