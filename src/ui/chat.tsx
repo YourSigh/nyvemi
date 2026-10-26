@@ -90,6 +90,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const list = useRef<FlatList<Message>>(null);
   const abort = useRef<AbortController | null>(null);
   const sending = useRef(false);
+  const incoming = interaction.incoming;
   const refresh = useCallback(async () => {
     const page = await runtime.chat.historyPage(cid, historyLimit);
     for (const message of page.messages) {
@@ -100,7 +101,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         Date.now() - message.createdAt < 10000
       ) {
         arrivals.current.add(message.id);
-        if (message.origin === 'proactive') interaction.incoming(message);
+        if (message.origin === 'proactive') incoming(message);
       }
       seen.current.add(message.id);
     }
@@ -122,7 +123,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     );
 
     if (!c) setError('这个角色已被清空，请重新创建。');
-  }, [runtime, cid, historyLimit, interaction.incoming]);
+  }, [runtime, cid, historyLimit, incoming]);
   useFocusEffect(
     useCallback(() => {
       void (async () => {

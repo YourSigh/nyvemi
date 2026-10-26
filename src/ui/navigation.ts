@@ -7,6 +7,7 @@ export type Routes = {
   Theme: undefined;
   Create: undefined;
   Generate: { answers: CharacterAnswers; demo: boolean; interview?: boolean };
+  Appearance: { characterId: string; onboarding?: boolean };
   Chat: { characterId: string; notificationId?: string };
   Settings: {
     characterId: string;

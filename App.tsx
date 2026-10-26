@@ -1,3 +1,4 @@
+import { AppearanceScreen } from './src/ui/appearance';
 import { reconcileIntentionWork } from './src/proactive/requested-delivery';
 import { ThemeProvider, useTheme } from './src/theme/context';
 import { ThemeScreen } from './src/ui/theme';
@@ -45,6 +46,7 @@ function Application() {
   const [resumeProvider, setResumeProvider] = useState(false);
   const [skipTheme, setSkipTheme] = useState(false);
   const [runtime, setRuntime] = useState<Runtime>();
+  const [resumeAppearance, setResumeAppearance] = useState(false);
   const [initial, setInitial] = useState<string>();
   const [resumeInterview, setResumeInterview] = useState(false);
   const [ready, setReady] = useState(false);
@@ -66,6 +68,7 @@ function Application() {
         if (live) {
           setRuntime(r);
           setInitial(chars[0]?.id);
+          setResumeAppearance(Boolean(chars[0]?.appearancePending));
           setResumeInterview(Boolean((draft && !draft.savedCharacterId) || savedTheme));
           setReady(true);
         }
@@ -151,7 +154,9 @@ function Application() {
                   <Stack.Navigator
                     initialRouteName={
                       initial
-                        ? 'Chat'
+                        ? resumeAppearance
+                          ? 'Appearance'
+                          : 'Chat'
                         : resumeProvider
                           ? 'Provider'
                           : resumeTheme
@@ -191,6 +196,14 @@ function Application() {
                       name="Create"
                       component={InterviewScreen}
                       options={{ title: '创建角色' }}
+                    />
+                    <Stack.Screen
+                      name="Appearance"
+                      component={AppearanceScreen}
+                      initialParams={
+                        initial ? { characterId: initial, onboarding: resumeAppearance } : undefined
+                      }
+                      options={{ title: '角色形象' }}
                     />
                     <Stack.Screen
                       name="Generate"

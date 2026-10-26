@@ -184,6 +184,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           </Pressable>
           <Card>
             <Row
+              title="角色形象"
+              onPress={() => navigation.navigate('Appearance', { characterId: cid })}
+            />
+            <Row
               title="她记住的事"
               onPress={() => navigation.navigate('Memory', { characterId: cid })}
             />

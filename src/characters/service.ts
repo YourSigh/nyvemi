@@ -78,6 +78,7 @@ export class CharacterService {
         updatedAt: now,
       })),
       createdAt: now,
+      appearancePending: true,
     };
     await this.store.atomic(async (tx) => {
       await tx.put('characters', character);
