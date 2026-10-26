@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.5.0** adds a durable silence trigger after meaningful chat, unanswered-message limits, shared live schedule context, and contextual memory recall. It builds on the compact settings and native diagonal theme reveal in 0.4.1. Local tests and Android builds validate logic and compilation; device delivery, animation appearance and subjective model behavior for this revision await user acceptance. Earlier results in the [acceptance matrix](docs/ACCEPTANCE.md) apply only to those earlier revisions.
+This is an early MVP implementation. **0.6.0** reorganizes chat around a persistent character stage above a bounded conversation area. The current original vector mock supports breathing, blinking, semantic chat states, mouth motion and short reactions. It is a replaceable stand-in, not a Live2D model. An isolated Android emulator using a local HTTP fixture has checked layout, keyboard handling, the streaming interaction cycle, long replies and manual state controls; no paid model or physical-device test was used in this revision. See [character implementation and acceptance](docs/CHARACTER_PRESENCE.md).
 
 ## Local-first and BYOK
 
@@ -211,3 +211,11 @@ Ordinary chat can now leave a local evaluation even when the model does not expl
 Two unanswered autonomous bursts pause further autonomous messages until the user speaks again. Explicit user-requested reminders remain separate. Reconnects share the ordinary daily budget and respect quiet hours, time between messages and opt-out; failures stop after three attempts. Android scheduling remains best-effort. Imported evaluations do not replay.
 
 The shared conversation context reads real pending tasks and unanswered counts on every request. Memory recall can connect a short follow-up such as “后来呢” to the recent user topic, while a new topic gets its own query. Reference projects and adaptation details are recorded in [module references](docs/OPEN_SOURCE_REFERENCES.md). These are native TypeScript adaptations, without a QQ or server dependency. Character bundles containing the new intention type require 0.5.0 or later to import.
+
+## Character presence (0.6.0)
+
+The character occupies approximately half the usable phone screen, with a restrained centered-name header, a separate scrolling conversation viewport and a bottom composer. Keyboard avoidance resizes both regions while keeping the character visible. Long replies scroll inside the conversation area and never expand it over the character.
+
+The model response can include optional `emotion` and `intensity` alongside its messages. The renderer receives semantic states rather than business code manipulating animations. First stream data switches thinking to talking; message bubbles still wait for the complete response. Missing or invalid optional emotion metadata falls back safely. Local motion scheduling limits gestures and pauses animations offscreen, in background and in reduced-motion mode.
+
+Developer Mode includes a preview of all ten interaction states and individual actions. Overrides are session-only, expire after 60 seconds and never enter persona, memory, export or model prompts. Existing diagonal theme reveal applies to the whole character scene. The composer can launch Android's system speech recognition when available; transcription returns to an editable draft and is not sent automatically. Recognition may use the system provider's network service; Nyvemi does not record audio itself. Attachment upload and Live2D rigging are not included. Existing avatars continue to serve settings and notifications; the character stage currently uses the same original animated mock until dedicated artwork is supplied.

@@ -334,7 +334,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                     .finally(() => setDictating(false));
                 }}
                 style={{
-                  width: 36,
+                  width: 44,
                   height: 44,
                   alignItems: 'center',
                   justifyContent: 'center',
