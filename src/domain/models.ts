@@ -1,3 +1,9 @@
+import {
+  RigSchema,
+  type ImageSettings,
+  type ImageRequestCache,
+  type VisualDraft,
+} from '../appearance/model';
 import { expressionFields } from '../character/interaction';
 import { z } from 'zod';
 import type { ThemeRecord, ThemeOpening } from '../theme/model';
@@ -60,6 +66,8 @@ export const CharacterSchema = z
     state: StateSchema,
     interests: z.array(InterestSchema),
     avatar: z.string().optional(),
+    rig: RigSchema.optional(),
+    appearancePending: z.boolean().optional(),
     createdAt: z.number(),
   })
   .strict();
@@ -204,6 +212,9 @@ export interface ExtractionJob {
   createdAt: number;
 }
 export interface Entities {
+  imageSettings: ImageSettings;
+  imageRequests: ImageRequestCache;
+  visualDrafts: VisualDraft;
   themes: ThemeRecord;
   themeOpenings: ThemeOpening;
   characters: Character;

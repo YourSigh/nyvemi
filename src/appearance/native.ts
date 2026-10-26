@@ -1,0 +1,80 @@
+import { Directory, File, Paths } from 'expo-file-system';
+import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
+import * as SecureStore from 'expo-secure-store';
+import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'react-native';
+import { fetch as nativeFetch } from 'expo/fetch';
+import { isAvatar } from '../transfer/bundle';
+import type { ImageAsset } from './model';
+import type { ImageAssets } from './service';
+export const imageHash = (text: string) => digestStringAsync(CryptoDigestAlgorithm.SHA256, text);
+const directory = () => {
+  const dir = new Directory(Paths.document, 'character-images');
+  dir.create({ idempotent: true, intermediates: true });
+  return dir;
+};
+export const imageSecret = {
+  get: () => SecureStore.getItemAsync('nyvemi.images.api-key'),
+  set: (key: string) =>
+    SecureStore.setItemAsync('nyvemi.images.api-key', key, {
+      keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+    }),
+};
+async function inspect(file: File): Promise<ImageAsset> {
+  if (!file.exists || file.size > 12 * 1024 * 1024) throw new Error('请使用小于 12 MB 的图片');
+  const bytes = await file.bytes();
+  if (!isAvatar(bytes)) throw new Error('仅支持 PNG、JPEG、WebP 图片');
+  const { width, height } = await Image.getSize(file.uri);
+  if (width > 8192 || height > 8192 || width * height > 20_000_000) throw new Error('图片尺寸过大');
+  return { uri: file.uri, width, height };
+}
+export const imageAssets: ImageAssets = {
+  exists: async (asset) => Boolean(asset.svg) || new File(asset.uri).exists,
+  fingerprint: async (asset) => imageHash(asset.svg ?? (await new File(asset.uri).base64())),
+  dataUrl: async (asset) => {
+    if (asset.svg) throw new Error('演示图片不能发送到真实生图接口');
+    const file = new File(asset.uri);
+    await inspect(file);
+    const b = await file.bytes();
+    const mime = b[0] === 137 ? 'image/png' : b[0] === 255 ? 'image/jpeg' : 'image/webp';
+    return `data:${mime};base64,${await file.base64()}`;
+  },
+  download: async (url, key) => {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || parsed.username || parsed.password)
+      throw new Error('图片下载地址不安全');
+    const target = new File(directory(), `${key}.png`);
+    if (target.exists) {
+      try {
+        return await inspect(target);
+      } catch {
+        target.delete();
+      }
+    }
+    // No Authorization header is ever forwarded to image/CDN hosts.
+    const response = await nativeFetch(url, { signal: AbortSignal.timeout(60_000) });
+    if (!response.ok) throw new Error(`下载图片失败（${response.status}），重试不会重新生图`);
+    if (Number(response.headers.get('content-length')) > 12 * 1024 * 1024)
+      throw new Error('输出图片过大');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > 12 * 1024 * 1024 || !isAvatar(bytes))
+      throw new Error('输出图片格式或尺寸不支持');
+    target.write(bytes);
+    try {
+      return await inspect(target);
+    } catch (e) {
+      target.delete();
+      throw e;
+    }
+  },
+};
+export async function pickReference(): Promise<ImageAsset | undefined> {
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+  if (result.canceled) return;
+  const original = new File(result.assets[0].uri);
+  await inspect(original);
+  const key = await imageHash(await original.base64());
+  const target = new File(directory(), `reference-${key}.png`);
+  if (!target.exists) original.copy(target);
+  return inspect(target);
+}
