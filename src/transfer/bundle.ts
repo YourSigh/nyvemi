@@ -1,3 +1,4 @@
+import { validateRig, type CharacterRig } from '../appearance/model';
 import { z } from 'zod';
 import { ThemeRecordSchema } from '../theme/model';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
@@ -29,7 +30,7 @@ const JobSchema = z
 const ManifestSchema = z
   .object({
     format: z.literal('nyvemi'),
-    version: z.union([z.literal(1), z.literal(2)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     theme: ThemeRecordSchema.optional(),
     exportedAt: z.number(),
     character: CharacterSchema.omit({ avatar: true }).extend({
@@ -50,9 +51,10 @@ export interface BundleAssets {
   writeAvatar(characterId: string, bytes: Uint8Array): Promise<string>;
   removeAvatar(uri: string): Promise<void>;
 }
-const MAX_ZIP = 20 * 1024 * 1024,
+const MAX_ZIP = 100 * 1024 * 1024,
   MAX_JSON = 12 * 1024 * 1024,
-  MAX_AVATAR = 5 * 1024 * 1024;
+  MAX_AVATAR = 5 * 1024 * 1024,
+  MAX_IMAGE = 12 * 1024 * 1024;
 function clean(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(clean);
   if (value && typeof value === 'object') {
@@ -71,19 +73,33 @@ export function isAvatar(bytes: Uint8Array): boolean {
     (strFromU8(bytes.slice(0, 4)) === 'RIFF' && strFromU8(bytes.slice(8, 12)) === 'WEBP')
   );
 }
-export function readBundle(bytes: Uint8Array): { manifest: BundleManifest; avatar?: Uint8Array } {
-  if (bytes.byteLength > MAX_ZIP) throw new Error('Bundle 不能超过 20 MB');
+export function readBundle(bytes: Uint8Array): {
+  manifest: BundleManifest;
+  avatar?: Uint8Array;
+  images: Record<string, Uint8Array>;
+} {
+  if (bytes.byteLength > MAX_ZIP) throw new Error('Bundle 不能超过 100 MB');
   let total = 0;
   const names = new Set<string>();
   const files = unzipSync(bytes, {
     filter: (file) => {
-      if (!['manifest.json', 'avatar.bin'].includes(file.name) || names.has(file.name))
+      if (
+        (!['manifest.json', 'avatar.bin'].includes(file.name) &&
+          !/^rig\/\d{1,2}\.bin$/.test(file.name)) ||
+        names.has(file.name) ||
+        names.size >= 34
+      )
         throw new Error('Bundle 包含不支持或重复的文件');
       names.add(file.name);
       total += file.originalSize;
       if (
-        file.originalSize > (file.name === 'manifest.json' ? MAX_JSON : MAX_AVATAR) ||
-        total > MAX_JSON + MAX_AVATAR
+        file.originalSize >
+          (file.name === 'manifest.json'
+            ? MAX_JSON
+            : file.name === 'avatar.bin'
+              ? MAX_AVATAR
+              : MAX_IMAGE) ||
+        total > MAX_ZIP
       )
         throw new Error('Bundle 解压尺寸过大');
       return true;
@@ -135,7 +151,27 @@ export function readBundle(bytes: Uint8Array): { manifest: BundleManifest; avata
       job.assistantMessageIds.some((mid) => !ids.get('messages')?.has(mid))
     )
       throw new Error('抽取任务引用的消息不存在');
-  return { manifest, avatar };
+  const images = Object.fromEntries(
+    Object.entries(files).filter(([name]) => name.startsWith('rig/')),
+  );
+  const used = new Set<string>();
+  if (manifest.character.rig) {
+    if (manifest.version !== 3) throw new Error('分层形象需要 Bundle v3');
+    const rig = validateRig(manifest.character.rig);
+    for (const layer of rig.layers) {
+      if (layer.asset.svg) {
+        if (rig.source !== 'mock' || !layer.asset.uri.startsWith('mock:'))
+          throw new Error('演示图层格式不正确');
+      } else {
+        const bytes = images[layer.asset.uri];
+        if (!bytes || !isAvatar(bytes)) throw new Error('形象资产缺失或格式不支持');
+        used.add(layer.asset.uri);
+      }
+    }
+  }
+  if (Object.keys(images).some((name) => !used.has(name)))
+    throw new Error('Bundle 包含未引用的形象文件');
+  return { manifest, avatar, images };
 }
 export class CharacterBundleService {
   constructor(
@@ -153,7 +189,7 @@ export class CharacterBundleService {
       };
       return {
         format: 'nyvemi' as const,
-        version: 2 as const,
+        version: character.rig ? (3 as const) : (2 as const),
         theme: await tx.get('themes', 'app'),
         exportedAt: Date.now(),
         character: portable,
@@ -166,11 +202,30 @@ export class CharacterBundleService {
         extractions: await tx.list('extractions', characterId, 100001),
       };
     });
+    const rigFiles: Record<string, Uint8Array> = {};
+    if (manifest.character.rig) {
+      const rig = validateRig(manifest.character.rig);
+      const mapped = new Map<string, string>();
+      for (const layer of rig.layers) {
+        if (layer.asset.svg) continue;
+        const old = layer.asset.uri;
+        if (!mapped.has(old)) {
+          const data = await this.assets.readAvatar(old);
+          if (data.length > MAX_IMAGE || !isAvatar(data))
+            throw new Error('形象图层过大或格式不支持');
+          const name = `rig/${mapped.size}.bin`;
+          mapped.set(old, name);
+          rigFiles[name] = data;
+        }
+        layer.asset = { ...layer.asset, uri: mapped.get(old)! };
+      }
+      manifest.character.rig = rig;
+    }
     const json = JSON.stringify(redactKnownSecret(clean(manifest), knownSecret));
     ManifestSchema.parse(JSON.parse(json));
     const content = strToU8(json);
     if (content.length > MAX_JSON) throw new Error('角色数据超过首版 Bundle 的 12 MB 上限');
-    const files: Record<string, Uint8Array> = { 'manifest.json': content };
+    const files: Record<string, Uint8Array> = { 'manifest.json': content, ...rigFiles };
     const character = await this.store.get('characters', characterId);
     if (character?.avatar) {
       const avatar = await this.assets.readAvatar(character.avatar);
@@ -182,7 +237,7 @@ export class CharacterBundleService {
     return bytes;
   }
   async importCharacter(bytes: Uint8Array): Promise<Character> {
-    const { manifest: m, avatar } = readBundle(bytes);
+    const { manifest: m, avatar, images } = readBundle(bytes);
     const cid = id();
     const maps = new Map<string, string>();
     const remap = (kind: string, old: string): string => {
@@ -191,8 +246,28 @@ export class CharacterBundleService {
       return maps.get(key)!;
     };
     let avatarUri: string | undefined;
+    const imageUris: string[] = [];
+    let rig: CharacterRig | undefined;
     try {
       if (avatar) avatarUri = await this.assets.writeAvatar(cid, avatar);
+      if (m.character.rig) {
+        const mapped = new Map<string, string>();
+        for (const [name, data] of Object.entries(images)) {
+          const uri = await this.assets.writeAvatar(cid, data);
+          imageUris.push(uri);
+          mapped.set(name, uri);
+        }
+        rig = validateRig({
+          ...m.character.rig,
+          layers: m.character.rig.layers.map((layer) => ({
+            ...layer,
+            asset: {
+              ...layer.asset,
+              uri: layer.asset.svg ? layer.asset.uri : mapped.get(layer.asset.uri)!,
+            },
+          })),
+        });
+      }
       const received = new Set(
         m.notifications
           .filter((n) => n.status === 'delivered' || n.openedAt !== undefined)
@@ -203,6 +278,8 @@ export class CharacterBundleService {
         id: cid,
         persona: { ...m.character.persona, id: cid },
         avatar: avatarUri,
+        rig,
+        appearancePending: false,
       };
       await this.store.atomic(async (tx) => {
         await tx.put('characters', character);
@@ -290,7 +367,8 @@ export class CharacterBundleService {
       });
       return character;
     } catch (error) {
-      if (avatarUri) await this.assets.removeAvatar(avatarUri).catch(() => undefined);
+      for (const uri of [...imageUris, ...(avatarUri ? [avatarUri] : [])])
+        await this.assets.removeAvatar(uri).catch(() => undefined);
       throw error;
     }
   }

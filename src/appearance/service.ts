@@ -24,7 +24,9 @@ export class MockImageProvider implements ImageProvider {
     return mockCandidate(`${input.description}:${index}`);
   }
   async split(image: ImageAsset) {
-    return mockRig(image.uri);
+    return mockRig(
+      image.uri.startsWith('mock:preview:') ? image.uri.slice('mock:preview:'.length) : image.uri,
+    );
   }
 }
 export class VisualCreationService {
@@ -38,8 +40,12 @@ export class VisualCreationService {
       throw new Error('请用 1～2000 字描述形象');
     if (input.mode !== 'text' && !input.reference) throw new Error('请先选择参考图');
     const lock = `visual:${characterId}`;
-    if (!(await this.store.lease(lock, Date.now(), 15 * 60_000)))
+    if (!(await this.store.lease(lock, Date.now(), 45 * 60_000)))
       throw new Error('形象正在处理中，请稍后继续');
+    if (!(await this.store.lease('visual-assets', Date.now(), 45 * 60_000))) {
+      await this.store.release(lock);
+      throw new Error('图像资源正在处理中，请稍后继续');
+    }
     try {
       if (!(await this.store.get('characters', characterId))) throw new Error('角色不存在');
       const provider = await this.provider();
@@ -71,11 +77,16 @@ export class VisualCreationService {
       return draft;
     } finally {
       await this.store.release(lock);
+      await this.store.release('visual-assets');
     }
   }
   async select(characterId: string, index?: number) {
     const lock = `visual:${characterId}`;
-    if (!(await this.store.lease(lock, Date.now(), 15 * 60_000))) throw new Error('形象正在处理中');
+    if (!(await this.store.lease(lock, Date.now(), 45 * 60_000))) throw new Error('形象正在处理中');
+    if (!(await this.store.lease('visual-assets', Date.now(), 45 * 60_000))) {
+      await this.store.release(lock);
+      throw new Error('图像资源正在处理中，请稍后继续');
+    }
     try {
       const draft = await this.store.get('visualDrafts', characterId);
       if (!draft) throw new Error('请先生成形象');
@@ -93,6 +104,7 @@ export class VisualCreationService {
       return draft.rig;
     } finally {
       await this.store.release(lock);
+      await this.store.release('visual-assets');
     }
   }
   async save(characterId: string) {

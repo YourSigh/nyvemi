@@ -352,3 +352,43 @@ it('expires a transferred silence trigger and does not revive it when restoring 
   expect(await b.store.list('intentions', imported.id)).toHaveLength(1);
   expect((await b.store.get('intentions', task.id))?.status).toBe('expired');
 });
+it('round-trips a layered rig with portable assets and excludes local image paths', async () => {
+  const { mockRig } = await import('../src/appearance/mock');
+  const a = await setup(),
+    b = await setup();
+  const rig = mockRig('pink');
+  // Use a valid raster fixture for real layer transfer; same file is deduplicated in the ZIP.
+  const raster = Uint8Array.from(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lN0AAAAASUVORK5CYII=',
+      'base64',
+    ),
+  );
+  a.assets.set('file://private-layer.png', raster);
+  rig.source = 'seedream';
+  rig.layers = rig.layers.map((l) => ({
+    ...l,
+    asset: { uri: 'file://private-layer.png', width: 1, height: 1 },
+  }));
+  await a.store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    state: { energy: 0.5, relationshipCloseness: 0.1, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: 1,
+    rig,
+  });
+  await a.store.put('settings', defaultSettings('c'));
+  const bytes = await a.service.exportCharacter('c');
+  const bundle = readBundle(bytes);
+  expect(bundle.manifest.version).toBe(3);
+  expect(Object.keys(bundle.images)).toHaveLength(1);
+  expect(JSON.stringify(bundle.manifest)).not.toContain('file://private-layer');
+  const restored = await b.service.importCharacter(bytes);
+  expect(restored.rig?.layers).toHaveLength(rig.layers.length);
+  expect(b.assets.get(restored.rig!.layers[0].asset.uri)).toEqual(raster);
+  const files = unzipSync(bytes);
+  const missing = { ...files };
+  delete missing['rig/0.bin'];
+  expect(() => readBundle(zipSync(missing))).toThrow('缺失');
+});

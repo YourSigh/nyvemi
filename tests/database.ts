@@ -1,7 +1,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { Database } from '../src/storage/store';
 export class TestDatabase implements Database {
-  private db = new DatabaseSync(':memory:');
+  private db: DatabaseSync;
+  constructor(path = ':memory:') {
+    this.db = new DatabaseSync(path);
+  }
   async exec(sql: string): Promise<void> {
     this.db.exec(sql);
   }

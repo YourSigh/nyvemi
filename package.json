@@ -17,7 +17,8 @@
     "format:check": "prettier --check App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
     "verify": "bash scripts/verify.sh",
     "prebuild:android": "expo prebuild --platform android",
-    "test:live": "node scripts/test-live.cjs"
+    "test:live": "node scripts/test-live.cjs",
+    "test:live:images": "node scripts/test-live-images.cjs"
   },
   "dependencies": {
     "@react-navigation/native": "^7.3.14",

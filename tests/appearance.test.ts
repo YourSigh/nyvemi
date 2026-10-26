@@ -149,7 +149,8 @@ it('maps normalized 0..1000 layer bounds and requires functional facial layers',
       url: `https://cdn.example/${name}`,
       size: '512x512',
       z_index: i + 1,
-      bounding_box: { name, normalized: [100, 200, 600, 700] },
+      name,
+      bounding_box: { normalized: [100, 200, 600, 700] },
     })),
   ];
   const http = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data })));

@@ -29,13 +29,13 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
       });
       if (result.canceled) return;
       const file = new File(result.assets[0].uri);
-      if (file.size > 20 * 1024 * 1024) throw new Error('文件超过 20 MB');
+      if (file.size > 100 * 1024 * 1024) throw new Error('文件超过 100 MB');
       const content = await file.bytes();
       const parsed = readBundle(content);
       setBytes(content);
       setPreview(parsed.manifest);
     } catch {
-      setError('无法读取这个 Bundle。请确认是兼容的 .nyvemi 文件且不超过 20 MB。');
+      setError('无法读取这个 Bundle。请确认是兼容的 .nyvemi 文件且不超过 100 MB。');
     }
   };
   const importPerson = async () => {

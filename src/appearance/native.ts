@@ -1,3 +1,5 @@
+import { pruneVisualAssets } from './cleanup';
+import type { Storage } from '../storage/store';
 import { Directory, File, Paths } from 'expo-file-system';
 import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
@@ -78,3 +80,16 @@ export async function pickReference(): Promise<ImageAsset | undefined> {
   if (!target.exists) original.copy(target);
   return inspect(target);
 }
+
+export const cleanupVisualAssets = (store: Storage) =>
+  pruneVisualAssets(store, {
+    list: async () =>
+      directory()
+        .list()
+        .filter((f): f is File => f instanceof File)
+        .map((f) => f.uri),
+    remove: async (uri) => {
+      const f = new File(uri);
+      if (f.exists) f.delete();
+    },
+  });

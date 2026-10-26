@@ -12,6 +12,8 @@ import { validateImageSettings } from './service';
 const Output = z.object({
   url: z.string().url(),
   size: z.string().regex(/^\d+x\d+$/),
+  name: z.string().optional(),
+  description: z.string().optional(),
   z_index: z.number().int().nonnegative().max(100).optional(),
   bounding_box: z
     .object({
@@ -149,7 +151,7 @@ export class SeedreamImageProvider implements ImageProvider {
           // Base backgrounds are intentionally omitted: character stage must stay transparent.
           if (!item.bounding_box) continue;
           const name =
-            `${item.bounding_box.name ?? ''} ${item.bounding_box.description ?? ''}`.toLowerCase();
+            `${item.name ?? item.bounding_box.name ?? ''} ${item.description ?? item.bounding_box.description ?? ''}`.toLowerCase();
           const role = /eye|眼/.test(name)
             ? 'eyes'
             : /mouth|嘴|口部/.test(name)

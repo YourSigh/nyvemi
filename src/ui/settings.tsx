@@ -1,3 +1,4 @@
+import { cleanupVisualAssets } from '../appearance/native';
 import { usePalette } from '../theme/context';
 import { NotificationSetup } from './notification-setup';
 import { useState, useCallback, useLayoutEffect } from 'react';
@@ -362,6 +363,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                   cancelNotification: async (id) => bridge().cancelNotification(id),
                   removeShortcut: async (id) => bridge().removeShortcut(id),
                   removeAvatar: bundleAssets.removeAvatar,
+                  removeAppearance: () => cleanupVisualAssets(runtime.store),
                 });
                 navigation.reset({ index: 0, routes: [{ name: 'Create' }] });
               })

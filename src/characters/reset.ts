@@ -5,6 +5,7 @@ export interface CharacterCleanup {
   cancelNotification(id: string): Promise<void>;
   removeShortcut(characterId: string): Promise<void>;
   removeAvatar(uri: string): Promise<void>;
+  removeAppearance?(): Promise<void>;
 }
 export async function resetCharacter(
   store: Storage,
@@ -18,6 +19,8 @@ export async function resetCharacter(
   const acquired: string[] = [];
   try {
     for (const name of [
+      'visual-assets',
+      `visual:${characterId}`,
       'background-cycle',
       'heartbeat',
       'requested-delivery',
@@ -41,6 +44,7 @@ export async function resetCharacter(
     });
     // File cleanup is retryable. Never report a destructive transaction as failed after it committed.
     if (c.avatar) await cleanup.removeAvatar(c.avatar).catch(() => undefined);
+    await cleanup.removeAppearance?.().catch(() => undefined);
   } finally {
     for (const name of acquired.reverse()) await store.release(name);
   }
