@@ -1,3 +1,6 @@
+import { appendDictation, timeMarkers } from '../chat/presentation';
+import { ScheduledMessages } from './scheduled-messages';
+import Svg, { Path } from 'react-native-svg';
 import { characterChatLayout } from '../character/layout';
 import { useCharacterInteraction } from './character/interaction';
 import { CharacterStage } from './character/stage';
@@ -21,7 +24,7 @@ import type { PropsWithChildren } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Character, Message, Intention } from '../domain/models';
-import { Avatar, Button, ErrorText } from './components';
+import { Button, ErrorText } from './components';
 import { bridge } from '../native/android';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
@@ -68,6 +71,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [messages, setMessages] = useState<Message[]>([]);
+  const times = useMemo(() => timeMarkers(messages), [messages]);
+  const [dictating, setDictating] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(100);
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
@@ -220,48 +225,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             intensity={interaction.intensity}
           />
           <View testID="conversation-area" style={{ flex: 1, minHeight: 0 }}>
-            <View style={{ maxHeight: 42 }}>
-              {requested.map((task) => (
-                <View
-                  key={task.id}
-                  style={{
-                    paddingHorizontal: 16,
-                    paddingVertical: 6,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <Text style={{ flex: 1, color: palette.muted, fontSize: 12 }}>
-                    约好{' '}
-                    {new Date(task.requestedDueAt ?? task.earliestAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}{' '}
-                    来找你
-                    {!bridge().canNotify()
-                      ? ' · 通知未开启'
-                      : Date.now() >= task.earliestAt
-                        ? ' · 正在等待送达'
-                        : task.requestedDueAt && task.earliestAt > task.requestedDueAt
-                          ? ' · 稍后重试'
-                          : ''}
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="取消这次约定来信"
-                    onPress={() => {
-                      void cancelRequestedWork(runtime.store, bridge(), task.id)
-                        .then(refresh)
-                        .catch(() => setError('取消未完成，请稍后重试'));
-                    }}
-                  >
-                    <Text style={{ color: palette.accent, padding: 6 }}>取消</Text>
-                  </Pressable>
-                </View>
-              ))}
-            </View>
+            <ScheduledMessages
+              tasks={requested}
+              onCancel={(id) => cancelRequestedWork(runtime.store, bridge(), id).then(refresh)}
+              onError={() => setError('取消未完成，请重试')}
+            />
             <FlatList
               ref={list}
               data={[...messages].reverse()}
@@ -311,20 +279,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               renderItem={({ item: m }) => (
                 <Arrival messageId={m.id} arrivals={arrivals.current}>
                   <View style={[s.row, m.role === 'user' && s.mine]}>
-                    {m.role === 'assistant' ? (
-                      <Avatar
-                        name={character?.persona.name ?? 'N'}
-                        uri={character?.avatar}
-                        size={32}
-                      />
-                    ) : null}
-                    <View style={{ maxWidth: '80%', gap: 5 }}>
-                      <Text style={s.time}>
-                        {new Date(m.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Text>
+                    <View style={{ maxWidth: '88%', gap: 4 }}>
+                      {times.has(m.id) ? (
+                        <Text style={s.time}>
+                          {new Date(m.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </Text>
+                      ) : null}
                       <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
                         <Text selectable style={s.message}>
                           {m.content}
@@ -351,6 +314,37 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
             <View style={s.composer}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="语音输入"
+                disabled={busy || dictating}
+                onPress={() => {
+                  setDictating(true);
+                  setError('');
+                  void bridge()
+                    .dictate()
+                    .then((result) => setDraft((current) => appendDictation(current, result)))
+                    .catch((e) => setError(e instanceof Error ? e.message : '无法打开语音输入'))
+                    .finally(() => setDictating(false));
+                }}
+                style={{
+                  width: 36,
+                  height: 44,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: busy || dictating ? 0.4 : 1,
+                }}
+              >
+                <Svg width={20} height={24} viewBox="0 0 24 28">
+                  <Path
+                    d="M9 6a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0V6Zm-4 7v2a7 7 0 0 0 14 0v-2M12 22v4M8 26h8"
+                    fill="none"
+                    stroke={palette.muted}
+                    strokeWidth={1.7}
+                    strokeLinecap="round"
+                  />
+                </Svg>
+              </Pressable>
               <TextInput
                 accessibilityLabel="消息"
                 style={s.input}
@@ -401,30 +395,40 @@ const createStyles = (palette: Palette) =>
     name: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: palette.ink },
     sub: { fontSize: 12, color: palette.muted, marginTop: 4 },
     more: { fontSize: 26, padding: 8, color: palette.accent },
-    messages: { padding: 18, gap: 20, flexGrow: 1 },
+    messages: { paddingHorizontal: 20, paddingVertical: 12, gap: 12, flexGrow: 1 },
     row: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
     mine: { justifyContent: 'flex-end' },
     bubble: {
-      padding: 13,
-      backgroundColor: palette.paper,
+      padding: 11,
+      backgroundColor: palette.tint,
       borderRadius: 16,
       borderTopLeftRadius: 5,
       flexShrink: 1,
     },
-    userBubble: { backgroundColor: palette.tint, borderTopLeftRadius: 16, borderTopRightRadius: 5 },
-    message: { fontSize: 16, lineHeight: 25, color: palette.ink },
+    userBubble: {
+      backgroundColor: palette.paper,
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 5,
+    },
+    message: { fontSize: 15, lineHeight: 23, color: palette.ink },
     time: { fontSize: 10, color: palette.muted, marginHorizontal: 3 },
-    empty: { textAlign: 'center', color: palette.muted, marginTop: 70 },
-    footer: { padding: 12, gap: 8, borderTopWidth: 1, borderColor: palette.line },
+    empty: { textAlign: 'center', color: palette.muted, marginTop: 16 },
+    footer: {
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 8,
+      borderTopWidth: 1,
+      borderColor: palette.line,
+    },
     composer: { flexDirection: 'row', gap: 9, alignItems: 'flex-end' },
     input: {
       flex: 1,
-      maxHeight: 120,
-      minHeight: 48,
-      padding: 12,
+      maxHeight: 100,
+      minHeight: 44,
+      padding: 10,
       backgroundColor: palette.paper,
       borderRadius: 14,
-      fontSize: 16,
+      fontSize: 15,
       color: palette.ink,
     },
   });

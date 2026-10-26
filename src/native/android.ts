@@ -5,6 +5,7 @@ import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  dictate(): Promise<string | null>;
   prepareThemeTransition(): Promise<boolean>;
   revealThemeTransition(duration: number): Promise<void>;
   finishThemeTransition(): Promise<void>;

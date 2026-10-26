@@ -1,5 +1,8 @@
 package app.nyvemi.nativebridge
 
+import android.app.Activity
+import android.speech.RecognizerIntent
+import android.content.ActivityNotFoundException
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -27,6 +30,8 @@ import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.functions.Queues
 
 class NyvemiAndroidModule : Module() {
+  private var dictation: expo.modules.kotlin.Promise? = null
+  private val dictationRequest = 41412
   private val themeTransition = NyvemiThemeTransition()
   private val channelId = "nyvemi-companions-v1"
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
@@ -77,7 +82,27 @@ class NyvemiAndroidModule : Module() {
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("finishThemeTransition") { themeTransition.finish() }.runOnQueue(Queues.MAIN)
     OnActivityEntersBackground { themeTransition.finish() }
-    OnDestroy { themeTransition.finish() }
+    OnDestroy { themeTransition.finish(); dictation?.resolve(null); dictation = null }
+    AsyncFunction("dictate") { promise: expo.modules.kotlin.Promise ->
+      val activity = appContext.currentActivity
+      if (activity == null || dictation != null) { promise.reject("dictation_unavailable", "请稍后重试语音输入", null); return@AsyncFunction }
+      val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault().toLanguageTag())
+        putExtra(RecognizerIntent.EXTRA_PROMPT, "说点什么…")
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+      }
+      dictation = promise
+      try { activity.startActivityForResult(intent, dictationRequest) }
+      catch (_: ActivityNotFoundException) { dictation = null; promise.reject("dictation_unavailable", "设备没有语音输入服务，可使用键盘麦克风", null) }
+      catch (_: Exception) { dictation = null; promise.reject("dictation_failed", "无法打开系统语音输入", null) }
+    }.runOnQueue(Queues.MAIN)
+    OnActivityResult { _, result ->
+      if (result.requestCode == dictationRequest) {
+        val pending = dictation; dictation = null
+        pending?.resolve(if (result.resultCode == Activity.RESULT_OK) result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.take(6000) else null)
+      }
+    }
     AsyncFunction("intentionWorkState") { id: String -> NyvemiRequestedWork.status(context(), id) }
     AsyncFunction("scheduleRequested") { id: String, cid: String, dueAt: Double ->
       NyvemiRequestedWork.schedule(context().applicationContext, id, cid, dueAt.toLong())
