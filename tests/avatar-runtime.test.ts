@@ -1,6 +1,7 @@
 import { URL } from 'node:url';
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 const runtime = new URL('../vendor/psd2live-runtime/runtime.wasm', import.meta.url),
   model = new URL('../assets/avatar/tongza.p2lrt', import.meta.url);
 type Native = Record<string, (...args: number[]) => number> & { memory: WebAssembly.Memory };
@@ -105,5 +106,42 @@ it('gaze moves irises independently and head motion excites the runtime hair pen
     );
   }
   expect(Math.max(...samples) - Math.min(...samples)).toBeGreaterThan(0.001);
+  rt.p2l_rig_free(rig);
+});
+it('keeps the actual reconstructed scalp, neck and hair-root seams opaque throughout the gentle envelope', async () => {
+  const metadata = JSON.parse(
+    readFileSync(new URL('../assets/avatar/tongza-material.json', import.meta.url), 'utf8'),
+  ) as {
+    seamProbes: { joint: string; x: number; y: number }[];
+    modelSha256: string;
+  };
+  const { rt, rig, set } = await load();
+  expect(createHash('sha256').update(readFileSync(model)).digest('hex')).toBe(metadata.modelSha256);
+  const size = 640,
+    at = rt.p2l_alloc(size * size * 4);
+  rt.p2l_behaviors(rig, 0);
+  for (const yaw of [-3, 0, 3])
+    for (const roll of [-1.2, 0, 1.2]) {
+      set('ParamAngleX', yaw);
+      set('ParamAngleY', yaw / 2);
+      set('ParamAngleZ', roll);
+      set('ParamBreath', yaw === 0 ? 0 : 1);
+      set('ParamBodyAngleZ', roll / 4);
+      set('ParamMouthOpenY', yaw === 0 ? 0.45 : 0);
+      for (let i = 0; i < 15; i++) rt.p2l_update(rig, 1 / 60);
+      expect(rt.p2l_render(rig, at, size, size, 0, 1)).toBe(1);
+      const pixels = new Uint8Array(rt.memory.buffer, at, size * size * 4);
+      for (const p of metadata.seamProbes) {
+        const x = Math.round(p.x * size),
+          y = Math.round(p.y * size);
+        for (const dx of [-1, 0, 1])
+          for (const dy of [-1, 0, 1])
+            expect(
+              pixels[((y + dy) * size + x + dx) * 4 + 3],
+              `${p.joint} at yaw ${yaw}, roll ${roll}`,
+            ).toBeGreaterThan(230);
+      }
+    }
+  rt.p2l_dealloc(at, size * size * 4);
   rt.p2l_rig_free(rig);
 });

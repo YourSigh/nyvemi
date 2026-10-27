@@ -1,0 +1,98 @@
+{
+  "profile": "occlusion-v2",
+  "radius": 31,
+  "minimum": 79,
+  "joints": [
+    {
+      "a": "head",
+      "b": "neck",
+      "before": 586,
+      "pixels": 4307
+    },
+    {
+      "a": "neck",
+      "b": "body",
+      "before": 4628,
+      "pixels": 11757
+    },
+    {
+      "a": "back_hair_left",
+      "b": "front_hair",
+      "before": 4416,
+      "pixels": 16586
+    },
+    {
+      "a": "back_hair_right",
+      "b": "front_hair",
+      "before": 4621,
+      "pixels": 17728
+    },
+    {
+      "a": "arm_left",
+      "b": "body",
+      "before": 34104,
+      "pixels": 42889
+    },
+    {
+      "a": "arm_right",
+      "b": "body",
+      "before": 35880,
+      "pixels": 44545
+    }
+  ],
+  "scalpPixels": 204266,
+  "rootPixels": {
+    "left": 15083,
+    "right": 15826
+  },
+  "outfit": "continuous-rest-pose",
+  "addedPixels": {
+    "back_hair_left": 12350,
+    "back_hair_right": 13669,
+    "body": 0,
+    "neck": 10628,
+    "arm_left": 0,
+    "arm_right": 0,
+    "head": 21509,
+    "eyes": 0,
+    "mouth": 0,
+    "front_hair": 0
+  },
+  "modelSha256": "a26fbf56ced05a3dbe05720fe34a7f0bda5fa6514f18bdcc6bf4402ccfc719f9",
+  "sourceLayerCount": 10,
+  "renderer": "PSD2Live WASM + WebGL",
+  "motionProfile": "gentle",
+  "sourceRequests": 2,
+  "notes": [
+    "Seedream forehead, face, neck and garment reconstruction",
+    "Conservative color underpaint under opaque crown; palette-based hair-root bridges",
+    "Continuous rest-pose garment mesh; independent arm actions suspended in gentle profile"
+  ],
+  "seamProbes": [
+    {
+      "joint": "neck/face",
+      "x": 0.50390625,
+      "y": 0.4248046875
+    },
+    {
+      "joint": "neck/topwear",
+      "x": 0.501953125,
+      "y": 0.45361328125
+    },
+    {
+      "joint": "back hair left/front hair",
+      "x": 0.36767578125,
+      "y": 0.23779296875
+    },
+    {
+      "joint": "back hair right/front hair",
+      "x": 0.64111328125,
+      "y": 0.2333984375
+    },
+    {
+      "joint": "face/front hair",
+      "x": 0.50634765625,
+      "y": 0.23193359375
+    }
+  ]
+}

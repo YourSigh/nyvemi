@@ -126,6 +126,10 @@ export async function upgradeBuiltinMeshModels(store: Storage) {
         length: 11432228,
         digest: '329324ea9e4a458f143e38fbfe06886f6f0f2c36d5a94bdfb6b0360cd6b6b188',
       },
+      {
+        length: 13194132,
+        digest: 'bb83f68ce9f77e4567cde0dd5cf780a95546c4c64ba8293097a946ae65aa6345',
+      },
     ],
     async () => (await assetFile(demoModel)).bytes(),
   );
