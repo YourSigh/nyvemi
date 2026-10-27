@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nyvemi",
     "slug": "nyvemi",
-    "version": "0.9.0",
+    "version": "0.9.1",
     "orientation": "portrait",
     "icon": "./assets/nyvemi-icon.png",
     "userInterfaceStyle": "light",
@@ -20,7 +20,7 @@
       "package": "app.nyvemi.android",
       "allowBackup": false,
       "blockedPermissions": ["android.permission.RECORD_AUDIO"],
-      "versionCode": 13
+      "versionCode": 14
     },
     "scheme": "nyvemi",
     "platforms": ["android"],
