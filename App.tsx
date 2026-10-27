@@ -1,3 +1,4 @@
+import { upgradeBuiltinMeshModels } from './src/avatar/native';
 import { AppearanceScreen } from './src/ui/appearance';
 import { reconcileIntentionWork } from './src/proactive/requested-delivery';
 import { ThemeProvider, useTheme } from './src/theme/context';
@@ -56,6 +57,9 @@ function Application() {
     let live = true;
     void getRuntime()
       .then(async (r) => {
+        await upgradeBuiltinMeshModels(r.store).catch(() =>
+          r.diagnostics.error('', 'avatar_sample_upgrade').catch(() => undefined),
+        );
         const chars = await r.store.list('characters');
         const draft = await r.store.get('interviews', 'active');
         const savedTheme = await r.themes.load();

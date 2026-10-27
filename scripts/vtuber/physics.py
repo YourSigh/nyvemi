@@ -7,6 +7,8 @@ from mcp_proxy import Client
 log=(root/'mcp.log').read_text();token=re.search(r'^token\s+(\S+)',log,re.M).group(1)
 with Client(endpoint=f'http://127.0.0.1:{args.port}/mcp',token=token) as c:
  c.edit('project_import_psd',path=str(root/f'{args.name}.psd'),discard_unsaved=True)
+ c.edit('skeleton_auto')
+ print('Automatic arm skeleton generated')
  for id,target,preset,magnitude,segments in [
   ('PonyL','ArtMeshBackHairL','hair',.045,2),('PonyR','ArtMeshBackHairR','hair',.055,2),
   ('Accessory','ArtMeshHeadwear','accessory',.025,1),('Clothes','ArtMeshTopwear','cloth',.012,1)]:

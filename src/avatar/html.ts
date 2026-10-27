@@ -8,7 +8,7 @@ export function avatarHTML(
     throw new Error('模型数据编码不正确');
   const source = player.replace('export class P2LPlayer', 'class P2LPlayer');
   const safe = (s: string) => s.replace(/<\/script/gi, '<\\/script');
-  return `<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}canvas{display:block;width:100%;height:100%;touch-action:none}</style></head><body><canvas id="stage"></canvas><script>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent}canvas{display:block;width:100%;height:100%;touch-action:none}</style></head><body><canvas id="stage"></canvas><script>
 ${safe(source)}
 ${safe(driver)}
 const notify=v=>{if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify(v));};
@@ -19,9 +19,9 @@ const decode=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
  const {instance}=await WebAssembly.instantiate(decode('${wasmBase64}'),{});
  if(instance.exports.p2l_abi_version()>>>16!==1)throw Error('Unsupported runtime ABI');
  const player=await P2LPlayer.fromBytes(document.getElementById('stage'),instance.exports,decode('${modelBase64}'));
- const driver=window.NyvemiAvatarDriver.createDriver(player);driver.setInput({active:false});let stopped=false,previous=performance.now(),frame;
- window.NyvemiAvatar={setInput:v=>driver.setInput(v),dispose:()=>{stopped=true;cancelAnimationFrame(frame);player.dispose();},parameters:driver.parameters};
- const tick=now=>{if(stopped)return;driver.step((now-previous)/1000);previous=now;frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);
+ const driver=window.NyvemiAvatarDriver.createDriver(player);const interactions=window.NyvemiAvatarDriver.mountInteractions(document.getElementById('stage'),player,driver,notify);driver.setInput({active:false});let stopped=false,previous=performance.now(),frame;
+ window.NyvemiAvatar={setInput:v=>{if(v.active===false)interactions.cancel();driver.setInput(v)},play:kind=>driver.play(kind),dispose:()=>{stopped=true;cancelAnimationFrame(frame);interactions.dispose();player.dispose();},parameters:driver.parameters};
+ const tick=now=>{if(stopped)return;interactions.beforeFrame();driver.step((now-previous)/1000);interactions.afterFrame();previous=now;frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);
  window.addEventListener('pagehide',()=>window.NyvemiAvatar.dispose(),{once:true});
  document.addEventListener('visibilitychange',()=>{previous=performance.now();driver.setInput({active:!document.hidden});});
  notify({type:'ready',parameters:driver.parameters,meshes:player.meshes.length});

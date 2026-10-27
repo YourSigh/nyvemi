@@ -50,3 +50,55 @@ it('rejects arbitrary files and unsupported mesh versions', () => {
   new DataView(bytes.buffer).setUint32(8, 99, true);
   expect(() => validateP2lrt(bytes)).toThrow('版本');
 });
+it('runs finite eating and wave actions, then returns arms to rest without changing chat state', () => {
+  const values = new Map<string, number>();
+  const player: MeshPlayer = {
+    parameterRanges: () =>
+      ['ParamArmLA', 'ParamArmLB', 'ParamArmRA', 'ParamArmRB', 'ParamMouthOpenY'].map((id) => ({
+        id,
+        min: -180,
+        max: 180,
+        default: 0,
+      })),
+    setParameter: (id, v) => values.set(id, v),
+    behaviors: () => {},
+    update: () => {},
+    draw: () => {},
+  };
+  const d = createDriver(player, () => 0.5);
+  expect(d.play('eat')).toBe(true);
+  for (let i = 0; i < 20; i++) d.step(0.05);
+  expect(values.get('ParamArmLB')).toBeGreaterThan(60);
+  expect(values.get('ParamMouthOpenY')).toBeGreaterThan(0);
+  expect(d.action()?.kind).toBe('eat');
+  for (let i = 0; i < 170; i++) d.step(0.05);
+  expect(d.action()).toBeUndefined();
+  expect(Math.abs(values.get('ParamArmLB')!)).toBeLessThan(0.1);
+  d.play('wave');
+  d.setInput({ state: 'thinking' });
+  d.step(0.05);
+  expect(d.action()).toBeUndefined();
+  expect(d.play('eat')).toBe(false);
+});
+it('follows touch gaze and clears a held interaction on backgrounding', () => {
+  const values = new Map<string, number>();
+  const player: MeshPlayer = {
+    parameterRanges: () =>
+      ['ParamAngleX', 'ParamEyeBallX'].map((id) => ({ id, min: -30, max: 30, default: 0 })),
+    setParameter: (id, v) => values.set(id, v),
+    behaviors: () => {},
+    update: () => {},
+    draw: () => {},
+  };
+  const d = createDriver(player);
+  d.point(1, 0, true);
+  d.step(0.03);
+  expect(values.get('ParamAngleX')).toBe(20);
+  expect(values.get('ParamEyeBallX')).toBe(0.8);
+  d.play('pat');
+  d.setInput({ active: false });
+  expect(d.action()).toBeUndefined();
+  d.setInput({ active: true });
+  d.step(0.03);
+  expect(values.get('ParamAngleX')).not.toBe(20);
+});

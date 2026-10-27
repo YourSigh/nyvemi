@@ -97,3 +97,32 @@ export async function stageDemoMeshAvatar(store: Storage, cid: string) {
   const f = await assetFile(demoModel);
   return stageMeshAvatar(store, cid, await f.bytes());
 }
+
+export async function upgradeBuiltinMeshModels(store: Storage) {
+  const { upgradeKnownModels } = await import('./upgrade');
+  const { digest, CryptoDigestAlgorithm } = await import('expo-crypto');
+  await upgradeKnownModels(
+    store,
+    {
+      read: (uri) => new File(uri).bytes(),
+      digest: async (bytes) =>
+        Array.from(
+          new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, Uint8Array.from(bytes).buffer)),
+        )
+          .map((v) => v.toString(16).padStart(2, '0'))
+          .join(''),
+      write: writeMeshAvatar,
+      remove: async (uri) => {
+        const f = new File(uri);
+        if (f.exists) f.delete();
+      },
+    },
+    [
+      {
+        length: 6161428,
+        digest: '7923e164488f39b306421c14ea90a68e2bfd2164124b4c29c32d78011e448fca',
+      },
+    ],
+    async () => (await assetFile(demoModel)).bytes(),
+  );
+}

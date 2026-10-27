@@ -74,9 +74,22 @@ function prepare(input, output) {
   emit('back hair right', hair.png, hair.left, hair.top, leftMask);
   emit('back hair left', hair.png, hair.left, hair.top, rightMask);
   const body = find('body');
-  emit('topwear', body.png, body.left, body.top);
   const arm = find('arm');
-  emit('handwear', arm.png, arm.left, arm.top);
+  emit('topwear', body.png, body.left, body.top, (x, y, d, i) => {
+    const ax = x - arm.left,
+      ay = y - arm.top;
+    if (
+      ax >= 0 &&
+      ay >= 0 &&
+      ax < arm.png.width &&
+      ay < arm.png.height &&
+      arm.png.data[(ay * arm.png.width + ax) * 4 + 3] > 24
+    )
+      d[i + 3] = 0;
+    return true;
+  });
+  emit('handwear right', arm.png, arm.left, arm.top, (x) => x < center);
+  emit('handwear left', arm.png, arm.left, arm.top, (x) => x >= center);
   emit('face', head.png, head.left, head.top);
   for (const [side, x0, x1] of [
     ['right', 0, Math.floor(eyes.png.width / 2)],
