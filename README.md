@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.9.1** repairs visible hair/accessory seams in the PSD2Live mesh/deformer/physics model. Touch/drag, feeding, waving and stretching use arm parameters, and the character stage occupies roughly one third of the screen. A simplified Tongza reference has passed the actual Seedream → source layers → layered PSD → automatic rig → offline WASM/WebGL playback chain. The included sample has 17 meshes, 33 parameters, an arm skeleton and independent physical groups. **Rig compilation currently runs on the local development computer, not on the phone.** Android can preview the bundled sample or import a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [pipeline, reproduction and limitations](docs/VTUBER_PIPELINE.md). No physical-device test was performed.
+This is an early MVP implementation. **0.10.0** rebuilds the Tongza demo material for small, stable mesh animation: hidden forehead/scalp and neck underpaint, connected hair roots, occlusion overlap and a continuous rest-pose garment. The bundled sample has 16 meshes and 27 parameters in the existing offline PSD2Live WASM/WebGL renderer. Default motion focuses on idle, blink, breath, talking, gentle thinking/happy; large arm actions are suspended in this profile. The stage remains roughly one third of the screen and shrinks with the keyboard. **Rig compilation currently runs on the local development computer, not on the phone.** Android previews the bundled sample or imports a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [material repair and validation](docs/AVATAR_MATERIAL_V2.md). No physical-device test was performed.
 
 ## Local-first and BYOK
 
@@ -232,10 +232,14 @@ The automatic source-to-rig toolchain is local desktop tooling (`npm run avatar:
 
 ## Character interaction (0.9.0)
 
-Tap her head to pat, tap her body to get a reaction, or drag her within the stage. Long-press or tap **⋯** for **投喂 / 招手 / 伸懒腰 / 停一下 / 归位**. Feeding drives arm bones, chewing, eyes and head for eight seconds; the bowl and chopsticks follow transformed hand geometry. Tap the bowl for another serving. Idle behavior occasionally looks around or stretches. Thinking/talking takes priority and stops these actions. These interactions are local and do not call a model or create conversation messages.
+The earlier interactive profile lets you tap her head/body and drag her within the stage. Long-press or tap **⋯** for **投喂 / 招手 / 伸懒腰 / 停一下 / 归位**. Feeding drives arm bones, chewing, eyes and head for eight seconds; the bowl and chopsticks follow transformed hand geometry. Tap the bowl for another serving. Idle behavior occasionally looks around or stretches. Thinking/talking takes priority and stops these actions. These interactions are local and do not call a model or create conversation messages.
 
 The character still uses roughly one third of the screen and shrinks with the keyboard. Existing byte-identical 0.8 built-in models upgrade automatically; imported custom rigs are preserved. Actions needing missing arm parameters are disabled for those models. See [interaction details and validation](docs/CHARACTER_INTERACTIONS.md).
 
 ### Seam repair (0.9.1)
 
 The coarse hair artwork no longer has a rectangular ornament cutout. The bucket stays on the continuous crown mesh and follows head deformation; it no longer has a separate accessory pendulum. Ponytail roots share overlapping source pixels with feathered boundaries, rather than meeting along bare cuts. Existing 0.8/0.9 built-in samples update automatically; custom models remain untouched. See [repair verification](docs/AVATAR_SEAM_FIX.md).
+
+### Stable small-motion profile (0.10.0)
+
+The current default keeps tapping/dragging and gently follows touch with head/gaze. Large feeding/waving/stretching actions are retained in the driver as an opt-in development profile, but hidden in the default menu while the new garment rig is calibrated for small motion. Existing built-in 0.8–0.9.1 model files upgrade automatically without resetting conversations or personality. Imported custom models are preserved. See [new material, overlap, motion bounds and actual render tests](docs/AVATAR_MATERIAL_V2.md).
