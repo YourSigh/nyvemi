@@ -45,6 +45,36 @@ it('prepares generic green eyes, independent ponytails and a round-trippable lay
     const prepared = prepare(source, out);
     expect(prepared.layers.map((l: { name: string }) => l.name)).toContain('back hair left');
     expect(prepared.layers.map((l: { name: string }) => l.name)).toContain('back hair right');
+    // A coarse input cannot isolate the ornament. Never cut a rectangular
+    // headwear hole, and retain opaque coverage through all hair joins.
+    expect(prepared.layers.some((l: { name: string }) => l.name === 'headwear')).toBe(false);
+    const hairLayers = prepared.layers
+      .filter((l: { name: string }) => /hair/.test(l.name))
+      .map((l: { file: string; bounding_box: { absolute: number[] } }) => ({
+        box: l.bounding_box.absolute,
+        png: PNG.sync.read(readFileSync(join(root, 'prepared', l.file))),
+      }));
+    let overlap = 0;
+    const sourceHair = PNG.sync.read(readFileSync(join(root, '5.png')));
+    for (let y = 0; y < sourceHair.height; y++)
+      for (let x = 0; x < sourceHair.width; x++) {
+        const original = sourceHair.data[(y * sourceHair.width + x) * 4 + 3];
+        if (original < 250) continue;
+        const alphas = hairLayers.map(
+          ({ box, png }: { box: number[]; png: { width: number; data: Uint8Array } }) => {
+            const px = x + 8 - box[0],
+              py = y + 8 - box[1];
+            return px >= 0 && py >= 0 && x + 8 < box[2] && y + 8 < box[3]
+              ? png.data[(py * png.width + px) * 4 + 3] / 255
+              : 0;
+          },
+        );
+        expect(
+          1 - alphas.reduce((remaining: number, a: number) => remaining * (1 - a), 1),
+        ).toBeGreaterThan(0.98);
+        if (alphas.filter((a: number) => a > 0.2).length >= 2) overlap++;
+      }
+    expect(overlap).toBeGreaterThan(50);
     const iris = prepared.layers.find((l: { name: string }) => l.name === 'irides left');
     expect(iris).toBeDefined();
     const p = PNG.sync.read(readFileSync(join(root, 'prepared', iris.file)));

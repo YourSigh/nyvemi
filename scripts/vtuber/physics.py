@@ -11,9 +11,9 @@ with Client(endpoint=f'http://127.0.0.1:{args.port}/mcp',token=token) as c:
  print('Automatic arm skeleton generated')
  for id,target,preset,magnitude,segments in [
   ('PonyL','ArtMeshBackHairL','hair',.045,2),('PonyR','ArtMeshBackHairR','hair',.055,2),
-  ('Accessory','ArtMeshHeadwear','accessory',.025,1),('Clothes','ArtMeshTopwear','cloth',.012,1)]:
+  ('Clothes','ArtMeshTopwear','cloth',.012,1)]:
   c.edit('swing_put',id=id,targets=[target],kind='lateral',segments=segments,fulcrum='top',preset=preset,magnitude=magnitude,softness=.75)
   print(id,'physics generated')
  c.edit('project_save_as',path=str(root/f'{args.name}.psd2live'))
  c.edit('project_export_target',target='web',output_directory=str(root/'web-physics'))
- print('Exported mesh runtime with independent ponytails, accessory and clothes physics')
+ print('Exported mesh runtime with independent ponytails and clothes physics')

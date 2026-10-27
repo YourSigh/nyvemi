@@ -68,9 +68,30 @@ function prepare(input, output) {
   const hairRoot = head.top * 0.8,
     leftEdge = head.left - faceWidth * 0.08,
     rightEdge = head.left + faceWidth * 1.08;
-  const leftMask = (x, y) => y > hairRoot && x < leftEdge,
-    rightMask = (x, y) => y > hairRoot && x > rightEdge;
-  const bucket = (x, y) => x > center + faceWidth * 0.3 && y < head.top * 0.88;
+  // Adjacent parts need shared source pixels: a zero-overlap partition exposes
+  // straight transparent cuts as soon as their independent deformers move.
+  const join = faceWidth * 0.14;
+  const ramp = (a, b, value) => {
+    const t = Math.max(0, Math.min(1, (value - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  };
+  const coverage = (weight) => (x, y, d, i) => {
+    d[i + 3] = Math.round(d[i + 3] * weight(x, y));
+    return d[i + 3] > 0;
+  };
+  const roots = (y) => ramp(hairRoot - join, hairRoot, y);
+  const leftMask = coverage(
+      (x, y) => roots(y) * (1 - ramp(leftEdge + join, leftEdge + 3 * join, x)),
+    ),
+    rightMask = coverage((x, y) => roots(y) * ramp(rightEdge - 3 * join, rightEdge - join, x));
+  const crownMask = coverage((x, y) =>
+    Math.max(
+      1 - ramp(hairRoot + join, hairRoot + 3 * join, y),
+      ramp(leftEdge - join, leftEdge + join, x) * (1 - ramp(rightEdge - join, rightEdge + join, x)),
+    ),
+  );
+  // The coarse six-part input has no isolated ornament or hidden scalp. Keep
+  // the bucket attached to the continuous crown, never as a rectangular cutout.
   emit('back hair right', hair.png, hair.left, hair.top, leftMask);
   emit('back hair left', hair.png, hair.left, hair.top, rightMask);
   const body = find('body');
@@ -187,14 +208,8 @@ function prepare(input, output) {
   }
   const mouth = find('mouth');
   emit('mouth open', mouth.png, mouth.left, mouth.top);
-  emit(
-    'front hair',
-    hair.png,
-    hair.left,
-    hair.top,
-    (x, y) => !leftMask(x, y) && !rightMask(x, y) && !bucket(x, y),
-  );
-  emit('headwear', hair.png, hair.left, hair.top, bucket);
+  emit('front hair', hair.png, hair.left, hair.top, crownMask);
+
   const manifest = { size: source.size, layers };
   fs.writeFileSync(output, JSON.stringify(manifest, null, 2));
   console.log(JSON.stringify({ prepared: layers.length, layers: layers.map((l) => l.name) }));

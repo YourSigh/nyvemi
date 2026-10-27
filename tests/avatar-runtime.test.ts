@@ -60,7 +60,6 @@ it('loads the actual PSD2Live model with all required facial and physics paramet
     'ParamBodyAngleZ',
     'ParamBreath',
     'ParamHairBack',
-    'ParamSwingAccessory',
     'ParamSwingClothes',
     'ParamSwingPonyL_1',
     'ParamSwingPonyR_1',
