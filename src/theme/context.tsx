@@ -8,7 +8,8 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { AccessibilityInfo, AppState, View } from 'react-native';
+import { AccessibilityInfo, AppState, BackHandler, View } from 'react-native';
+import { closeKeyboard } from '../ui/keyboard';
 import { bridge } from '../native/android';
 import { defaultPalette, generatePalette } from './generator';
 import type { Palette, ThemeRecord } from './model';
@@ -61,12 +62,14 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setReducedMotion(value);
       if (value) release();
     });
+    const back = BackHandler.addEventListener('hardwareBackPress', () => locked.current);
     const lifecycle = AppState.addEventListener('change', (state) => {
       if (state !== 'active') release();
     });
     return () => {
       mounted.current = false;
       motion.remove();
+      back.remove();
       lifecycle.remove();
       release();
     };
@@ -76,6 +79,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     locked.current = true;
     setTransitioning(true);
     try {
+      await closeKeyboard();
+      await nextPaint();
       const reduce = await AccessibilityInfo.isReduceMotionEnabled().catch(() => false);
       await runThemeTransition(
         {
@@ -99,7 +104,24 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     <ThemeContext.Provider
       value={{ palette, record, hydrate, apply, transitioning, reducedMotion }}
     >
-      <View style={{ flex: 1, backgroundColor: palette.background }}>{children}</View>
+      <View style={{ flex: 1, backgroundColor: palette.background }}>
+        <View
+          style={{ flex: 1 }}
+          pointerEvents={transitioning ? 'none' : 'auto'}
+          importantForAccessibility={transitioning ? 'no-hide-descendants' : 'auto'}
+        >
+          {children}
+        </View>
+        {transitioning ? (
+          <View
+            testID="theme-interaction-lock"
+            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 }}
+            onStartShouldSetResponder={() => true}
+            onMoveShouldSetResponder={() => true}
+            accessibilityViewIsModal
+          />
+        ) : null}
+      </View>
     </ThemeContext.Provider>
   );
 }

@@ -8,17 +8,24 @@ import { Diagnostics } from '../src/storage/diagnostics';
 import type { LLMProvider } from '../src/providers/provider';
 import { migrate, SQLiteStore } from '../src/storage/store';
 import { TestDatabase } from './database';
-it('requires an explicit interface change rather than a favorite, quote, hypothetical or clothing', () => {
+it('accepts personal color preferences and interface requests while excluding quotes and unrelated objects', () => {
   for (const input of [
     '把这里换成淡紫色吧',
     '帮我把主题调暗一点',
     '换个淡蓝色吧',
     '调暗一点',
     'change the theme to blue',
+    '我喜欢紫色',
+    '我最喜欢淡蓝色，别太艳',
+    '还是蓝灰色看着更舒服',
+    'I prefer soft pink',
   ])
     expect(isThemeChangeRequest(input)).toBe(true);
   for (const input of [
-    '我喜欢紫色',
+    '我喜欢红烧肉',
+    '我朋友喜欢蓝色',
+    '我喜欢蓝色的衣服',
+    '我喜欢粉色，但别换',
     '你喜欢什么颜色？',
     '别换成蓝色',
     '如果换成蓝色会怎么样',
@@ -86,20 +93,20 @@ it('applies a semantic theme action during chat without opening another question
     },
   );
   expect(applied).toEqual(['淡紫色，柔和一点']);
-  expect(prompts[0]).toContain('这轮允许响应明确');
+  expect(prompts[0]).toContain('这轮允许响应界面');
   expect((await chat.history('c')).map((m) => m.content)).toEqual([
     '把这里换成淡紫色吧',
     '好，淡一点的紫。',
   ]);
   expect(await store.list('intentions', 'c')).toHaveLength(0);
 });
-it('rejects unsolicited theme actions and does not change a preference merely mentioned in chat', async () => {
+it('rejects unsolicited theme actions on questions about someone else', async () => {
   const { chat, disableAction } = await fixture();
   let applied = false;
   await expect(
     chat.send(
       'c',
-      '我喜欢紫色',
+      '你喜欢什么颜色？',
       () => {},
       undefined,
       undefined,
@@ -158,4 +165,22 @@ it('executes a clear color request even when the provider omits its action field
       '{"messages":[],"theme":{"description":"蓝色"},"schedule":{"afterSeconds":60}}',
     ),
   ).toThrow();
+});
+
+it('applies a personal color preference even when the optional model action is absent', async () => {
+  const { chat, disableAction } = await fixture();
+  disableAction();
+  const applied: string[] = [];
+  await chat.send(
+    'c',
+    '我喜欢淡蓝色',
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    async (description) => {
+      applied.push(description);
+    },
+  );
+  expect(applied).toEqual(['我喜欢淡蓝色']);
 });

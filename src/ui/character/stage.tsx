@@ -106,6 +106,7 @@ export function CharacterStage(
     onMeshReady?: (ready: boolean) => void;
   },
 ) {
+  if (!props.meshAvatar && !props.rig) return null;
   return props.meshAvatar ? (
     <MeshAvatarStage
       model={props.meshAvatar}

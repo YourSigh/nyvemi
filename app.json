@@ -7,7 +7,7 @@
     "icon": "./assets/nyvemi-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/nyvemi-icon.png",
+      "image": "./assets/splash-empty.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFF7FA"
     },

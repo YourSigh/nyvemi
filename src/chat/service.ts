@@ -24,6 +24,7 @@ export function streamingPreview(raw: string): string {
   }
 }
 export interface ChatHooks {
+  clock?: () => string;
   scheduleRequested?: (user: Message, delayMs: number) => Promise<string>;
   retrieve: (characterId: string, query: string) => Promise<Memory[]>;
   afterRound: (characterId: string, user: Message, assistant: Message[]) => Promise<void>;
@@ -184,7 +185,14 @@ export class ChatService {
       // A retry may be older than the history window: always include this request last.
       history.push({ ...user, status: 'complete' });
       const memories = await this.hooks.retrieve(characterId, content);
-      const prompt = buildChatPrompt(character, history, memories);
+      const provider = await this.provider();
+      const prompt = buildChatPrompt(
+        character,
+        history,
+        memories,
+        Date.now(),
+        this.hooks.clock?.(),
+      );
       prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
       const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
       prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n${await conversationContext(this.store, characterId, Date.now())}`;
@@ -192,9 +200,7 @@ export class ChatService {
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';
       let firstToken = true;
-      const result = await (
-        await this.provider()
-      ).streamChat(
+      const result = await provider.streamChat(
         prompt,
         (delta) => {
           if (firstToken && delta.length) {

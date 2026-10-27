@@ -49,6 +49,9 @@ class NyvemiThemeTransition {
       image.elevation = 10000f
       decor.addView(image, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
       overlay = image
+      image.isFocusableInTouchMode = true
+      image.isFocusable = true
+      image.requestFocus()
       handler.postDelayed(timeout, 6000)
       true
     } catch (_: Exception) {
@@ -117,6 +120,7 @@ class NyvemiThemeTransition {
       canvas.drawRect(bounds, mask)
       canvas.restoreToCount(layer)
     }
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean = true
     override fun onTouchEvent(event: MotionEvent): Boolean = true
     fun release() { image = null }
   }

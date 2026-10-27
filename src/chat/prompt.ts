@@ -37,25 +37,32 @@ export function characterVoice(persona: Persona): string {
   return lines.filter(Boolean).join('\n');
 }
 export function localTimeContext(now = Date.now()): string {
-  const date = new Date(now);
-  return `用户设备本地时间：${date.toLocaleString('zh-CN', { hour12: false })}；时区：${Intl.DateTimeFormat().resolvedOptions().timeZone}；UTC 偏移分钟：${-date.getTimezoneOffset()}；UTC：${date.toISOString()}。你与用户使用同一个设备时钟，不存在你自己的另一套时间。`;
+  const date = new Date(now),
+    pad = (n: number) => String(n).padStart(2, '0');
+  const hour = date.getHours();
+  const period =
+    hour < 6 ? '凌晨' : hour < 12 ? '上午' : hour < 14 ? '中午' : hour < 18 ? '下午' : '晚上';
+  const offset = -date.getTimezoneOffset();
+  const zone = `${offset >= 0 ? '+' : '-'}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+  return `【本轮设备时钟】现在是 ${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} 星期${'日一二三四五六'[date.getDay()]} ${pad(hour)}:${pad(date.getMinutes())}:${pad(date.getSeconds())}（24小时制，${period}，UTC${zone}）。这是用户设备本地当前时间，你和用户共用这一时钟。判断现在、今天、明天及上午/下午只依据本轮时钟，不用训练日期、历史消息时间或角色所在地替代，也不要声称自己的时间与用户不同。`;
 }
 export function buildChatPrompt(
   character: Character,
   history: Message[],
   memories: Memory[],
   now = Date.now(),
+  clock = localTimeContext(now),
 ): ChatTurn[] {
   const recent = history.filter((m) => m.status === 'complete').slice(-16);
   return [
     {
       role: 'system',
-      content: `${characterVoice(character.persona)}\n\n${naturalRules}\n${localTimeContext(now)}\n当前相处状态（仅用于语气）：${JSON.stringify(character.state)}\n最近关注的自身兴趣：${character.interests
+      content: `${characterVoice(character.persona)}\n\n${naturalRules}\n当前相处状态（仅用于语气）：${JSON.stringify(character.state)}\n最近关注的自身兴趣：${character.interests
         .slice(0, 12)
         .map((i) => i.topic)
         .join(
           '、',
-        )}\n相关记忆：${JSON.stringify(memories.slice(0, 8).map((m) => ({ type: m.type, content: m.content.slice(0, 500) })))}\n以下消息的设备时间（与消息顺序对应，避免把几小时前当成刚刚）：${recent.map((m) => new Date(m.createdAt).toLocaleString('zh-CN', { hour12: false })).join('；')}`,
+        )}\n相关记忆：${JSON.stringify(memories.slice(0, 8).map((m) => ({ type: m.type, content: m.content.slice(0, 500) })))}\n以下消息的设备时间（与消息顺序对应，避免把几小时前当成刚刚）：${recent.map((m) => new Date(m.createdAt).toLocaleString('zh-CN', { hour12: false })).join('；')}\n${clock}`,
     },
     ...recent.map((m) => ({ role: m.role, content: m.content.slice(0, 2000) })),
   ];

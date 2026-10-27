@@ -57,6 +57,7 @@ async function createRuntime() {
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const syncIntentionWork = () => reconcileIntentionWork(store, bridge());
   const chat = new ChatService(store, provider, diagnostics, {
+    clock: () => bridge().deviceTimeContext(),
     scheduleRequested: async (user, delayMs) => {
       if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
       if (!(await requestNotifications()) || !bridge().canNotify())
