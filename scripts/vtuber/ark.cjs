@@ -27,7 +27,7 @@ async function request(operation, body) {
     throw Error('This test sends keys only to official Ark');
   const budgetFile = path.join(root, 'budget.json'),
     budget = fs.existsSync(budgetFile) ? JSON.parse(fs.readFileSync(budgetFile)) : { requests: 0 };
-  const limit = 7;
+  const limit = Math.max(1, Math.min(7, Number(process.env.NYVEMI_AVATAR_REQUEST_LIMIT) || 7));
   if (budget.requests >= limit) throw Error('Artwork batch request limit reached');
   budget.requests++;
   fs.writeFileSync(budgetFile, JSON.stringify({ ...budget, limit }));

@@ -18,6 +18,7 @@ async function main() {
     hash.update(fs.readFileSync(path.join(path.dirname(input), l.file)));
   for (const file of [
     'scripts/vtuber/prepare.cjs',
+    'scripts/vtuber/occlusion.cjs',
     'scripts/vtuber/psd.cjs',
     'scripts/vtuber/physics.py',
   ])

@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { PNG } = require('pngjs');
 const { decode, resize } = require('./psd.cjs');
+const { prepareComplete, weldOutfit } = require('./occlusion.cjs');
 function prepare(input, output) {
   const root = path.dirname(input),
     source = JSON.parse(fs.readFileSync(input)),
@@ -22,8 +23,14 @@ function prepare(input, output) {
     if (!p) throw Error(`Required source part missing: ${name}`);
     return p;
   };
+  const complete = source.preparation === 'occlusion-v2' ? prepareComplete(parts) : undefined;
+  if (complete)
+    fs.writeFileSync(
+      path.join(outRoot, 'occlusion-report.json'),
+      JSON.stringify(complete.report, null, 2),
+    );
   const head = find('head'),
-    hair = find('hair'),
+    hair = find(complete ? 'front_hair' : 'hair'),
     eyes = find('eyes');
   const center = head.left + head.png.width / 2,
     faceWidth = head.png.width;
@@ -92,26 +99,43 @@ function prepare(input, output) {
   );
   // The coarse six-part input has no isolated ornament or hidden scalp. Keep
   // the bucket attached to the continuous crown, never as a rectangular cutout.
-  emit('back hair right', hair.png, hair.left, hair.top, leftMask);
-  emit('back hair left', hair.png, hair.left, hair.top, rightMask);
-  const body = find('body');
-  const arm = find('arm');
-  emit('topwear', body.png, body.left, body.top, (x, y, d, i) => {
-    const ax = x - arm.left,
-      ay = y - arm.top;
-    if (
-      ax >= 0 &&
-      ay >= 0 &&
-      ax < arm.png.width &&
-      ay < arm.png.height &&
-      arm.png.data[(ay * arm.png.width + ax) * 4 + 3] > 24
-    )
-      d[i + 3] = 0;
-    return true;
-  });
-  emit('handwear right', arm.png, arm.left, arm.top, (x) => x < center);
-  emit('handwear left', arm.png, arm.left, arm.top, (x) => x >= center);
-  emit('face', head.png, head.left, head.top);
+  if (!complete) {
+    emit('back hair right', hair.png, hair.left, hair.top, leftMask);
+    emit('back hair left', hair.png, hair.left, hair.top, rightMask);
+    const body = find('body');
+    const arm = find('arm');
+    emit('topwear', body.png, body.left, body.top, (x, y, d, i) => {
+      const ax = x - arm.left,
+        ay = y - arm.top;
+      if (
+        ax >= 0 &&
+        ay >= 0 &&
+        ax < arm.png.width &&
+        ay < arm.png.height &&
+        arm.png.data[(ay * arm.png.width + ax) * 4 + 3] > 24
+      )
+        d[i + 3] = 0;
+      return true;
+    });
+    emit('handwear right', arm.png, arm.left, arm.top, (x) => x < center);
+    emit('handwear left', arm.png, arm.left, arm.top, (x) => x >= center);
+    emit('face', head.png, head.left, head.top);
+  } else {
+    const outfit = weldOutfit(complete.parts.get('body'), [
+      complete.parts.get('arm_left'),
+      complete.parts.get('arm_right'),
+    ]);
+    for (const [sourceName, target] of [
+      ['back_hair_left', 'back hair left'],
+      ['back_hair_right', 'back hair right'],
+      ['neck', 'neck'],
+      ['head', 'face'],
+    ]) {
+      const p = complete.parts.get(sourceName);
+      emit(target, p.png, p.left, p.top);
+      if (sourceName === 'neck') emit('topwear', outfit.png, outfit.left, outfit.top);
+    }
+  }
   for (const [side, x0, x1] of [
     ['right', 0, Math.floor(eyes.png.width / 2)],
     ['left', Math.floor(eyes.png.width / 2), eyes.png.width],
@@ -208,7 +232,7 @@ function prepare(input, output) {
   }
   const mouth = find('mouth');
   emit('mouth open', mouth.png, mouth.left, mouth.top);
-  emit('front hair', hair.png, hair.left, hair.top, crownMask);
+  emit('front hair', hair.png, hair.left, hair.top, complete ? undefined : crownMask);
 
   const manifest = { size: source.size, layers };
   fs.writeFileSync(output, JSON.stringify(manifest, null, 2));

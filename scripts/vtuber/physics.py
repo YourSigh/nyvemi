@@ -10,8 +10,8 @@ with Client(endpoint=f'http://127.0.0.1:{args.port}/mcp',token=token) as c:
  c.edit('skeleton_auto')
  print('Automatic arm skeleton generated')
  for id,target,preset,magnitude,segments in [
-  ('PonyL','ArtMeshBackHairL','hair',.045,2),('PonyR','ArtMeshBackHairR','hair',.055,2),
-  ('Clothes','ArtMeshTopwear','cloth',.012,1)]:
+  ('PonyL','ArtMeshBackHairL','hair',.012,2),('PonyR','ArtMeshBackHairR','hair',.014,2),
+  ('Clothes','ArtMeshTopwear','cloth',.003,1)]:
   c.edit('swing_put',id=id,targets=[target],kind='lateral',segments=segments,fulcrum='top',preset=preset,magnitude=magnitude,softness=.75)
   print(id,'physics generated')
  c.edit('project_save_as',path=str(root/f'{args.name}.psd2live'))

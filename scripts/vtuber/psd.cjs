@@ -25,13 +25,24 @@ function resize(p, w, h) {
         y1 = Math.min(p.height - 1, y0 + 1),
         fx = sx - x0,
         fy = sy - y0;
-      for (let c = 0; c < 4; c++)
-        data[(y * w + x) * 4 + c] = Math.round(
-          p.data[(y0 * p.width + x0) * 4 + c] * (1 - fx) * (1 - fy) +
-            p.data[(y0 * p.width + x1) * 4 + c] * fx * (1 - fy) +
-            p.data[(y1 * p.width + x0) * 4 + c] * (1 - fx) * fy +
-            p.data[(y1 * p.width + x1) * 4 + c] * fx * fy,
-        );
+      const samples = [
+        [(y0 * p.width + x0) * 4, (1 - fx) * (1 - fy)],
+        [(y0 * p.width + x1) * 4, fx * (1 - fy)],
+        [(y1 * p.width + x0) * 4, (1 - fx) * fy],
+        [(y1 * p.width + x1) * 4, fx * fy],
+      ];
+      const alpha = samples.reduce((a, [i, weight]) => a + p.data[i + 3] * weight, 0);
+      const target = (y * w + x) * 4;
+      data[target + 3] = Math.round(alpha);
+      // Interpolate premultiplied color; transparent white must not bleed into dark outlines.
+      for (let c = 0; c < 3; c++)
+        data[target + c] =
+          alpha > 0
+            ? Math.round(
+                samples.reduce((a, [i, weight]) => a + p.data[i + c] * p.data[i + 3] * weight, 0) /
+                  alpha,
+              )
+            : 0;
     }
   return { width: w, height: h, data };
 }

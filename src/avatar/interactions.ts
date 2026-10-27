@@ -112,6 +112,7 @@ export function mountInteractions(
     ['招手', 'wave'],
     ['伸懒腰', 'stretch'],
   ] as [string, AvatarAction][]) {
+    if (!driver.supports(kind)) continue;
     const b = document.createElement('button');
     b.textContent = label;
     b.style.cssText = buttonStyle;

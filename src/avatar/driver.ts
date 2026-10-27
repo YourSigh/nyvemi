@@ -18,12 +18,14 @@ export interface AvatarInput {
   active: boolean;
   reducedMotion: boolean;
   eyesClosed?: boolean;
+  motionProfile?: 'gentle' | 'interactive';
 }
 export const defaultAvatarInput: AvatarInput = {
   state: 'idle',
   intensity: 0.5,
   active: true,
   reducedMotion: false,
+  motionProfile: 'gentle',
 };
 export function pose(
   state: CharacterInteractionState,
@@ -37,15 +39,15 @@ export function pose(
     sleepy = state === 'sleepy',
     shy = state === 'shy';
   return {
-    headX: state === 'thinking' ? -7 + drift * 2 : drift * 4,
-    headY: state === 'thinking' ? 3 : shy ? -6 : sleepy ? -5 : sway * 1.8,
-    headZ: state === 'thinking' ? -5 : shy ? 4 : sleepy ? 3 : sway * 1.5,
+    headX: state === 'thinking' ? -1.8 + drift * 0.4 : drift * 1.1,
+    headY: state === 'thinking' ? 0.8 : shy ? -1.2 : sleepy ? -1.1 : sway * 0.5,
+    headZ: state === 'thinking' ? -0.6 : shy ? 0.5 : sleepy ? 0.5 : sway * 0.35,
     eyeX: state === 'thinking' ? -0.35 : shy ? -0.15 : drift * 0.12,
     eyeY: state === 'thinking' ? 0.25 : shy ? -0.35 : sleepy ? -0.2 : sway * 0.07,
     eyeOpen: sleepy ? 0.18 : happy ? 0.78 : 1,
-    mouth: state === 'talking' ? 0.12 + 0.62 * Math.pow(Math.sin(time * 9.3), 2) : happy ? 0.22 : 0,
-    smile: happy ? 0.85 : shy ? 0.35 : state === 'angry' ? -0.55 : 0.05,
-    body: reducedMotion ? 0 : sway * (happy ? 2 : 1) * (0.6 + intensity * 0.4),
+    mouth: state === 'talking' ? 0.04 + 0.4 * Math.pow(Math.sin(time * 7.8), 2) : happy ? 0.08 : 0,
+    smile: happy ? 0.5 : shy ? 0.25 : state === 'angry' ? -0.55 : 0.05,
+    body: reducedMotion ? 0 : sway * (happy ? 0.3 : 0.2) * (0.6 + intensity * 0.4),
   };
 }
 export type AvatarAction = 'pat' | 'poke' | 'eat' | 'wave' | 'stretch' | 'lookAround';
@@ -114,13 +116,15 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
   let nextIdleAction = 12 + random() * 12;
   let pointer = { x: 0, y: 0, down: false };
   const supports = (kind: AvatarAction) =>
-    kind === 'eat'
-      ? ['ParamArmLA', 'ParamArmLB', 'ParamArmRA', 'ParamArmRB'].every((id) => byId.has(id))
-      : kind === 'wave'
-        ? byId.has('ParamArmRA')
-        : kind === 'stretch'
-          ? byId.has('ParamArmLA') && byId.has('ParamArmRA')
-          : true;
+    input.motionProfile !== 'interactive' && ['eat', 'wave', 'stretch'].includes(kind)
+      ? false
+      : kind === 'eat'
+        ? ['ParamArmLA', 'ParamArmLB', 'ParamArmRA', 'ParamArmRB'].every((id) => byId.has(id))
+        : kind === 'wave'
+          ? byId.has('ParamArmRA')
+          : kind === 'stretch'
+            ? byId.has('ParamArmLA') && byId.has('ParamArmRA')
+            : true;
   const play = (kind: AvatarAction) => {
     if (!supports(kind) || !input.active || input.state === 'thinking' || input.state === 'talking')
       return false;
@@ -176,13 +180,13 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
         }
       }
       if (!action && input.state === 'idle' && !input.reducedMotion && elapsed >= nextIdleAction) {
-        play(random() < 0.5 ? 'lookAround' : 'stretch');
+        play('lookAround');
         nextIdleAction = elapsed + 18 + random() * 12;
       }
       if (input.state === 'thinking' || input.state === 'talking') action = undefined;
       blinkRemaining = Math.max(0, blinkRemaining - step);
       if (elapsed >= blinkAt) {
-        blinkRemaining = 0.14;
+        blinkRemaining = 0.2;
         blinkAt = elapsed + 2 + random() * 4;
       }
       const p: ReturnType<typeof pose> & {
@@ -192,12 +196,18 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
         armRB?: number;
       } = pose(input.state, elapsed, input.intensity, input.reducedMotion);
       if (action) Object.assign(p, actionPose(action.kind, action.time));
+      if (input.motionProfile !== 'interactive') {
+        p.headX = Math.max(-3, Math.min(3, p.headX));
+        p.headY = Math.max(-2, Math.min(2, p.headY));
+        p.headZ = Math.max(-1.2, Math.min(1.2, p.headZ));
+        p.body = Math.max(-0.5, Math.min(0.5, p.body));
+      }
       if (pointer.down) {
-        p.headX = pointer.x * 20;
-        p.headY = pointer.y * 10;
+        p.headX = pointer.x * (input.motionProfile === 'interactive' ? 20 : 2.5);
+        p.headY = pointer.y * (input.motionProfile === 'interactive' ? 10 : 1.5);
         p.eyeX = pointer.x * 0.8;
         p.eyeY = pointer.y * 0.6;
-        p.headZ = -pointer.x * 5;
+        p.headZ = -pointer.x * (input.motionProfile === 'interactive' ? 5 : 0.7);
       }
       if (input.reducedMotion) {
         p.headX = 0;
@@ -207,13 +217,18 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
       }
       const alpha = lastActive ? 1 - Math.exp(-step * 9) : 1;
       lastActive = true;
-      const shut = input.eyesClosed || blinkRemaining > 0;
+      const blink = blinkRemaining > 0 ? Math.sin((1 - blinkRemaining / 0.2) * Math.PI) : 0;
+      const openness = input.eyesClosed ? 0 : p.eyeOpen * (1 - blink);
       set(['ParamAngleX'], p.headX, alpha);
       set(['ParamAngleY'], p.headY, alpha);
       set(['ParamAngleZ'], p.headZ, alpha);
       set(['ParamEyeBallX'], p.eyeX, alpha);
       set(['ParamEyeBallY'], p.eyeY, alpha);
-      set(['ParamEyeLOpen', 'ParamEyeROpen'], shut ? 0 : p.eyeOpen, shut ? 1 : alpha);
+      set(
+        ['ParamEyeLOpen', 'ParamEyeROpen'],
+        openness,
+        blinkRemaining > 0 || input.eyesClosed ? 1 : alpha,
+      );
       set(['ParamMouthOpenY', 'ParamMouthOpen'], p.mouth, Math.min(1, step * 18));
       set(['ParamMouthForm', 'ParamMouthSmile'], p.smile, alpha);
       set(['ParamBodyAngleZ', 'ParamBodyAngle'], p.body, alpha);
