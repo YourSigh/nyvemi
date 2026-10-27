@@ -19,10 +19,14 @@ it('accepts personal color preferences and interface requests while excluding qu
     '我最喜欢淡蓝色，别太艳',
     '还是蓝灰色看着更舒服',
     'I prefer soft pink',
+    '淡紫色也挺好看',
+    '喜欢薄荷绿色',
   ])
     expect(isThemeChangeRequest(input)).toBe(true);
   for (const input of [
     '我喜欢红烧肉',
+    '我喜欢蓝色吗？',
+    '我喜欢蓝色的杯子',
     '我朋友喜欢蓝色',
     '我喜欢蓝色的衣服',
     '我喜欢粉色，但别换',

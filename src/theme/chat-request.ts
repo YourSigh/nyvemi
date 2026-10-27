@@ -9,7 +9,7 @@ export function isThemeChangeRequest(input: string): boolean {
     return false;
   if (/[“「『"].*(?:换|改|喜欢|偏爱).*[”」』"]/.test(text)) return false;
   if (
-    /衣服|裙子|裤子|头发|发色|头像|壁纸|手机壳|花朵/.test(text) &&
+    /衣服|裙子|裤子|头发|发色|头像|壁纸|手机壳|花朵|杯子|汽车|家具/.test(text) &&
     !/App|app|界面|主题|配色/.test(text)
   )
     return false;
@@ -20,6 +20,7 @@ export function isThemeChangeRequest(input: string): boolean {
     /(?:主题|界面|背景|配色).{0,12}(?:调暗|调亮|柔和一点|淡一点)/.test(text) ||
     /(?:change|switch|make).{0,25}(?:theme|app colou?r|pink|blue|purple|dark|light)/i.test(text);
   if (explicit) return true;
+  if (/(?:吗|么|\?|？)\s*$/.test(text)) return false;
   const color =
     /(?:粉|蓝|紫|绿|红|橙|白|黑|灰|黄|棕|青|杏|米|桃)[^，。！？,;；]{0,5}色|粉白|黑白灰|蓝灰|薄荷绿|\b(?:pink|blue|purple|green|red|orange|white|black|gray|grey|yellow|mint)\b/i;
   return text.split(/[，。！？,;；]/).some((clause) => {
@@ -32,7 +33,9 @@ export function isThemeChangeRequest(input: string): boolean {
     return (
       color.test(clause) &&
       (/(?:我|自己|个人).{0,6}(?:喜欢|偏爱|钟意|想要|想用|想试)/.test(clause) ||
+        /^(?:比较|更|最|挺|还是)?(?:喜欢|偏爱|钟意|想要|想用|想试)/.test(clause.trim()) ||
         /(?:还是|感觉|觉得).*(?:更|挺|很|比较)?(?:好看|舒服|合适)/.test(clause) ||
+        /(?:色|粉白|蓝灰).*(?:好看|舒服|合适|不错)/.test(clause) ||
         /\bi\s+(?:like|love|prefer)\b/i.test(clause))
     );
   });

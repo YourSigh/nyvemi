@@ -1,5 +1,6 @@
 export const THEME_REVEAL_MS = 2200;
 export interface ThemeTransitionPorts {
+  settleInput(): Promise<void>;
   prepare(): Promise<boolean>;
   persist(): Promise<void>;
   commit(): void;
@@ -12,12 +13,13 @@ export async function runThemeTransition(
   ports: ThemeTransitionPorts,
   animate = true,
 ): Promise<void> {
-  if (!animate) {
-    await ports.persist();
-    ports.commit();
-    return;
-  }
   try {
+    await ports.settleInput();
+    if (!animate) {
+      await ports.persist();
+      ports.commit();
+      return;
+    }
     if (!(await ports.prepare())) throw new Error('换色特效还没准备好，请再试一下');
     await ports.persist();
     ports.commit();

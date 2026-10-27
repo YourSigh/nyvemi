@@ -19,7 +19,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "app.nyvemi.android",
       "allowBackup": false,
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
+      "permissions": ["android.permission.RECORD_AUDIO"],
       "versionCode": 16
     },
     "scheme": "nyvemi",
@@ -34,7 +34,7 @@
       [
         "expo-image-picker",
         {
-          "microphonePermission": false,
+          "microphonePermission": "允许 Nyvemi 在按住说话时使用麦克风",
           "cameraPermission": false
         }
       ],

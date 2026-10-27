@@ -8,7 +8,7 @@ export async function closeKeyboard(): Promise<void> {
       resolve();
     };
     const subscription = Keyboard.addListener('keyboardDidHide', finish);
-    const timeout = setTimeout(finish, 450);
+    const timeout = setTimeout(finish, 900);
     Keyboard.dismiss();
   });
 }

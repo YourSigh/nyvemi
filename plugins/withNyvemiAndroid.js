@@ -3,7 +3,16 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 module.exports = function withNyvemiAndroid(config) {
   config = withAndroidManifest(config, (c) => {
-    const app = c.modResults.manifest.application[0];
+    // Older generated projects retained a tools:node=remove marker even after
+    // RECORD_AUDIO was removed from blockedPermissions. Replace that stale entry.
+    const manifest = c.modResults.manifest;
+    manifest['uses-permission'] = [
+      ...(manifest['uses-permission'] || []).filter(
+        (p) => p.$['android:name'] !== 'android.permission.RECORD_AUDIO',
+      ),
+      { $: { 'android:name': 'android.permission.RECORD_AUDIO' } },
+    ];
+    const app = manifest.application[0];
     app.$['android:usesCleartextTraffic'] = 'true';
     return c;
   });

@@ -33,6 +33,7 @@ class NyvemiAndroidModule : Module() {
   private var dictation: expo.modules.kotlin.Promise? = null
   private val dictationRequest = 41412
   private val themeTransition = NyvemiThemeTransition()
+  private val voiceInput = NyvemiVoiceInput { id, text -> sendEvent("voicePartial", mapOf("id" to id, "text" to text)) }
   private val channelId = "nyvemi-companions-v1"
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
   private fun manager(ctx: Context): NotificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -91,8 +92,12 @@ class NyvemiAndroidModule : Module() {
       themeTransition.reveal(duration) { promise.resolve(null) }
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("finishThemeTransition") { themeTransition.finish() }.runOnQueue(Queues.MAIN)
-    OnActivityEntersBackground { themeTransition.finish() }
-    OnDestroy { themeTransition.finish(); dictation?.resolve(null); dictation = null }
+    Events("voicePartial")
+    AsyncFunction("startVoice") { id: String -> voiceInput.start(context(), id) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("finishVoice") { id: String, cancel: Boolean, promise: expo.modules.kotlin.Promise -> voiceInput.finish(id, cancel, promise) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("cancelVoice") { id: String -> voiceInput.cancel(id) }.runOnQueue(Queues.MAIN)
+    OnActivityEntersBackground { themeTransition.finish(); voiceInput.cancel() }
+    OnDestroy { voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
     AsyncFunction("dictate") { promise: expo.modules.kotlin.Promise ->
       val activity = appContext.currentActivity
       if (activity == null || dictation != null) { promise.reject("dictation_unavailable", "请稍后重试语音输入", null); return@AsyncFunction }

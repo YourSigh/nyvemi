@@ -7,6 +7,13 @@ import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
   deviceTimeContext(): string;
   dictate(): Promise<string | null>;
+  startVoice(id: string): Promise<void>;
+  finishVoice(id: string, cancel: boolean): Promise<string | null>;
+  cancelVoice(id: string): Promise<void>;
+  addListener(
+    event: 'voicePartial',
+    listener: (event: { id: string; text: string }) => void,
+  ): { remove(): void };
   prepareThemeTransition(): Promise<boolean>;
   revealThemeTransition(duration: number): Promise<void>;
   finishThemeTransition(): Promise<void>;

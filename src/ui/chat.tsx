@@ -1,5 +1,6 @@
 import { useCharacterDebug } from './character/debug';
-import { appendDictation, timeMarkers } from '../chat/presentation';
+import { HoldToTalk, requestVoiceAccess } from './voice';
+import { timeMarkers } from '../chat/presentation';
 import { ScheduledMessages } from './scheduled-messages';
 import Svg, { Path } from 'react-native-svg';
 import { characterChatLayout } from '../character/layout';
@@ -61,7 +62,7 @@ function Arrival({
   );
 }
 export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
-  const { palette, apply } = useTheme();
+  const { palette, apply, transitioning } = useTheme();
   const theme = useMemo(() => characterTheme(palette), [palette]);
   const s = useMemo(() => createStyles(theme), [theme]);
   const runtime = useRuntime();
@@ -77,11 +78,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [messages, setMessages] = useState<Message[]>([]);
   const times = useMemo(() => timeMarkers(messages), [messages]);
   const [dictating, setDictating] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
   const [historyLimit, setHistoryLimit] = useState(100);
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
   const [draft, setDraft] = useState('');
-  const interaction = useCharacterInteraction(runtime.chat, cid, Boolean(draft.trim()));
+  const interaction = useCharacterInteraction(
+    runtime.chat,
+    cid,
+    Boolean(draft.trim()) || dictating,
+  );
   const seen = useRef(new Set<string>());
   const arrivals = useRef(new Set<string>());
   const loaded = useRef(false);
@@ -166,15 +172,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       abort.current?.abort();
     };
   }, [cid]);
-  const send = async (retry?: Message) => {
-    if (sending.current) return;
-    const text = retry?.content ?? draft;
+  const send = async (retry?: Message, spoken?: string) => {
+    if (sending.current || transitioning) return;
+    const text = retry?.content ?? spoken ?? draft;
     if (!text.trim()) return;
     sending.current = true;
     autoScroll.current = true;
     setBusy(true);
     setError('');
-    if (!retry) setDraft('');
+    if (!retry && !spoken) setDraft('');
     abort.current = new AbortController();
     try {
       await runtime.chat.send(
@@ -325,16 +331,20 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             <View style={s.composer}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="语音输入"
-                disabled={busy || dictating}
+                accessibilityLabel={voiceMode ? '切换键盘输入' : '切换按住说话'}
+                disabled={busy || dictating || transitioning}
                 onPress={() => {
-                  setDictating(true);
+                  if (voiceMode) {
+                    setVoiceMode(false);
+                    return;
+                  }
                   setError('');
-                  void bridge()
-                    .dictate()
-                    .then((result) => setDraft((current) => appendDictation(current, result)))
-                    .catch((e) => setError(e instanceof Error ? e.message : '无法打开语音输入'))
-                    .finally(() => setDictating(false));
+                  void closeKeyboard()
+                    .then(requestVoiceAccess)
+                    .then((granted) => {
+                      if (granted) setVoiceMode(true);
+                    })
+                    .catch(() => setError('无法开启麦克风，请检查系统权限'));
                 }}
                 style={{
                   width: 44,
@@ -346,7 +356,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               >
                 <Svg width={20} height={24} viewBox="0 0 24 28">
                   <Path
-                    d="M9 6a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0V6Zm-4 7v2a7 7 0 0 0 14 0v-2M12 22v4M8 26h8"
+                    d={
+                      voiceMode
+                        ? 'M2 6h20v16H2V6Zm4 4h1m3 0h1m3 0h1m3 0h1M6 14h1m3 0h1m3 0h1m3 0h1M7 18h10'
+                        : 'M9 6a3 3 0 0 1 6 0v8a3 3 0 0 1-6 0V6Zm-4 7v2a7 7 0 0 0 14 0v-2M12 22v4M8 26h8'
+                    }
                     fill="none"
                     stroke={theme.textSecondary}
                     strokeWidth={1.7}
@@ -354,29 +368,41 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   />
                 </Svg>
               </Pressable>
-              <TextInput
-                accessibilityLabel="消息"
-                style={s.input}
-                placeholder="说点什么…"
-                placeholderTextColor={theme.textSecondary}
-                selectionColor={theme.primary}
-                cursorColor={theme.primary}
-                value={draft}
-                onChangeText={setDraft}
-                onFocus={() => {
-                  autoScroll.current = true;
-                  requestAnimationFrame(() =>
-                    list.current?.scrollToOffset({ offset: 0, animated: false }),
-                  );
-                }}
-                multiline
-                maxLength={6000}
-              />
-              <Button
-                title={busy ? '…' : '发送'}
-                disabled={busy || !draft.trim()}
-                onPress={() => void send()}
-              />
+              {voiceMode ? (
+                <HoldToTalk
+                  key={cid}
+                  disabled={busy || transitioning}
+                  onActiveChange={setDictating}
+                  onError={setError}
+                  onText={(text) => void send(undefined, text)}
+                />
+              ) : (
+                <>
+                  <TextInput
+                    accessibilityLabel="消息"
+                    style={s.input}
+                    placeholder="说点什么…"
+                    placeholderTextColor={theme.textSecondary}
+                    selectionColor={theme.primary}
+                    cursorColor={theme.primary}
+                    value={draft}
+                    onChangeText={setDraft}
+                    onFocus={() => {
+                      autoScroll.current = true;
+                      requestAnimationFrame(() =>
+                        list.current?.scrollToOffset({ offset: 0, animated: false }),
+                      );
+                    }}
+                    multiline
+                    maxLength={6000}
+                  />
+                  <Button
+                    title={busy ? '…' : '发送'}
+                    disabled={busy || !draft.trim()}
+                    onPress={() => void send()}
+                  />
+                </>
+              )}
             </View>
           </View>
         </View>

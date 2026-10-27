@@ -62,28 +62,33 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       setReducedMotion(value);
       if (value) release();
     });
-    const back = BackHandler.addEventListener('hardwareBackPress', () => locked.current);
     const lifecycle = AppState.addEventListener('change', (state) => {
       if (state !== 'active') release();
     });
     return () => {
       mounted.current = false;
       motion.remove();
-      back.remove();
       lifecycle.remove();
       release();
     };
   }, []);
+  useEffect(() => {
+    if (!transitioning) return;
+    const back = BackHandler.addEventListener('hardwareBackPress', () => true);
+    return () => back.remove();
+  }, [transitioning]);
   const apply = useCallback(async (next: ThemeRecord, persist: () => Promise<void>) => {
     if (locked.current) throw new Error('颜色正在慢慢铺开，稍等一下');
     locked.current = true;
     setTransitioning(true);
     try {
-      await closeKeyboard();
-      await nextPaint();
       const reduce = await AccessibilityInfo.isReduceMotionEnabled().catch(() => false);
       await runThemeTransition(
         {
+          settleInput: async () => {
+            await closeKeyboard();
+            await nextPaint();
+          },
           prepare: () => bridge().prepareThemeTransition(),
           persist,
           commit: () => {
