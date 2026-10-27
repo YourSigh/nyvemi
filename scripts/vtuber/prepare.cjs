@@ -3,16 +3,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { PNG } = require('pngjs');
 const { decode, resize } = require('./psd.cjs');
+const { normalizeName, validateManifest } = require('./material.cjs');
 const { prepareComplete, weldOutfit } = require('./occlusion.cjs');
 function prepare(input, output) {
   const root = path.dirname(input),
     source = JSON.parse(fs.readFileSync(input)),
     outRoot = path.dirname(output);
+  validateManifest(source);
   fs.mkdirSync(outRoot, { recursive: true });
   const parts = source.layers.map((l) => {
     const [left, top, right, bottom] = l.bounding_box.absolute;
     return {
       ...l,
+      name: normalizeName(l.name),
       left,
       top,
       png: resize(decode(path.join(root, l.file)), right - left, bottom - top),
@@ -30,7 +33,7 @@ function prepare(input, output) {
       JSON.stringify(complete.report, null, 2),
     );
   const head = find('head'),
-    hair = find(complete ? 'front_hair' : 'hair'),
+    hair = complete ? complete.parts.get('front_hair') : find('hair'),
     eyes = find('eyes');
   const center = head.left + head.png.width / 2,
     faceWidth = head.png.width;
@@ -121,17 +124,19 @@ function prepare(input, output) {
     emit('handwear left', arm.png, arm.left, arm.top, (x) => x >= center);
     emit('face', head.png, head.left, head.top);
   } else {
-    const outfit = weldOutfit(complete.parts.get('body'), [
-      complete.parts.get('arm_left'),
-      complete.parts.get('arm_right'),
-    ]);
+    const outfit = weldOutfit(
+      complete.parts.get('body'),
+      [complete.parts.get('arm_left'), complete.parts.get('arm_right')].filter(Boolean),
+    );
     for (const [sourceName, target] of [
+      ['back_hair', 'back hair'],
       ['back_hair_left', 'back hair left'],
       ['back_hair_right', 'back hair right'],
       ['neck', 'neck'],
       ['head', 'face'],
     ]) {
       const p = complete.parts.get(sourceName);
+      if (!p) continue;
       emit(target, p.png, p.left, p.top);
       if (sourceName === 'neck') emit('topwear', outfit.png, outfit.left, outfit.top);
     }
@@ -189,7 +194,31 @@ function prepare(input, output) {
           maxY = Math.max(maxY, y);
         }
       }
-    if (maxX <= minX) throw Error(`Cannot locate ${side} iris in source; inspect eye artwork`);
+    if (maxX <= minX) {
+      minX = x1;
+      maxX = x0;
+      minY = h;
+      maxY = 0;
+      color = [0, 0, 0];
+      samples = 0;
+      const margin = (x1 - x0) * 0.17;
+      for (let y = Math.floor(h * 0.35); y < h * 0.94; y++)
+        for (let x = Math.ceil(x0 + margin); x < x1 - margin; x++) {
+          const i = (y * p.width + x) * 4;
+          if (p.data[i + 3] < 200 || Math.max(p.data[i], p.data[i + 1], p.data[i + 2]) > 150)
+            continue;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+          for (let c = 0; c < 3; c++) color[c] += p.data[i + c];
+          samples++;
+        }
+      if (maxX <= minX || maxY - minY < h * 0.18)
+        throw Error(
+          `Cannot locate open ${side} iris; provide front-facing open eyes or repair artwork`,
+        );
+    }
     color = color.map((v) => Math.round(v / Math.max(1, samples)));
     const cx = (minX + maxX) / 2,
       cy = (minY + maxY) / 2,
@@ -232,7 +261,7 @@ function prepare(input, output) {
   }
   const mouth = find('mouth');
   emit('mouth open', mouth.png, mouth.left, mouth.top);
-  emit('front hair', hair.png, hair.left, hair.top, complete ? undefined : crownMask);
+  if (hair) emit('front hair', hair.png, hair.left, hair.top, complete ? undefined : crownMask);
 
   const manifest = { size: source.size, layers };
   fs.writeFileSync(output, JSON.stringify(manifest, null, 2));

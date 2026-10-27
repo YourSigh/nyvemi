@@ -194,7 +194,7 @@ export class SeedreamImageProvider implements ImageProvider {
   async repairBody(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig> {
     const dataUrl = await this.decompositionImage(image);
     const prompt =
-      '只分离并重建一个完整身体图层，命名 body。包含从颈根到腰部连续完整的上衣胸口、躯干、裙子、双腿、袜子和鞋。必须把被玩偶、手臂、头发挡住的胸口与上衣补画完整，上衣覆盖范围必须连续不透明，不要在胸口挖透明洞。保留原角色服装风格、姿势与对齐。不要把头部、头发、五官、手臂、玩偶放在身体层。只输出背景底图和 body 图层。';
+      '只分离并重建一个完整身体图层，命名 body。保留原图实际存在的服装、躯干和下肢，按原图保留外套、裤装或裙装，不要擅自改变服装类别、性别感、肤色或配色。补画被手臂、头发或道具挡住的服装和躯干，身体与衣领连接处连续不透明，不要挖透明洞。保留姿势与对齐。不要把头部、头发、五官、手臂或道具重复放在身体层。只输出背景底图和 body 图层。';
     return this.cached(
       'repair-body-v1',
       [await this.assets.fingerprint(image), rig],

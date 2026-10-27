@@ -92,6 +92,10 @@ export function mountInteractions(
         pat: '嗯…',
         poke: '诶？',
         lookAround: '让我看看',
+        nod: '嗯嗯',
+        shake: '唔～',
+        wink: '😉',
+        smile: '嘿嘿',
       }[kind],
     );
     notify({ type: 'interaction', action: kind });
@@ -108,6 +112,10 @@ export function mountInteractions(
     }
   };
   for (const [label, kind] of [
+    ['点点头', 'nod'],
+    ['摇摇头', 'shake'],
+    ['眨眨眼', 'wink'],
+    ['笑一下', 'smile'],
     ['投喂', 'eat'],
     ['招手', 'wave'],
     ['伸懒腰', 'stretch'],

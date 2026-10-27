@@ -19,6 +19,8 @@ async function main() {
   for (const file of [
     'scripts/vtuber/prepare.cjs',
     'scripts/vtuber/occlusion.cjs',
+    'scripts/vtuber/material.cjs',
+    'scripts/vtuber/verify-runtime.cjs',
     'scripts/vtuber/psd.cjs',
     'scripts/vtuber/physics.py',
   ])
@@ -95,6 +97,8 @@ async function main() {
     );
     const model = path.join(output, 'web-physics', `${name}.p2lrt`);
     if (!fs.existsSync(model)) throw Error('Compiler produced no model');
+    const { verifyRig } = require('./verify-runtime.cjs');
+    await verifyRig(model, path.join(output, 'runtime-report.json'));
     fs.writeFileSync(
       receipt,
       JSON.stringify(

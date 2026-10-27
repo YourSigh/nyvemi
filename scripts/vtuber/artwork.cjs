@@ -2,8 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { root, env, b64, request, download } = require('./ark.cjs');
 const { rigPortrait, completeLayers } = require('./prompts.cjs');
-const constraints =
-  'Simplified animation-ready chibi VTuber character reference. Straight front view, upright head, neutral standing pose, entire character visible with padding, arms relaxed away from torso, hands do not cover face or body, legs naturally apart. Clearly separated simple hair masses, reduce fine strands, dangling charms and crossed structures. Flat clean colors with soft shading, plain background, no text, no layout sheet, no multiple views. Both eyes fully open, small open mouth with visible dark mouth interior. Preserve requested identity and palette.';
+const constraints = rigPortrait;
 async function main() {
   const op = process.argv[2],
     input = process.argv[3];

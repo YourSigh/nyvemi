@@ -130,3 +130,45 @@ it('keeps default motion small, reserves large arm actions and closes eyelids sm
   expect(eyes.some((v) => v > 0.15 && v < 0.85)).toBe(true);
   expect(Math.max(...eyes.slice(1).map((v, i) => Math.abs(v - eyes[i])))).toBeLessThan(0.35);
 });
+
+it('enables only actions backed by movable parameters and plays bounded small gestures', () => {
+  const values = new Map<string, number>();
+  const ids = ['ParamAngleX', 'ParamAngleY', 'ParamEyeLOpen', 'ParamEyeROpen', 'ParamMouthForm'];
+  const d = createDriver(
+    {
+      parameterRanges: () =>
+        ids.map((id) => ({
+          id,
+          min: id.includes('Eye') ? 0 : -30,
+          max: id.includes('Eye') ? 1 : 30,
+          default: id.includes('Eye') ? 1 : 0,
+        })),
+      setParameter: (id, v) => values.set(id, v),
+      behaviors: () => {},
+      update: () => {},
+      draw: () => {},
+    },
+    () => 0.5,
+  );
+  for (const action of ['nod', 'shake', 'wink', 'smile'] as const) {
+    expect(d.supports(action)).toBe(true);
+    expect(d.play(action)).toBe(true);
+    const eyes: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      d.step(0.05);
+      eyes.push(values.get('ParamEyeLOpen')!);
+      expect(Math.abs(values.get('ParamAngleX')!)).toBeLessThanOrEqual(3);
+    }
+    if (action === 'wink') expect(Math.min(...eyes)).toBeLessThan(0.2);
+    expect(d.action()).toBeUndefined();
+  }
+  const empty = createDriver({
+    parameterRanges: () => [],
+    setParameter: () => {},
+    behaviors: () => {},
+    update: () => {},
+    draw: () => {},
+  });
+  expect(empty.supports('wink')).toBe(false);
+  expect(empty.play('nod')).toBe(false);
+});

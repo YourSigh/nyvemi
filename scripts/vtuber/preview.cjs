@@ -54,10 +54,16 @@ async function main() {
     ],
     { stdio: ['pipe', 'ignore', 'ignore'] },
   );
-  const scenes = ['idle', 'thinking', 'talking', 'talking', 'happy', 'shy', 'sleepy', 'idle'];
-  for (let f = 0; f < fps * scenes.length; f++) {
-    const state = scenes[Math.floor(f / fps)];
-    driver.setInput({ state });
+  const actions = process.argv[4] === 'actions';
+  const scenes = actions
+    ? ['nod', 'shake', 'wink', 'smile']
+    : ['idle', 'thinking', 'talking', 'talking', 'happy', 'shy', 'sleepy', 'idle'];
+  const sceneFrames = fps * (actions ? 3 : 1);
+  for (let f = 0; f < sceneFrames * scenes.length; f++) {
+    const scene = scenes[Math.floor(f / sceneFrames)];
+    driver.setInput({ state: actions ? 'idle' : scene });
+    if (actions && f % sceneFrames === 0 && !driver.play(scene))
+      throw Error(`Unsupported preview action: ${scene}`);
     driver.step(1 / fps);
     if (!rt.p2l_render(rig, at, size, size, 0, 1)) throw Error('Frame render failed');
     const b = new Uint8Array(rt.memory.buffer, at, size * size * 4),
@@ -69,11 +75,11 @@ async function main() {
       frame[i + 2] = Math.round(frame[i + 2] * a + 250 * (1 - a));
       frame[i + 3] = 255;
     }
-    if (f % fps === Math.floor(fps / 2)) {
+    if (f % sceneFrames === Math.floor(fps / 2)) {
       const png = new PNG({ width: size, height: size });
       png.data.set(frame);
       fs.writeFileSync(
-        path.join(path.dirname(out), `pose-${Math.floor(f / fps)}-${state}.png`),
+        path.join(path.dirname(out), `pose-${Math.floor(f / sceneFrames)}-${scene}.png`),
         PNG.sync.write(png),
       );
     }
