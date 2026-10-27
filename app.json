@@ -2,12 +2,12 @@
   "expo": {
     "name": "Nyvemi",
     "slug": "nyvemi",
-    "version": "0.10.1",
+    "version": "0.11.0",
     "orientation": "portrait",
     "icon": "./assets/nyvemi-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-empty.png",
+      "image": "./assets/nyvemi-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFF7FA"
     },
@@ -20,7 +20,7 @@
       "package": "app.nyvemi.android",
       "allowBackup": false,
       "permissions": ["android.permission.RECORD_AUDIO"],
-      "versionCode": 16
+      "versionCode": 17
     },
     "scheme": "nyvemi",
     "platforms": ["android"],

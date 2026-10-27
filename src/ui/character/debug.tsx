@@ -34,6 +34,7 @@ export function CharacterDebugControls({ characterId }: { characterId: string })
     <Card>
       <Text style={{ color: theme.text, fontSize: 18, fontWeight: '600' }}>角色动作</Text>
       <CharacterStage
+        allowMockPreview
         name="动作预览"
         height={230}
         state={debug?.state ?? 'idle'}

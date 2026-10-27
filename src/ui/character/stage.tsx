@@ -1,3 +1,4 @@
+import { hasCharacterVisual } from '../../character/visual';
 import type { MeshAvatar } from '../../avatar/model';
 import { MeshAvatarStage } from './mesh';
 import type { MotionCommand } from '../../character/motion-scheduler';
@@ -103,10 +104,11 @@ function LegacyCharacterStage({
 export function CharacterStage(
   props: Parameters<typeof LegacyCharacterStage>[0] & {
     meshAvatar?: MeshAvatar;
+    allowMockPreview?: boolean;
     onMeshReady?: (ready: boolean) => void;
   },
 ) {
-  if (!props.meshAvatar && !props.rig) return null;
+  if (!hasCharacterVisual(props, props.allowMockPreview)) return null;
   return props.meshAvatar ? (
     <MeshAvatarStage
       model={props.meshAvatar}

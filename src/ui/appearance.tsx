@@ -377,13 +377,15 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             state={awake.complete ? previewState : awake.state}
           />
           <Note>
-            {!awake.complete
-              ? elapsed < 1400
-                ? '正在让她睁开眼睛'
-                : elapsed < 2600
-                  ? '正在让她学会眨眼'
-                  : '正在让她动起来'
-              : '醒来了。'}
+            {!meshAvatar && (!rig || rig.source === 'mock')
+              ? '可以先试试桶砸皮套，或导入你喜欢的角色'
+              : !awake.complete
+                ? elapsed < 1400
+                  ? '正在让她睁开眼睛'
+                  : elapsed < 2600
+                    ? '正在让她学会眨眼'
+                    : '正在让她动起来'
+                : '醒来了。'}
           </Note>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(
