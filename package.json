@@ -2,7 +2,7 @@
   "name": "nyvemi",
   "description": "Android-first local-first AI companion",
   "license": "AGPL-3.0-only",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

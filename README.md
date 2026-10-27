@@ -12,7 +12,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.8.0** adds a real PSD2Live mesh/deformer/physics runtime to Android and reduces the character stage to roughly one third of the screen. A simplified Tongza reference has passed the actual Seedream → source layers → layered PSD → automatic rig → offline WASM/WebGL playback chain. The included sample has 17 meshes, 6,980 vertices, 24 deformers, 26 parameters and 7 physics groups. **Rig compilation currently runs on the local development computer, not on the phone.** Android can preview the bundled sample or import a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [pipeline, reproduction and limitations](docs/VTUBER_PIPELINE.md). No physical-device test was performed.
+This is an early MVP implementation. **0.9.0** adds touch/drag, feeding, waving and stretching on an arm-skeleton rig, building on a real PSD2Live mesh/deformer/physics runtime to Android and reduces the character stage to roughly one third of the screen. A simplified Tongza reference has passed the actual Seedream → source layers → layered PSD → automatic rig → offline WASM/WebGL playback chain. The included sample has 18 meshes, 34 parameters, an arm skeleton and independent physical groups. **Rig compilation currently runs on the local development computer, not on the phone.** Android can preview the bundled sample or import a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [pipeline, reproduction and limitations](docs/VTUBER_PIPELINE.md). No physical-device test was performed.
 
 ## Local-first and BYOK
 
@@ -229,3 +229,9 @@ First creation includes appearance setup before Chat. Choose text, text plus ref
 Settings → 角色形象 → 试试简化桶砸皮套 previews a bundled real mesh rig, then saves it without changing the person or chat history. `.p2lrt` import works for other characters. Head X/Y/Z, independent gaze/blink, mouth opening/form, body angle, breath and separate ponytail/accessory/outfit physics run inside PSD2Live's MIT runtime. Chat states set parameter targets and never rotate or scale the whole model View. Existing cutout rigs remain compatible but are not described as VTuber models.
 
 The automatic source-to-rig toolchain is local desktop tooling (`npm run avatar:setup`, `avatar:candidates`, `avatar:split`, `avatar:rig`), with an optional reference and cached paid image responses. The phone plays its outputs offline; it does not contain the desktop compiler. Character bundles with mesh avatars use v4. See [full implementation and validation](docs/VTUBER_PIPELINE.md).
+
+## Character interaction (0.9.0)
+
+Tap her head to pat, tap her body to get a reaction, or drag her within the stage. Long-press or tap **⋯** for **投喂 / 招手 / 伸懒腰 / 停一下 / 归位**. Feeding drives arm bones, chewing, eyes and head for eight seconds; the bowl and chopsticks follow transformed hand geometry. Tap the bowl for another serving. Idle behavior occasionally looks around or stretches. Thinking/talking takes priority and stops these actions. These interactions are local and do not call a model or create conversation messages.
+
+The character still uses roughly one third of the screen and shrinks with the keyboard. Existing byte-identical 0.8 built-in models upgrade automatically; imported custom rigs are preserved. Actions needing missing arm parameters are disabled for those models. See [interaction details and validation](docs/CHARACTER_INTERACTIONS.md).
