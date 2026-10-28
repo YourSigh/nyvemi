@@ -139,23 +139,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         await runtime.heartbeat.openChat(cid);
         await refresh();
       })().catch(() => setError('读取聊天失败'));
-      const active = async () => {
-        const s = await runtime.store.get('settings', cid);
-        if (s) await runtime.store.put('settings', { ...s, lastActiveAt: Date.now() });
-      };
-      void active().catch(() => {});
-      const timer = setInterval(() => void active().catch(() => {}), 60000);
+      // App-level activity tracking owns lastActiveAt and checks AppState. A focused screen
+      // remains mounted in the background; a screen timer must never keep the user "active".
       const incoming = setInterval(() => {
         if (AppState.currentState === 'active') void refresh().catch(() => {});
       }, 3000);
       const subscription = AppState.addEventListener('change', (state) => {
         if (state === 'active') {
-          void active().catch(() => {});
           void refresh().catch(() => {});
         }
       });
       return () => {
-        clearInterval(timer);
         clearInterval(incoming);
         subscription.remove();
       };

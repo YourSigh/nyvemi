@@ -5,12 +5,8 @@ import android.os.Handler
 import android.os.Looper
 import org.json.JSONObject
 import androidx.work.*
-import com.facebook.react.ReactApplication
 import com.facebook.react.bridge.Arguments
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
-import com.facebook.react.jstasks.HeadlessJsTaskContext
 import kotlinx.coroutines.*
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -19,8 +15,6 @@ object NyvemiRequestedWork {
   private val handler = Handler(Looper.getMainLooper())
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val timers = ConcurrentHashMap<String, Pair<String, Runnable>>()
-  private val receipts = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
-  private val flights = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
   private fun name(id: String) = "nyvemi-requested:$id"
   private fun tag(cid: String) = "nyvemi-requested-character:$cid"
 
@@ -69,7 +63,7 @@ object NyvemiRequestedWork {
     // The durable worker remains the recovery path after process death / Doze.
     val timer = Runnable {
       timers.remove(id)
-      if (NyvemiPresenceService.instance != null) scope.launch { execute(context.applicationContext, id, "foreground") }
+      if (NyvemiPresenceService.instance != null) scope.launch { execute(context.applicationContext, id, "presence_deadline") }
     }
     timers.put(id, cid to timer)?.let { handler.removeCallbacks(it.second) }
     handler.postDelayed(timer, (dueAt - System.currentTimeMillis()).coerceAtLeast(0))
@@ -88,56 +82,23 @@ object NyvemiRequestedWork {
     WorkManager.getInstance(context).cancelAllWorkByTag(tag(cid)).result.get()
   }
 
-  fun complete(runId: String, done: Boolean) { receipts[runId]?.complete(done) }
+  fun complete(runId: String, done: Boolean) { NyvemiHeadlessRun.complete(runId, done) }
 
-  suspend fun execute(context: Context, intentionId: String, source: String = "worker"): Boolean {
-    val result = CompletableDeferred<Boolean>()
-    val existing = flights.putIfAbsent(intentionId, result)
-    if (existing != null) return existing.await()
-    val runId = UUID.randomUUID().toString()
-    val receipt = CompletableDeferred<Boolean>()
-    receipts[runId] = receipt
-    var taskContext: HeadlessJsTaskContext? = null
-    var taskId: Int? = null
-    var done = false
-    var outcome = "runtime_unavailable"
-    record(context, intentionId, "starting_runtime", mapOf("startedAt" to System.currentTimeMillis(), "source" to source))
-    try {
-      done = withTimeout(150_000) {
-        val host = (context.applicationContext as ReactApplication).reactHost
-          ?: return@withTimeout false
-        val startup = withContext(Dispatchers.Main) { host.start() }
-        val ready = withContext(Dispatchers.IO) { startup.waitForCompletion(30, TimeUnit.SECONDS) }
-        if (!ready || startup.isFaulted() || startup.isCancelled()) return@withTimeout false
-        withContext(Dispatchers.Main) {
-          val reactContext = host.currentReactContext ?: error("React runtime unavailable")
-          taskContext = HeadlessJsTaskContext.getInstance(reactContext)
-          taskId = taskContext!!.startTask(HeadlessJsTaskConfig("NyvemiRequestedDelivery", Arguments.createMap().apply {
-            putString("intentionId", intentionId)
-            putString("runId", runId)
-          }, 140_000, true))
+  suspend fun execute(context: Context, intentionId: String, source: String = "worker"): Boolean =
+    NyvemiHeadlessRun.execute(context, "intention:$intentionId", "NyvemiRequestedDelivery", 150_000,
+      data = { runId -> Arguments.createMap().apply {
+        putString("intentionId", intentionId)
+        putString("runId", runId)
+      } },
+      record = { stage ->
+        val timing = when (stage) {
+          "starting_runtime" -> mapOf<String, Any>("startedAt" to System.currentTimeMillis(), "source" to source)
+          "running_js" -> emptyMap()
+          else -> mapOf<String, Any>("finishedAt" to System.currentTimeMillis(), "outcome" to stage)
         }
-        record(context, intentionId, "running_js")
-        outcome = "waiting_for_receipt"
-        receipt.await().also { outcome = if (it) "finished" else "retry_pending" }
+        record(context, intentionId, stage, timing)
       }
-    } catch (cancelled: CancellationException) {
-      outcome = if (cancelled is TimeoutCancellationException) "runtime_timeout" else "cancelled"
-      if (cancelled !is TimeoutCancellationException) throw cancelled
-    } catch (_: Exception) {
-      outcome = "runtime_error"
-      // No prompt, model response, URL or credential is logged by native scheduling.
-    } finally {
-      record(context, intentionId, outcome, mapOf("finishedAt" to System.currentTimeMillis(), "outcome" to outcome))
-      receipts.remove(runId)
-      result.complete(done)
-      flights.remove(intentionId, result)
-      withContext(NonCancellable + Dispatchers.Main) {
-        taskId?.let { if (taskContext?.isTaskRunning(it) == true) taskContext?.finishTask(it) }
-      }
-    }
-    return done
-  }
+    )
 }
 
 class NyvemiRequestedWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

@@ -125,6 +125,9 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("cancelRequested") { id: String -> NyvemiRequestedWork.cancel(context(), id) }
     AsyncFunction("cancelRequestedCharacter") { cid: String -> NyvemiRequestedWork.cancelCharacter(context(), cid) }
     Function("completeRequestedRun") { runId: String, done: Boolean -> NyvemiRequestedWork.complete(runId, done) }
+    AsyncFunction("registerMaintenance") { NyvemiMaintenance.register(context().applicationContext) }
+    AsyncFunction("maintenanceState") { NyvemiMaintenance.status(context().applicationContext) }
+    Function("completeMaintenanceRun") { runId: String, done: Boolean -> NyvemiHeadlessRun.complete(runId, done) }
     Function("presenceState") {
       val prefs = NyvemiPresenceService.preferences(context())
       mapOf("enabled" to prefs.getBoolean("enabled", false), "running" to (NyvemiPresenceService.instance != null), "characterId" to (prefs.getString("characterId", "") ?: ""))

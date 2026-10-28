@@ -1,3 +1,4 @@
+import { trackVisibleActivity } from './activity';
 import { SettingsSchema, type Settings } from '../domain/models';
 import type { Storage } from '../storage/store';
 export type EditableSettings = Pick<
@@ -29,9 +30,7 @@ export async function updateSettings(
     return next;
   });
 }
+// Kept for existing domain callers; UI should use trackVisibleActivity with a live visibility guard.
 export async function markAppActive(store: Storage, now = Date.now()): Promise<void> {
-  await store.atomic(async (tx) => {
-    for (const settings of await tx.list('settings'))
-      await tx.put('settings', { ...settings, lastActiveAt: now });
-  });
+  await trackVisibleActivity(store, () => true, now);
 }

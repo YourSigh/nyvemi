@@ -35,30 +35,3 @@ export function idleActivity(
     return '记着没聊完的事，等合适的时候再找你';
   return '安静待一会儿，有值得分享的小事再找你';
 }
-export interface PresenceLoopDependencies {
-  state(): PresenceState;
-  online(): boolean;
-  cycle(): Promise<void>;
-  idle(online: boolean): Promise<void>;
-  error(): Promise<void>;
-  sleep(ms: number): Promise<void>;
-  now(): number;
-}
-export async function runPresenceLoop(deps: PresenceLoopDependencies): Promise<void> {
-  let nextCycle = 0;
-  while (deps.state().enabled && deps.state().running) {
-    const online = deps.online();
-    if (online && deps.now() >= nextCycle) {
-      // At most one local cycle per 10 minutes; heartbeat gates decide whether a model is needed.
-      nextCycle = deps.now() + 10 * 60000;
-      try {
-        await deps.cycle();
-      } catch {
-        await deps.error();
-      }
-    }
-    if (!deps.state().running || !deps.state().enabled) break;
-    await deps.idle(online);
-    await deps.sleep(60000);
-  }
-}

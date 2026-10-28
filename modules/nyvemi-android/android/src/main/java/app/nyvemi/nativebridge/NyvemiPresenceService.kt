@@ -1,5 +1,11 @@
 package app.nyvemi.nativebridge
 
+import android.app.Service
+import android.os.IBinder
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.SystemClock
+import kotlinx.coroutines.*
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -10,13 +16,12 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import com.facebook.react.HeadlessJsTaskService
-import com.facebook.react.bridge.Arguments
-import com.facebook.react.jstasks.HeadlessJsTaskConfig
 
 /** User-started, visible companion session. No alarms, silent audio, or automatic boot launch. */
-class NyvemiPresenceService : HeadlessJsTaskService() {
-  private var taskStarted = false
+class NyvemiPresenceService : Service() {
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  private var ticker: Job? = null
+  private var fullCycle: Job? = null
   private var displayCharacter = ""
   private var displayName = "Nyvemi"
   private var displayText = "正在接上之前的相处"
@@ -42,12 +47,29 @@ class NyvemiPresenceService : HeadlessJsTaskService() {
     displayCharacter = prefs.getString("characterId", "") ?: ""
     displayName = prefs.getString("name", "Nyvemi") ?: "Nyvemi"
     ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(), if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0)
-    if (!taskStarted) {
-      taskStarted = true
-      startTask(HeadlessJsTaskConfig("NyvemiPresence", Arguments.createMap(), 0, true))
+    if (ticker?.isActive != true) ticker = scope.launch {
+      val cadence = NyvemiPresenceCadence()
+      while (isActive && preferences(this@NyvemiPresenceService).getBoolean("enabled", false)) {
+        val connectivity = getSystemService(ConnectivityManager::class.java)
+        val online = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+          ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+        if (online) {
+          // Separate lanes: slow RSS/extraction must not block a due conversation intention.
+          if (fullCycle?.isActive != true && cadence.fullDue(SystemClock.elapsedRealtime())) {
+            fullCycle = launch {
+              val done = NyvemiMaintenance.execute(applicationContext, true, "presence_service")
+              cadence.fullFinished(SystemClock.elapsedRealtime(), done)
+            }
+          }
+          NyvemiMaintenance.execute(applicationContext, false, "presence_service")
+        } else update(displayCharacter, displayName, "暂时离线，等网络恢复再接上")
+        // Native coroutine delay, independent of RN foreground frame/JS timer lifecycle.
+        delay(30_000)
+      }
     }
     return START_STICKY
   }
+  override fun onBind(intent: Intent?): IBinder? = null
   private fun notification(): android.app.Notification {
     val launch = packageManager.getLaunchIntentForPackage(packageName)!!.apply {
       action = Intent.ACTION_VIEW
@@ -71,6 +93,7 @@ class NyvemiPresenceService : HeadlessJsTaskService() {
   }
   override fun onDestroy() {
     instance = null
+    scope.cancel()
     // Keep preference on OS destruction for START_STICKY recovery; explicit stop clears it.
     super.onDestroy()
   }

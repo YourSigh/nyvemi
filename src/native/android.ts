@@ -4,7 +4,17 @@ import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
+export interface MaintenanceState {
+  fast: { stage: string; source: string; startedAt: number; finishedAt: number; updatedAt: number };
+  full: { stage: string; source: string; startedAt: number; finishedAt: number; updatedAt: number };
+  workStates: string[];
+  batteryUnrestricted: boolean;
+  deviceIdle: boolean;
+}
 interface AndroidBridge {
+  registerMaintenance(): Promise<void>;
+  maintenanceState(): Promise<MaintenanceState>;
+  completeMaintenanceRun(runId: string, done: boolean): void;
   deviceTimeContext(): string;
   dictate(): Promise<string | null>;
   startVoice(id: string): Promise<void>;

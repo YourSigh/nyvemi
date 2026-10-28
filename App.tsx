@@ -9,7 +9,7 @@ import { AppState, View } from 'react-native';
 import { bridge, requestNotificationsOnLaunch } from './src/native/android';
 import { resumeCompanionPresence } from './src/native/presence';
 import { registerHeartbeat } from './src/native/background';
-import { markAppActive } from './src/application/settings';
+import { trackVisibleActivity } from './src/application/activity';
 import { InterviewScreen } from './src/ui/interview';
 import { UsageScreen } from './src/ui/usage';
 import { ExperiencesScreen } from './src/ui/experiences';
@@ -90,8 +90,9 @@ function Application() {
       .catch(() => runtime.diagnostics.error('', 'background_registration'))
       .catch(() => undefined);
     const active = () => {
-      if (AppState.currentState === 'active')
-        void markAppActive(runtime.store).catch(() => undefined);
+      void trackVisibleActivity(runtime.store, () => AppState.currentState === 'active').catch(
+        () => undefined,
+      );
     };
     const resume = () => {
       active();
