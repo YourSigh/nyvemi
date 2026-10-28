@@ -1,4 +1,5 @@
 import { it, expect, vi, beforeEach } from 'vitest';
+import { registerHeartbeat } from '../src/native/background';
 const mocks = vi.hoisted(() => ({
   tasks: new Map<string, () => (data: unknown) => Promise<void>>(),
   getRuntime: vi.fn(),
@@ -32,7 +33,6 @@ vi.mock('../src/native/android', () => ({
 }));
 vi.mock('../src/application/runtime', () => ({ getRuntime: mocks.getRuntime }));
 vi.mock('../src/proactive/heartbeat/driver', () => ({ runBackgroundCycle: mocks.cycle }));
-import { registerHeartbeat } from '../src/native/background';
 function runtime() {
   return {
     heartbeat: { runRequested: vi.fn(), runContinuations: vi.fn(), runReconnects: vi.fn() },

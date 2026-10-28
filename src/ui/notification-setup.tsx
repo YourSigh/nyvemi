@@ -1,3 +1,6 @@
+import { backgroundSummary } from '../proactive/background-health';
+import { registerHeartbeat } from '../native/background';
+import { resumeCompanionPresence } from '../native/presence';
 import { deliveryReport, deliverySummary } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
@@ -12,19 +15,24 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
   const [allowed, setAllowed] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [health, setHealth] = useState('');
+  const [background, setBackground] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const report = useCallback(
-    () =>
+    async () =>
       deliveryReport(runtime.store, characterId, (id) => bridge().intentionWorkState(id), {
         notifications: bridge().canNotify(),
         online: bridge().hasNetwork(),
         presenceRunning: bridge().presenceState().running,
+        background: await bridge().maintenanceState(),
       }),
     [runtime, characterId],
   );
   const refresh = useCallback(async () => {
     setAllowed(bridge().canNotify());
+    setBackground(
+      backgroundSummary(await bridge().maintenanceState(), bridge().presenceState().running),
+    );
     if (expanded) setHealth(deliverySummary(await report()));
   }, [expanded, report]);
   useFocusEffect(
@@ -84,7 +92,7 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
           secondary
           onPress={() => void act(() => bridge().openBatterySettings())}
         />
-        <Note>后台收不到来信时，可允许后台运行或选择「不限制」。</Note>
+        <Note>{background}</Note>
       </Card>
       <Card>
         <Pressable
@@ -125,7 +133,13 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
               title="修复后台任务"
               secondary
               disabled={busy}
-              onPress={() => void act(() => runtime.syncIntentionWork())}
+              onPress={() =>
+                void act(async () => {
+                  await registerHeartbeat();
+                  await runtime.syncIntentionWork();
+                  await resumeCompanionPresence();
+                })
+              }
             />
             <Button
               title="分享来信诊断"

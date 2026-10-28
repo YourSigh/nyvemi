@@ -5,11 +5,9 @@ import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import * as BackgroundTask from 'expo-background-task';
 import { id, type NotificationRecord } from '../domain/models';
 import { androidNotifications, bridge } from '../native/android';
 import { runBackgroundCycle } from '../proactive/heartbeat/driver';
-import { HEARTBEAT_TASK } from '../native/background';
 import * as TaskManager from 'expo-task-manager';
 import { useRuntime } from './context';
 import { Button, Card, ErrorText, Heading, Note, Page } from './components';
@@ -47,7 +45,11 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       Prompt: diagnostics.filter((d) => d.characterId === cid && d.kind === 'prompt'),
       Error: diagnostics.filter((d) => d.kind === 'error'),
       抽取队列: await runtime.store.list('extractions', cid, 60),
-      后台注册: await TaskManager.getRegisteredTasksAsync(),
+      后台注册: await bridge().maintenanceState(),
+      旧版任务: await TaskManager.getRegisteredTasksAsync(),
+      后台执行: diagnostics.filter(
+        (d) => typeof d.data.event === 'string' && d.data.event.startsWith('maintenance_'),
+      ),
       常驻状态: bridge().presenceState(),
       来信执行链路: await deliveryReport(
         runtime.store,
@@ -57,6 +59,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
           notifications: bridge().canNotify(),
           online: bridge().hasNetwork(),
           presenceRunning: bridge().presenceState().running,
+          background: await bridge().maintenanceState(),
         },
       ),
     });
@@ -140,16 +143,10 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
         />
         {__DEV__ ? (
           <Button
-            title="触发真实 WorkManager Worker（Debug）"
+            title="排入真实后台检查（Debug，可能调用模型）"
             secondary
             disabled={busy}
-            onPress={() =>
-              void run(async () => {
-                if (!(await TaskManager.isTaskRegisteredAsync(HEARTBEAT_TASK)))
-                  throw new Error('未注册');
-                await BackgroundTask.triggerTaskWorkerForTestingAsync();
-              })
-            }
+            onPress={() => void run(() => bridge().enqueueMaintenanceCheck())}
           />
         ) : null}
         <Button

@@ -1,3 +1,4 @@
+import { backgroundSnapshot, type BackgroundHealth } from './background-health';
 import { interactionState } from '../conversation/context';
 import type { Storage } from '../storage/store';
 export interface NativeDeliveryState {
@@ -15,7 +16,12 @@ export async function deliveryReport(
   store: Storage,
   characterId: string,
   native: (id: string) => Promise<NativeDeliveryState>,
-  environment: { notifications: boolean; online: boolean; presenceRunning: boolean },
+  environment: {
+    notifications: boolean;
+    online: boolean;
+    presenceRunning: boolean;
+    background?: BackgroundHealth;
+  },
   now = Date.now(),
 ) {
   const tasks = (await store.list('intentions', characterId, 100)).slice(0, 12);
@@ -60,12 +66,13 @@ export async function deliveryReport(
     });
   }
   return {
-    reportVersion: 1,
+    reportVersion: 2,
     generatedAt: now,
     environment: {
       notifications: environment.notifications,
       online: environment.online,
       presenceRunning: environment.presenceRunning,
+      background: environment.background ? backgroundSnapshot(environment.background) : undefined,
     },
     unansweredProactiveMessages: interaction.unansweredCount,
     silentMinutes: interaction.silentMinutes,

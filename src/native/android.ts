@@ -1,19 +1,14 @@
+import type { BackgroundHealth } from '../proactive/background-health';
 import type { NativeDeliveryState } from '../proactive/delivery-report';
 import type { PresenceState } from '../presence/loop';
 import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
-export interface MaintenanceState {
-  fast: { stage: string; source: string; startedAt: number; finishedAt: number; updatedAt: number };
-  full: { stage: string; source: string; startedAt: number; finishedAt: number; updatedAt: number };
-  workStates: string[];
-  batteryUnrestricted: boolean;
-  deviceIdle: boolean;
-}
 interface AndroidBridge {
   registerMaintenance(): Promise<void>;
-  maintenanceState(): Promise<MaintenanceState>;
+  maintenanceState(): Promise<BackgroundHealth>;
+  enqueueMaintenanceCheck(): Promise<void>;
   completeMaintenanceRun(runId: string, done: boolean): void;
   deviceTimeContext(): string;
   dictate(): Promise<string | null>;

@@ -19,6 +19,12 @@ object NyvemiMaintenance {
     WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, work).result.get()
   }
 
+  fun enqueueNow(context: Context) {
+    val work = OneTimeWorkRequestBuilder<NyvemiMaintenanceWorker>()
+      .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+    WorkManager.getInstance(context).enqueueUniqueWork("$WORK:manual", ExistingWorkPolicy.KEEP, work).result.get()
+  }
+
   suspend fun execute(context: Context, full: Boolean, source: String): Boolean {
     val mode = if (full) "full" else "fast"
     return NyvemiHeadlessRun.execute(context, "maintenance:$mode", "NyvemiMaintenance", if (full) 480_000 else 150_000,
