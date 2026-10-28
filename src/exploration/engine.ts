@@ -37,7 +37,8 @@ export class ExplorationEngine {
     try {
       const settings = await this.store.get('settings', characterId);
       const c = await this.store.get('characters', characterId);
-      if (!c || !settings?.proactiveEnabled) return 'disabled';
+      if (!c || !settings?.proactiveEnabled || settings.explorationEnabled === false)
+        return 'disabled';
       if (isQuietHour(now, settings.quietStart, settings.quietEnd)) return 'quiet_hours';
       if (
         settings.lastExplorationAt !== undefined &&
@@ -66,6 +67,13 @@ export class ExplorationEngine {
         .sort((a, b) => b.score - a.score)[0];
       if (!selected)
         return await log('no_interesting_unseen_content', { candidates: candidates.length });
+      const freshSettings = await this.store.get('settings', characterId);
+      if (
+        !(await this.store.get('characters', characterId)) ||
+        !freshSettings?.proactiveEnabled ||
+        freshSettings.explorationEnabled === false
+      )
+        return await log('cancelled_during_fetch');
       const v = selected.v;
       const experience: Experience = {
         id: id(),

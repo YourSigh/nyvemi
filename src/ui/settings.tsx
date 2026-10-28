@@ -246,6 +246,16 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
               }
             />
             <Toggle
+              title="让她偶尔逛逛 B 站"
+              value={settings?.explorationEnabled ?? true}
+              disabled={busy || !settings}
+              onChange={(v) =>
+                void act(async () => {
+                  setSettings(await updateSettings(runtime.store, cid, { explorationEnabled: v }));
+                })
+              }
+            />
+            <Toggle
               title="常驻陪伴"
               value={Boolean(presence?.running && presence.characterId === cid)}
               disabled={busy || !character}

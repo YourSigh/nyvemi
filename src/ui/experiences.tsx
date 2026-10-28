@@ -36,11 +36,15 @@ export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
           <Card key={e.id}>
             <Note>
               {new Date(e.createdAt).toLocaleString()} ·{' '}
-              {e.source.startsWith('rss:')
-                ? '从订阅中遇见'
-                : e.source === 'conversation'
-                  ? '你们聊过'
-                  : '此时此地'}
+              {e.source === 'bilibili'
+                ? '在 B 站刷到 · 标题与简介'
+                : e.source === 'mock-bilibili'
+                  ? '测试探索 · Mock'
+                  : e.source.startsWith('rss:')
+                    ? '从订阅中遇见'
+                    : e.source === 'conversation'
+                      ? '你们聊过'
+                      : '此时此地'}
             </Note>
             <Text style={{ color: palette.ink, fontSize: 17, fontWeight: '500' }}>
               {timeLabels[e.title] ?? e.title}

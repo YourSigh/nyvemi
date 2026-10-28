@@ -1,3 +1,4 @@
+import { serializeDatabase } from '../src/storage/serialized';
 import { it, expect, vi } from 'vitest';
 import {
   BilibiliContentProvider,
@@ -36,7 +37,7 @@ const character: Character = {
 async function setup() {
   const db = new TestDatabase();
   await migrate(db);
-  const store = new SQLiteStore(db);
+  const store = new SQLiteStore(serializeDatabase(db));
   await store.put('characters', character);
   await store.put('settings', {
     ...defaultSettings('c'),
@@ -154,4 +155,36 @@ it('parses guest responses without cookies and rejects invalid IDs, API errors a
   await expect(
     new BilibiliContentProvider(async () => new Response('x'.repeat(1048577))).candidates(),
   ).rejects.toThrow();
+});
+it('honors exploration opt-out and cancellation during network fetch', async () => {
+  const store = await setup();
+  const candidates = vi.fn().mockResolvedValue([robot]);
+  await store.put('settings', {
+    ...(await store.get('settings', 'c'))!,
+    explorationEnabled: false,
+  });
+  expect(await new ExplorationEngine(store, { id: 'bilibili', candidates }).run('c', now)).toBe(
+    'disabled',
+  );
+  expect(candidates).not.toHaveBeenCalled();
+  await store.put('settings', { ...(await store.get('settings', 'c'))!, explorationEnabled: true });
+  candidates.mockImplementation(async () => {
+    await store.put('settings', {
+      ...(await store.get('settings', 'c'))!,
+      explorationEnabled: false,
+    });
+    return [robot];
+  });
+  expect(await new ExplorationEngine(store, { id: 'bilibili', candidates }).run('c', now)).toBe(
+    'cancelled_during_fetch',
+  );
+  expect(await store.list('experiences', 'c')).toHaveLength(0);
+});
+it('serializes concurrent exploration so one candidate request creates one history entry', async () => {
+  const store = await setup();
+  const candidates = vi.fn().mockResolvedValue([robot]);
+  const engine = new ExplorationEngine(store, { id: 'mock-bilibili', candidates });
+  await Promise.all([engine.run('c', now), engine.run('c', now)]);
+  expect(candidates).toHaveBeenCalledOnce();
+  expect(await store.list('experiences', 'c')).toHaveLength(1);
 });

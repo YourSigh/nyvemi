@@ -9,6 +9,7 @@ export type EditableSettings = Pick<
   | 'minIntervalMinutes'
   | 'recentActiveMinutes'
   | 'proactiveEnabled'
+  | 'explorationEnabled'
   | 'rssUrls'
   | 'developerMode'
 >;

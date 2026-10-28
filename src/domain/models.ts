@@ -168,6 +168,7 @@ export const SettingsSchema = z
     lastActiveAt: z.number(),
     lastRssAt: z.number().optional(),
     lastExplorationAt: z.number().optional(),
+    explorationEnabled: z.boolean().optional(),
   })
   .strict();
 export type Settings = z.infer<typeof SettingsSchema>;
