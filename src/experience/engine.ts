@@ -77,7 +77,22 @@ export class ExperienceEngine {
               },
             };
           await tx.put('characters', current);
-          if (experience.appraisal.shareImpulse >= 0.7 && experience.source.startsWith('rss:'))
+          if (['bilibili', 'mock-bilibili'].includes(experience.source))
+            await new MemoryRepository(tx).upsert(
+              character.id,
+              'experience',
+              `${experience.title}。${experience.content} 来源：${experience.url ?? experience.source}`,
+              experience.appraisal.shareImpulse,
+              now,
+              now + 30 * 86400000,
+              experience.source,
+            );
+
+          if (
+            experience.appraisal.shareImpulse >= 0.7 &&
+            (experience.source.startsWith('rss:') ||
+              ['bilibili', 'mock-bilibili'].includes(experience.source))
+          )
             await tx.put('intentions', {
               id: id(),
               characterId: character.id,

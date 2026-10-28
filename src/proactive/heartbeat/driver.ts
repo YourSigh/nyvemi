@@ -1,3 +1,5 @@
+import { ExplorationEngine } from '../../exploration/engine';
+import { BilibiliContentProvider } from '../../exploration/content';
 import { fetch as nativeFetch } from 'expo/fetch';
 import type { Runtime } from '../../application/runtime';
 import {
@@ -48,6 +50,10 @@ export async function runBackgroundCycle(runtime: Runtime): Promise<void> {
           if (fresh) await tx.put('settings', { ...fresh, lastRssAt: now });
         });
       }
+      await new ExplorationEngine(
+        runtime.store,
+        new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
+      ).run(character.id, now);
       runtime.activity.report('experiencing', character.id);
       await engine.ingest(character, sources, now, (source) =>
         runtime.diagnostics.error(

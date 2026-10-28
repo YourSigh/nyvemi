@@ -24,7 +24,22 @@ export function appraiseExperience(
     ...character.persona.likes,
     ...character.interests.filter((i) => i.score > 0.25).map((i) => i.topic),
   ];
-  const selfInterest = Math.min(1, 0.15 + Math.max(0, ...own.map((t) => overlap(text, t))) * 1.3);
+  const selfInterest = Math.min(
+    1,
+    0.15 +
+      Math.max(
+        0,
+        ...own.map((t) =>
+          Math.max(
+            overlap(text, t),
+            ['bilibili', 'mock-bilibili'].includes(experience.source)
+              ? overlap(experience.topics.join(' '), t)
+              : 0,
+          ),
+        ),
+      ) *
+        1.3,
+  );
   const ranked = memories
     .map((memory) => ({ memory, score: overlap(text, memory.content) }))
     .sort((a, b) => b.score - a.score);
@@ -34,7 +49,9 @@ export function appraiseExperience(
   const emotionalValue = Math.min(1, 0.2 + userRelevance * 0.45);
   const shareImpulse = Math.min(
     1,
-    userRelevance * 0.52 + selfInterest * 0.2 + novelty * 0.18 + emotionalValue * 0.1,
+    ['bilibili', 'mock-bilibili'].includes(experience.source)
+      ? selfInterest * 0.55 + novelty * 0.2 + emotionalValue * 0.15 + userRelevance * 0.1
+      : userRelevance * 0.52 + selfInterest * 0.2 + novelty * 0.18 + emotionalValue * 0.1,
   );
   return {
     selfInterest,

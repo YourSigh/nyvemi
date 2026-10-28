@@ -38,6 +38,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
         (m) => m.type === 'open_loop',
       ),
       未来意图: await runtime.store.list('intentions', cid, 100),
+      自主探索: diagnostics.filter((d) => d.characterId === cid && d.data.event === 'exploration'),
       经历与评估: await runtime.store.list('experiences', cid, 60),
       Heartbeat: diagnostics.filter((d) => d.characterId === cid && d.kind === 'heartbeat'),
       通知历史: await runtime.store.list('notifications', cid, 60),
