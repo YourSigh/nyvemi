@@ -302,7 +302,7 @@ it('keeps partial and incomplete multi-part responses out of visible history', a
     },
   );
   await service.send(c.id, '你好', () => {});
-  expect(visible).toEqual([['半句话']]);
+  expect(visible).toEqual([[], ['半句话']]);
   expect(
     (await service.history(c.id)).filter((m) => m.role === 'assistant').map((m) => m.content),
   ).toEqual(['半句话', '第二条']);

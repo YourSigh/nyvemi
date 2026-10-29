@@ -1,3 +1,4 @@
+import { isEmptyGesture, messageChunks, typingDelay } from './delivery';
 import { ChatActivityBus, type ChatActivity } from '../character/interaction';
 import { planReconnect } from '../proactive/reconnect';
 import { conversationContext } from '../conversation/context';
@@ -95,7 +96,12 @@ export class ChatService {
       }
     // Silent rounds are complete too: recover their extraction without calling the chat model again.
     for (const user of messages)
-      if (user.role === 'user' && user.status === 'complete' && user.replyDisposition === 'silence')
+      if (
+        user.role === 'user' &&
+        user.status === 'complete' &&
+        user.replyDisposition === 'silence' &&
+        !isEmptyGesture(user.content)
+      )
         await this.hooks.afterRound(characterId, user, []);
     for (const [userId, assistant] of groups) {
       const user = await this.store.get('messages', userId);
@@ -119,10 +125,10 @@ export class ChatService {
     const content = text.trim();
     if (!content || content.length > 6000) throw new Error('请输入 1～6000 字消息');
     const lease = `chat:${characterId}`;
-    if (!(await this.store.lease(lease, Date.now(), 180000)))
+    if (!(await this.store.lease(lease, Date.now(), 300000)))
       throw new Error('这一轮还没聊完，请稍候');
     this.active.add(characterId);
-    this.activities.publish(characterId, { phase: 'thinking' });
+    const startedAt = Date.now();
     let user: Message | undefined;
     let hasReply = false;
     try {
@@ -154,6 +160,15 @@ export class ChatService {
           };
       await this.store.put('messages', user);
       onSaved();
+      if (isEmptyGesture(content)) {
+        user = { ...user, status: 'complete', replyDisposition: 'silence' };
+        await this.store.put('messages', user);
+        hasReply = true;
+        this.activities.publish(characterId, { phase: 'complete', hasMessages: false });
+        onSaved();
+        return;
+      }
+      this.activities.publish(characterId, { phase: 'thinking' });
       const acknowledge = async (delay: number) => {
         if (!this.hooks.scheduleRequested) throw new Error('当前无法登记定时来信');
         const acknowledgement = await this.hooks.scheduleRequested(user!, delay);
@@ -199,14 +214,9 @@ export class ChatService {
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';
-      let firstToken = true;
       const result = await provider.streamChat(
         prompt,
         (delta) => {
-          if (firstToken && delta.length) {
-            firstToken = false;
-            this.activities.publish(characterId, { phase: 'talking' });
-          }
           raw += delta;
           onPreview(streamingPreview(raw));
         },
@@ -222,7 +232,7 @@ export class ChatService {
       const themeDescription = canChangeTheme
         ? (outcome.theme?.description ?? content.slice(0, 500))
         : undefined;
-      const replies = outcome.messages;
+      const replies = messageChunks(outcome.messages);
       const saved: Message[] = [];
       const base = Math.max(Date.now(), user.createdAt + 1);
       const group: Message[] = replies.map((content, n) => ({
@@ -253,8 +263,13 @@ export class ChatService {
       onPreview('');
       onSaved();
       for (let n = 0; n < group.length; n++) {
-        if (n > 0) await this.pause(400 + Math.floor(Math.random() * 600));
-        const message: Message = { ...group[n], status: 'complete' };
+        await this.pause(typingDelay(group[n].content, n === 0, Date.now() - startedAt));
+        if (n === 0) this.activities.publish(characterId, { phase: 'talking' });
+        const message: Message = {
+          ...group[n],
+          status: 'complete',
+          createdAt: Math.max(Date.now(), group[n].createdAt, (saved.at(-1)?.createdAt ?? 0) + 1),
+        };
         await this.store.put('messages', message);
         saved.push(message);
         onPreview('');

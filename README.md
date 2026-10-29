@@ -259,3 +259,7 @@ Tap the microphone to switch to **按住说话**. Hold to speak, release to send
 ### Autonomous Bilibili browsing (0.12.0)
 
 Characters can occasionally discover guest Bilibili video metadata based on their own interests, remember the encounter, slowly evolve interests and later share a contextual reaction. This reuses the existing experience and proactive engines. Toggle it in notification settings. It reads **titles/descriptions, not full videos**. Guest API access returned HTTP 412 in the development environment; real discovery may be unavailable. Explicit Mock tests validate the full local loop without pretending to be real browsing. See [architecture, limitations and executed example](docs/BILIBILI_EXPLORATION.md).
+
+### Conversation rhythm (0.12.1)
+
+Empty full-stop gestures stay silent without a model call. Direct-chat prose paragraphs become separate bubbles, revealed after the complete model output with length-based composition time (including the first bubble); generation latency counts toward the first message only. Code/list formatting is retained. See [behavior and tests](docs/CHAT_DELIVERY_RHYTHM.md).

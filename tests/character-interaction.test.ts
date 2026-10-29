@@ -51,7 +51,7 @@ it('isolates observers by character and makes subscriptions disposable and non-b
   bus.publish('a', { phase: 'talking' });
   expect(events).toEqual([{ phase: 'thinking' }]);
 });
-it('publishes talking at the first actual stream token but waits for the complete response before saving bubbles', async () => {
+it('keeps thinking during streaming and talks only when a complete bubble is delivered', async () => {
   const db = new TestDatabase();
   await migrate(db);
   const store = new SQLiteStore(db);
@@ -75,7 +75,7 @@ it('publishes talking at the first actual stream token but waits for the complet
     streamChat: async (_, delta) => {
       calls++;
       delta('{');
-      expect(events.map((e) => e.phase)).toEqual(['thinking', 'talking']);
+      expect(events.map((e) => e.phase)).toEqual(['thinking']);
       expect(
         (await store.list('messages', 'c')).filter((m) => m.role === 'assistant'),
       ).toHaveLength(0);
