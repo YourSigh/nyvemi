@@ -1,5 +1,7 @@
 # Contextual participation — 0.12.2
 
+Superseded in 0.12.3: decision failure no longer falls back to response generation. Persistent quiet mode, transcript isolation, DeepSeek JSON mode, pre-delivery review and real-model acceptance are described in [quiet-contact repair](QUIET_CONTACT_REPAIR.md). The historical three-action protocol below is now four actions including pause.
+
 The 0.12.1 literal full-stop suppression was a scenario patch. It is removed. All ordinary inputs, including punctuation, now reach the same model-backed participation decision. There is no input-pattern silence blacklist, random ignored-message ratio or forced silence quota.
 
 Before generating response text, the replaceable LLM provider receives a short decision request with Persona, character state, bounded recent conversation, relevant memories, current device time, proactive setting and real pending intentions. The protocol is `reply`, `listen`, or `defer` with a concrete future thought. The prompt asks whether speaking adds conversational value now, whether the other person is still expressing themselves, and whether anything remains to be answered. It prioritizes actual questions/help/distress without implementing lists of trigger strings. It requests only an action, not chain-of-thought reasoning.

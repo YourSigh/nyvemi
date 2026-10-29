@@ -265,3 +265,7 @@ Characters can occasionally discover guest Bilibili video metadata based on thei
 Version 0.12.1 introduced a literal full-stop silence gate; **0.12.2 removes it** in favor of a general contextual participation decision (reply/listen/defer), before response generation. Direct-chat prose paragraphs become separate bubbles, revealed after the complete model output with length-based composition time (including the first bubble); generation latency counts toward the first message only. Code/list formatting is retained. See [behavior and tests](docs/CHAT_DELIVERY_RHYTHM.md).
 
 See [contextual participation](docs/CONVERSATION_PARTICIPATION.md) for the decision protocol, costs, recovery and validation limits.
+
+### Quiet contact repair (0.12.3)
+
+Real DeepSeek testing with reconstructed screenshot history reproduced a classifier returning roleplay narration instead of JSON. Control calls now isolate transcript data, enable DeepSeek JSON mode, fail without forcing a reply, persist quiet mode and review proposed replies before delivery. A real seven-turn acceptance run stayed silent until an explicit new question, answered it, then stopped again; pending follow-up was canceled. See [evidence and limitations](docs/QUIET_CONTACT_REPAIR.md).
