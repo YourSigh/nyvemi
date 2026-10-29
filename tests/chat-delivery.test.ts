@@ -1,16 +1,11 @@
 import { it, expect, vi } from 'vitest';
-import { isEmptyGesture, messageChunks, typingDelay } from '../src/chat/delivery';
+import { messageChunks, typingDelay } from '../src/chat/delivery';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { demoPersona } from '../src/domain/models';
 import { Diagnostics } from '../src/storage/diagnostics';
 import type { LLMProvider } from '../src/providers/provider';
-it('silences literal full stops without swallowing meaningful punctuation or emotional content', () => {
-  for (const s of ['。', '.', '。。。', '. 。 .']) expect(isEmptyGesture(s)).toBe(true);
-  for (const s of ['？', '?', '…', '！', '嗯。', '😭', '我需要帮助'])
-    expect(isEmptyGesture(s)).toBe(false);
-});
 it('splits prose paragraphs and preserves code/list formatting', () => {
   expect(messageChunks(['诶\n\n我突然想到一个事', '等我说完'])).toEqual([
     '诶',
@@ -39,9 +34,11 @@ async function setup() {
   });
   return store;
 }
-it('repeated full stops stay silent without model, extraction, sleep or erroneous retry state', async () => {
+it('contextual listen decisions stay silent without response generation or erroneous retry state', async () => {
   const store = await setup();
-  const provider = vi.fn();
+  const provider = vi
+    .fn()
+    .mockResolvedValue({ chat: async () => ({ content: '{\"action\":\"listen\"}' }) });
   const afterRound = vi.fn();
   const pause = vi.fn();
   const chat = new ChatService(
@@ -53,8 +50,8 @@ it('repeated full stops stay silent without model, extraction, sleep or erroneou
   );
   for (let n = 0; n < 5; n++) await chat.send('c', '。', () => {});
   await chat.recoverInterrupted('c');
-  expect(provider).not.toHaveBeenCalled();
-  expect(afterRound).not.toHaveBeenCalled();
+  expect(provider).toHaveBeenCalledTimes(5);
+  expect(afterRound).toHaveBeenCalled();
   expect(pause).not.toHaveBeenCalled();
   expect(
     (await chat.history('c')).every(

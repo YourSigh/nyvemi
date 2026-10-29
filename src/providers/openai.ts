@@ -53,13 +53,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
           messages,
           stream,
           max_tokens:
-            purpose === 'theme_interpretation'
-              ? 400
-              : purpose === 'proactive_generation'
-                ? 350
-                : purpose === 'chat'
-                  ? 1536
-                  : 2500,
+            purpose === 'conversation_participation'
+              ? 250
+              : purpose === 'theme_interpretation'
+                ? 400
+                : purpose === 'proactive_generation'
+                  ? 350
+                  : purpose === 'chat'
+                    ? 1536
+                    : 2500,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
           ...(new URL(this.config.baseUrl).hostname === 'api.deepseek.com'
             ? { thinking: { type: this.config.thinking ? 'enabled' : 'disabled' } }

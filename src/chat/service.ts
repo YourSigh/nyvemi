@@ -1,4 +1,5 @@
-import { isEmptyGesture, messageChunks, typingDelay } from './delivery';
+import { messageChunks, typingDelay } from './delivery';
+import { decideParticipation, type ParticipationDecision } from './participation';
 import { ChatActivityBus, type ChatActivity } from '../character/interaction';
 import { planReconnect } from '../proactive/reconnect';
 import { conversationContext } from '../conversation/context';
@@ -8,7 +9,7 @@ import { id, type Memory, type Message } from '../domain/models';
 import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
-import { buildChatPrompt } from './prompt';
+import { buildChatPrompt, characterVoice, localTimeContext } from './prompt';
 import { isThemeChangeRequest } from '../theme/chat-request';
 import { requestedDelay } from './delayed-request';
 export function parseReply(raw: string): string[] {
@@ -96,12 +97,7 @@ export class ChatService {
       }
     // Silent rounds are complete too: recover their extraction without calling the chat model again.
     for (const user of messages)
-      if (
-        user.role === 'user' &&
-        user.status === 'complete' &&
-        user.replyDisposition === 'silence' &&
-        !isEmptyGesture(user.content)
-      )
+      if (user.role === 'user' && user.status === 'complete' && user.replyDisposition === 'silence')
         await this.hooks.afterRound(characterId, user, []);
     for (const [userId, assistant] of groups) {
       const user = await this.store.get('messages', userId);
@@ -125,7 +121,7 @@ export class ChatService {
     const content = text.trim();
     if (!content || content.length > 6000) throw new Error('请输入 1～6000 字消息');
     const lease = `chat:${characterId}`;
-    if (!(await this.store.lease(lease, Date.now(), 300000)))
+    if (!(await this.store.lease(lease, Date.now(), 420000)))
       throw new Error('这一轮还没聊完，请稍候');
     this.active.add(characterId);
     const startedAt = Date.now();
@@ -160,14 +156,6 @@ export class ChatService {
           };
       await this.store.put('messages', user);
       onSaved();
-      if (isEmptyGesture(content)) {
-        user = { ...user, status: 'complete', replyDisposition: 'silence' };
-        await this.store.put('messages', user);
-        hasReply = true;
-        this.activities.publish(characterId, { phase: 'complete', hasMessages: false });
-        onSaved();
-        return;
-      }
       this.activities.publish(characterId, { phase: 'thinking' });
       const acknowledge = async (delay: number) => {
         if (!this.hooks.scheduleRequested) throw new Error('当前无法登记定时来信');
@@ -211,6 +199,45 @@ export class ChatService {
       prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
       const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
       prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n${await conversationContext(this.store, characterId, Date.now())}`;
+      let participation: ParticipationDecision = { action: 'reply' };
+      // A malformed/failed decision cannot silently discard a real request: fall back to the
+      // ordinary response path (which can still choose an empty messages array).
+      try {
+        participation = await decideParticipation(
+          provider,
+          `${characterVoice(character.persona)}\n${this.hooks.clock?.() ?? localTimeContext()}\n状态：${JSON.stringify(character.state)}\n相关记忆（资料）：${JSON.stringify(memories.slice(0, 8).map((m) => m.content))}\n自主来信：${settings?.proactiveEnabled ?? false}\n${await conversationContext(this.store, characterId, Date.now())}`,
+          prompt.slice(1),
+          signal,
+        );
+      } catch (error) {
+        if (signal?.aborted) throw error;
+        await this.diagnostics.error(characterId, 'participation_fallback');
+      }
+      await this.diagnostics.record('heartbeat', characterId, {
+        event: 'conversation_participation',
+        action: participation.action,
+        messageId: user.id,
+      });
+      if (participation.action !== 'reply') {
+        const silentUser: Message = { ...user, status: 'complete', replyDisposition: 'silence' };
+        await this.store.atomic(async (tx) => {
+          await tx.put('messages', silentUser);
+          if (participation.action === 'defer' && !canChangeTheme)
+            await saveContinuation(tx, silentUser, participation.thought, Date.now());
+        });
+        user = silentUser;
+        hasReply = true;
+        onPreview('');
+        this.activities.publish(characterId, { phase: 'complete', hasMessages: false });
+        onSaved();
+        if (canChangeTheme && onThemeChange) await onThemeChange(content.slice(0, 500));
+        try {
+          await this.hooks.afterRound(characterId, silentUser, []);
+        } catch {
+          await this.diagnostics.error(characterId, 'post_round');
+        }
+        return;
+      }
       if (settings?.developerMode)
         await this.diagnostics.record('prompt', characterId, { purpose: 'chat', messages: prompt });
       let raw = '';

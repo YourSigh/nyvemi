@@ -1,7 +1,3 @@
-/** Only literal full stops are unambiguously empty input. Questions, ellipses and emoji
- * retain their conversational meaning and remain eligible for a contextual model decision. */
-export const isEmptyGesture = (text: string): boolean => /^[.。\s\u200b]+$/u.test(text);
-
 /** Preserve code/list formatting; split prose paragraphs rather than every sentence. */
 export function messageChunks(messages: string[]): string[] {
   const chunks = messages.flatMap((text) => {

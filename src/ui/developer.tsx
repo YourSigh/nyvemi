@@ -29,6 +29,9 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
     const diagnostics = await runtime.store.list('diagnostics', undefined, 200);
     setSnapshot({
       人格: character?.persona,
+      参与决策: diagnostics.filter(
+        (d) => d.characterId === cid && d.data.event === 'conversation_participation',
+      ),
       会话感知: await conversationContext(runtime.store, cid, Date.now()),
       状态: character?.state,
       兴趣: character?.interests,
