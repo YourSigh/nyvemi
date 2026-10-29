@@ -262,4 +262,6 @@ Characters can occasionally discover guest Bilibili video metadata based on thei
 
 ### Conversation rhythm (0.12.1)
 
-Empty full-stop gestures stay silent without a model call. Direct-chat prose paragraphs become separate bubbles, revealed after the complete model output with length-based composition time (including the first bubble); generation latency counts toward the first message only. Code/list formatting is retained. See [behavior and tests](docs/CHAT_DELIVERY_RHYTHM.md).
+Version 0.12.1 introduced a literal full-stop silence gate; **0.12.2 removes it** in favor of a general contextual participation decision (reply/listen/defer), before response generation. Direct-chat prose paragraphs become separate bubbles, revealed after the complete model output with length-based composition time (including the first bubble); generation latency counts toward the first message only. Code/list formatting is retained. See [behavior and tests](docs/CHAT_DELIVERY_RHYTHM.md).
+
+See [contextual participation](docs/CONVERSATION_PARTICIPATION.md) for the decision protocol, costs, recovery and validation limits.

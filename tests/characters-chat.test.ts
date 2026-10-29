@@ -144,7 +144,9 @@ it('does not mark a delivered chat as retryable when background analysis fails',
   );
   await service.send(c.id, '聊一会儿', () => {});
   expect((await store.list('messages', c.id)).every((m) => m.status === 'complete')).toBe(true);
-  expect((await store.list('diagnostics', c.id))[0].data.operation).toBe('post_round');
+  expect(
+    (await store.list('diagnostics', c.id)).some((d) => d.data.operation === 'post_round'),
+  ).toBe(true);
 });
 it('recovers an interrupted request and durably saved multi-part replies after process restart', async () => {
   const store = await setup();

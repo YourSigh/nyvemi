@@ -1,5 +1,7 @@
 # Chat delivery rhythm — 0.12.1
 
+Historical behavior: 0.12.2 removes the full-stop gate described below. See [contextual participation](CONVERSATION_PARTICIPATION.md). Length-based delivery and paragraph splitting remain.
+
 Literal full stops (`.` / `。`, repeated/mixed/whitespace) are saved as complete user messages with silence disposition, without model calls, extraction, artificial delay or assistant acknowledgment. Recovery does not re-extract these empty gestures. Other inputs still have context-dependent model decisions, including an empty messages array: questions, ellipses, emoji, distress and help requests are not discarded by this gate. Prompt guidance explicitly permits silence for repetitive empty/finished exchanges; it is not a guarantee that every ambiguous input will be classified correctly by a provider.
 
 Ordinary prose is split at line breaks after the full model response is parsed, preserving code blocks and list formatting. Existing explicit message arrays remain supported, with a bounded 12-bubble delivery normalization. Sentences on one line are not blindly split at punctuation. This applies to direct-chat responses; proactive notifications keep their existing grouped notification delivery behavior.
