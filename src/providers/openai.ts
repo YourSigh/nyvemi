@@ -53,7 +53,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
           messages,
           stream,
           max_tokens:
-            purpose === 'conversation_participation'
+            purpose === 'conversation_participation' || purpose === 'conversation_delivery_review'
               ? 250
               : purpose === 'theme_interpretation'
                 ? 400
@@ -63,6 +63,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     ? 1536
                     : 2500,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
+          ...((purpose === 'conversation_participation' ||
+            purpose === 'conversation_delivery_review') &&
+          new URL(this.config.baseUrl).hostname === 'api.deepseek.com'
+            ? { response_format: { type: 'json_object' } }
+            : {}),
           ...(new URL(this.config.baseUrl).hostname === 'api.deepseek.com'
             ? { thinking: { type: this.config.thinking ? 'enabled' : 'disabled' } }
             : {}),

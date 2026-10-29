@@ -40,7 +40,7 @@ it('refreshes the device snapshot after provider initialization on every turn', 
   let snapshot = '旧时间',
     round = 0;
   const provider: import('../src/providers/provider').LLMProvider = {
-    chat: async () => ({ content: '', usage: {} }),
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     structuredOutput: async (_, schema) => schema.parse({}),
     streamChat: async (turns) => {
       prompts.push(turns[0].content);

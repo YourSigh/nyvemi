@@ -30,7 +30,9 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
     setSnapshot({
       人格: character?.persona,
       参与决策: diagnostics.filter(
-        (d) => d.characterId === cid && d.data.event === 'conversation_participation',
+        (d) =>
+          d.characterId === cid &&
+          ['conversation_participation', 'conversation_delivery'].includes(String(d.data.event)),
       ),
       会话感知: await conversationContext(runtime.store, cid, Date.now()),
       状态: character?.state,

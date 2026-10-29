@@ -27,9 +27,7 @@ async function setup() {
   const sent: NotificationRecord[] = [];
   const scheduled: string[] = [];
   const provider: LLMProvider = {
-    chat: async () => {
-      throw new Error('unused');
-    },
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     streamChat: async () => ({
       content: '{"messages":["又是加班啊","那帮人是真能折腾"],"continuation":null}',
       usage: {},

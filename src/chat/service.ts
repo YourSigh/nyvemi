@@ -1,3 +1,4 @@
+import { setContactMode } from './contact';
 import { messageChunks, typingDelay } from './delivery';
 import { decideParticipation, type ParticipationDecision } from './participation';
 import { ChatActivityBus, type ChatActivity } from '../character/interaction';
@@ -199,20 +200,14 @@ export class ChatService {
       prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
       const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
       prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n${await conversationContext(this.store, characterId, Date.now())}`;
-      let participation: ParticipationDecision = { action: 'reply' };
-      // A malformed/failed decision cannot silently discard a real request: fall back to the
-      // ordinary response path (which can still choose an empty messages array).
-      try {
-        participation = await decideParticipation(
-          provider,
-          `${characterVoice(character.persona)}\n${this.hooks.clock?.() ?? localTimeContext()}\n状态：${JSON.stringify(character.state)}\n相关记忆（资料）：${JSON.stringify(memories.slice(0, 8).map((m) => m.content))}\n自主来信：${settings?.proactiveEnabled ?? false}\n${await conversationContext(this.store, characterId, Date.now())}`,
-          prompt.slice(1),
-          signal,
-        );
-      } catch (error) {
-        if (signal?.aborted) throw error;
-        await this.diagnostics.error(characterId, 'participation_fallback');
-      }
+      const decisionContext = `${characterVoice(character.persona)}\n${this.hooks.clock?.() ?? localTimeContext()}\n状态：${JSON.stringify(character.state)}\n相关记忆（资料）：${JSON.stringify(memories.slice(0, 8).map((m) => m.content))}\n自主来信：${settings?.proactiveEnabled ?? false}\n${await conversationContext(this.store, characterId, Date.now())}`;
+      // Decision failure is a failed turn, never permission to force an unsolicited response.
+      const participation: ParticipationDecision = await decideParticipation(
+        provider,
+        decisionContext,
+        prompt.slice(1),
+        signal,
+      );
       await this.diagnostics.record('heartbeat', characterId, {
         event: 'conversation_participation',
         action: participation.action,
@@ -222,6 +217,7 @@ export class ChatService {
         const silentUser: Message = { ...user, status: 'complete', replyDisposition: 'silence' };
         await this.store.atomic(async (tx) => {
           await tx.put('messages', silentUser);
+          if (participation.action === 'pause') await setContactMode(tx, characterId, true);
           if (participation.action === 'defer' && !canChangeTheme)
             await saveContinuation(tx, silentUser, participation.thought, Date.now());
         });
@@ -259,7 +255,21 @@ export class ChatService {
       const themeDescription = canChangeTheme
         ? (outcome.theme?.description ?? content.slice(0, 500))
         : undefined;
-      const replies = messageChunks(outcome.messages);
+      let delivery: ParticipationDecision = participation;
+      if (outcome.messages.length)
+        delivery = await decideParticipation(
+          provider,
+          decisionContext,
+          prompt.slice(1),
+          signal,
+          outcome.messages,
+        );
+      await this.diagnostics.record('heartbeat', characterId, {
+        event: 'conversation_delivery',
+        action: delivery.action,
+        messageId: user.id,
+      });
+      const replies = delivery.action === 'reply' ? messageChunks(outcome.messages) : [];
       const saved: Message[] = [];
       const base = Math.max(Date.now(), user.createdAt + 1);
       const group: Message[] = replies.map((content, n) => ({
@@ -281,7 +291,11 @@ export class ChatService {
       };
       await this.store.atomic(async (tx) => {
         await tx.put('messages', user!);
+        if (delivery.action === 'pause') await setContactMode(tx, characterId, true);
+        else if (replies.length) await setContactMode(tx, characterId, false);
         for (const message of group) await tx.put('messages', message);
+        if (delivery.action === 'defer' && !themeDescription)
+          await saveContinuation(tx, user!, delivery.thought, base);
         if (outcome.continuation && replies.length && !themeDescription)
           await saveContinuation(tx, user!, outcome.continuation, base);
         if (replies.length && !themeDescription) await planReconnect(tx, user!, base);

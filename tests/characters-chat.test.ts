@@ -13,7 +13,7 @@ async function setup() {
   return new SQLiteStore(db);
 }
 const fake: LLMProvider = {
-  chat: async () => ({ content: 'ok', usage: {} }),
+  chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
   streamChat: async (_, onDelta) => {
     const content = '{"messages":["又咋了","谁又惹你了"]}';
     onDelta(content.slice(0, 20));

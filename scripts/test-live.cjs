@@ -20,12 +20,19 @@ if (new URL(base).origin !== 'https://api.deepseek.com') {
 }
 const result = spawnSync(
   process.execPath,
-  ['node_modules/vitest/vitest.mjs', 'run', 'tests/live-provider.test.ts'],
+  [
+    'node_modules/vitest/vitest.mjs',
+    'run',
+    process.argv.includes('--conversation')
+      ? 'tests/live-conversation.test.ts'
+      : 'tests/live-provider.test.ts',
+  ],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_LIVE_BASELINE: process.argv.includes('--baseline') ? '1' : '0',
       NYVEMI_LIVE_FOCUS: process.argv.includes('--focus-memory') ? 'memory' : 'full',
       NYVEMI_TEST_API_KEY: key,
       NYVEMI_TEST_BASE_URL: base,

@@ -27,7 +27,7 @@ async function setup(reply = outcome) {
   let generated = 0;
   let decline = false;
   const provider: LLMProvider = {
-    chat: async () => ({ content: '', usage: {} }),
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     streamChat: async () => ({ content: JSON.stringify(reply), usage: {} }),
     structuredOutput: async (_, schema) => {
       generated++;

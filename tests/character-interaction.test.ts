@@ -66,9 +66,7 @@ it('keeps thinking during streaming and talks only when a complete bubble is del
   const events: ChatActivity[] = [];
   let calls = 0;
   const provider: LLMProvider = {
-    chat: async () => {
-      throw new Error('unused');
-    },
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     structuredOutput: async () => {
       throw new Error('no extra emotion request');
     },

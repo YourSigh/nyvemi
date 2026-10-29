@@ -29,7 +29,7 @@ it('runs persona → streamed chat → extracted memory/loop → follow-up → R
     let content = '';
     if (prompt.includes('根据自然问答创造'))
       content = JSON.stringify({ ...demoPersona('remote-id'), likes: ['Android 自动化'] });
-    else if (prompt.includes('只输出以下 JSON 三选一'))
+    else if (prompt.includes('只输出以下 JSON 四选一'))
       content = JSON.stringify({ action: 'reply' });
     else if (prompt.includes('提取有长期价值'))
       content = JSON.stringify({
@@ -203,7 +203,7 @@ it('runs persona → streamed chat → extracted memory/loop → follow-up → R
     expect(JSON.stringify(await fresh.list('memories', restored.id))).not.toContain(
       'fixture-api-key',
     );
-    expect(metrics.length).toBe(6);
+    expect(metrics.length).toBe(7);
     expect(requests[1].stream).toBe(false);
     expect(requests[2].stream).toBe(true);
   } finally {

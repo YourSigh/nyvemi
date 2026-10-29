@@ -44,6 +44,7 @@ export type Persona = z.infer<typeof PersonaSchema>;
 export const StateSchema = z
   .object({
     mood: z.string().optional(),
+    contactMode: z.enum(['open', 'quiet']).optional(),
     energy: z.number().min(0).max(1),
     relationshipCloseness: z.number().min(0).max(1),
     recentFocus: z.array(z.string()),

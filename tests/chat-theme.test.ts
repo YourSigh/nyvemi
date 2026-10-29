@@ -45,9 +45,7 @@ async function fixture() {
   let action = true;
   const prompts: string[] = [];
   const provider: LLMProvider = {
-    chat: async () => {
-      throw new Error('unused');
-    },
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     structuredOutput: async (_, schema) => schema.parse(demoPersona('c')),
     streamChat: async (turns) => {
       prompts.push(turns[0].content);

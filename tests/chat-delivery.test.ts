@@ -68,6 +68,7 @@ it('waits for full output and per-message typing time before revealing separate 
     );
   });
   const provider = {
+    chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
     streamChat: async (_: unknown, delta: (s: string) => void) => {
       delta('{"messages":["诶');
       expect((await chat.history('c')).filter((m) => m.role === 'assistant')).toHaveLength(0);

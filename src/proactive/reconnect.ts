@@ -86,6 +86,8 @@ export async function autonomousBlock(
   records: NotificationRecord[],
   now: number,
 ): Promise<string | undefined> {
+  if ((await store.get('characters', characterId))?.state.contactMode === 'quiet')
+    return 'user_wants_space';
   const state = interactionState(
     await store.list('messages', characterId, 100),
     records.filter((n) => n.characterId === characterId),

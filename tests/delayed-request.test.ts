@@ -15,7 +15,7 @@ import { migrate, SQLiteStore } from '../src/storage/store';
 import { TestDatabase } from './database';
 
 const fake: LLMProvider = {
-  chat: async () => ({ content: '', usage: {} }),
+  chat: async () => ({ content: JSON.stringify({ action: 'reply' }), usage: {} }),
   streamChat: async () => {
     throw new Error('a scheduling acknowledgement must not come from the model');
   },
