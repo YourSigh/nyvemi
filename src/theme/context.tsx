@@ -14,13 +14,18 @@ import { bridge } from '../native/android';
 import { defaultPalette, generatePalette } from './generator';
 import type { Palette, ThemeRecord } from './model';
 import { runThemeTransition } from './transition';
+import { themeTask } from './task';
 interface ThemeContextValue {
   palette: Palette;
   record?: ThemeRecord;
   transitioning: boolean;
   reducedMotion: boolean;
   hydrate(record?: ThemeRecord): void;
-  apply(record: ThemeRecord, persist: () => Promise<void>): Promise<void>;
+  apply(
+    record: ThemeRecord,
+    persist: (signal?: AbortSignal) => Promise<void>,
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 function nextPaint(): Promise<void> {
@@ -39,6 +44,8 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const [transitioning, setTransitioning] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const locked = useRef(false);
+  const active = useRef<{ id: string; controller: AbortController } | undefined>(undefined);
+  const sequence = useRef(0);
   const mounted = useRef(true);
   const palette = useMemo(
     () =>
@@ -51,8 +58,11 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     mounted.current = true;
     const release = () => {
+      const operation = active.current;
+      if (!operation) return;
+      operation.controller.abort();
       void bridge()
-        .finishThemeTransition()
+        .finishThemeTransition(operation.id)
         .catch(() => {});
     };
     void AccessibilityInfo.isReduceMotionEnabled()
@@ -77,34 +87,56 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     const back = BackHandler.addEventListener('hardwareBackPress', () => true);
     return () => back.remove();
   }, [transitioning]);
-  const apply = useCallback(async (next: ThemeRecord, persist: () => Promise<void>) => {
-    if (locked.current) throw new Error('颜色正在慢慢铺开，稍等一下');
-    locked.current = true;
-    setTransitioning(true);
-    try {
-      const reduce = await AccessibilityInfo.isReduceMotionEnabled().catch(() => false);
-      await runThemeTransition(
-        {
-          settleInput: async () => {
-            await closeKeyboard();
-            await nextPaint();
+  const apply = useCallback(
+    async (
+      next: ThemeRecord,
+      persist: (signal?: AbortSignal) => Promise<void>,
+      signal?: AbortSignal,
+    ) => {
+      if (locked.current) throw new Error('颜色正在慢慢铺开，稍等一下');
+      locked.current = true;
+      const operation = {
+        id: `theme-${Date.now()}-${++sequence.current}`,
+        controller: new AbortController(),
+      };
+      active.current = operation;
+      const cancel = () => operation.controller.abort();
+      signal?.addEventListener('abort', cancel, { once: true });
+      if (signal?.aborted) cancel();
+      setTransitioning(true);
+      try {
+        const reduce = await themeTask(
+          () => AccessibilityInfo.isReduceMotionEnabled(),
+          500,
+          operation.controller.signal,
+        ).catch(() => false);
+        await runThemeTransition(
+          {
+            settleInput: async () => {
+              await closeKeyboard();
+              await nextPaint();
+            },
+            prepare: () => bridge().prepareThemeTransition(operation.id),
+            persist,
+            commit: () => {
+              if (mounted.current) setRecord(next);
+            },
+            paint: nextPaint,
+            reveal: (duration) => bridge().revealThemeTransition(operation.id, duration),
+            release: () => bridge().finishThemeTransition(operation.id),
           },
-          prepare: () => bridge().prepareThemeTransition(),
-          persist,
-          commit: () => {
-            if (mounted.current) setRecord(next);
-          },
-          paint: nextPaint,
-          reveal: (duration) => bridge().revealThemeTransition(duration),
-          release: () => bridge().finishThemeTransition(),
-        },
-        !reduce && AppState.currentState === 'active',
-      );
-    } finally {
-      locked.current = false;
-      if (mounted.current) setTransitioning(false);
-    }
-  }, []);
+          !reduce && AppState.currentState === 'active',
+          operation.controller.signal,
+        );
+      } finally {
+        locked.current = false;
+        active.current = undefined;
+        signal?.removeEventListener('abort', cancel);
+        if (mounted.current) setTransitioning(false);
+      }
+    },
+    [],
+  );
   return (
     <ThemeContext.Provider
       value={{ palette, record, hydrate, apply, transitioning, reducedMotion }}

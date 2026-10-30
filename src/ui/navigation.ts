@@ -6,7 +6,7 @@ export type Routes = {
   Plugins: { characterId: string };
   Usage: undefined;
   Provider: { onboarding?: boolean; skipTheme?: boolean } | undefined;
-  Theme: undefined;
+  Theme: { mode: 'settings' } | undefined;
   Create: undefined;
   Generate: { answers: CharacterAnswers; demo: boolean; interview?: boolean };
   Appearance: { characterId: string; onboarding?: boolean };

@@ -1,9 +1,10 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {
   runThemeTransition,
   THEME_REVEAL_MS,
   type ThemeTransitionPorts,
 } from '../src/theme/transition';
+afterEach(() => vi.useRealTimers());
 function ports(overrides: Partial<ThemeTransitionPorts> = {}) {
   const events: string[] = [];
   return {
@@ -87,4 +88,49 @@ it('never captures or saves before keyboard settling succeeds and still releases
   });
   await expect(runThemeTransition(api)).rejects.toThrow('keyboard interrupted');
   expect(events).toEqual(['release']);
+});
+
+it.each(['settleInput', 'prepare', 'persist', 'paint', 'reveal'] as const)(
+  'unlocks after a stalled %s callback and permits the next transition',
+  async (stage) => {
+    vi.useFakeTimers();
+    const { events, api } = ports({ [stage]: () => new Promise(() => {}) });
+    const result = runThemeTransition(api).then(
+      () => 'done',
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(await result).toContain('超时');
+    expect(events.at(-1)).toBe('release');
+    if (['settleInput', 'prepare', 'persist'].includes(stage))
+      expect(events).not.toContain('commit');
+    const retry = ports();
+    await runThemeTransition(retry.api);
+    expect(retry.events).toContain('diagonal_reveal');
+  },
+);
+it('does not wait forever for native cleanup itself', async () => {
+  vi.useFakeTimers();
+  const { api } = ports({ release: () => new Promise(() => {}) });
+  const result = runThemeTransition(api);
+  await vi.advanceTimersByTimeAsync(1500);
+  await expect(result).resolves.toBeUndefined();
+});
+it('cancels an interrupted transition without committing a late capture', async () => {
+  vi.useFakeTimers();
+  let captured: (ready: boolean) => void = () => {};
+  const controller = new AbortController();
+  const { events, api } = ports({
+    prepare: () =>
+      new Promise((resolve) => {
+        captured = resolve;
+      }),
+  });
+  const result = runThemeTransition(api, true, controller.signal).catch((e: Error) => e.message);
+  await vi.advanceTimersByTimeAsync(1);
+  controller.abort();
+  expect(await result).toContain('取消');
+  captured(true);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(events).toEqual(['keyboard_closed', 'release']);
 });

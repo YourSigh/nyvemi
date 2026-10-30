@@ -1,10 +1,11 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { contrast, defaultPalette, generatePalette } from '../src/theme/generator';
 import { defaultPreference, ThemePreferenceSchema, ThemeRecordSchema } from '../src/theme/model';
 import { ThemeService, localPreference } from '../src/theme/service';
 import { migrate, SQLiteStore } from '../src/storage/store';
 import { TestDatabase } from './database';
 import type { LLMProvider } from '../src/providers/provider';
+afterEach(() => vi.useRealTimers());
 
 it('generates readable, bounded palettes across all supported semantic combinations', () => {
   expect(contrast('#000000', '#FFFFFF')).toBe(21);
@@ -162,4 +163,35 @@ it('keeps the current base color for relative chat adjustments when the provider
     source: 'local',
     preference: { base: 'purple', brightness: 'dark' },
   });
+});
+
+it('bounds slow color interpretation and aborts the request before a local fallback', async () => {
+  vi.useFakeTimers();
+  const { store } = await fixture(defaultPreference);
+  let requestSignal: AbortSignal | undefined;
+  const service = new ThemeService(
+    store,
+    async () =>
+      ({
+        structuredOutput: async (_messages, _schema, _purpose, signal) => {
+          requestSignal = signal;
+          return new Promise(() => {});
+        },
+      }) as LLMProvider,
+  );
+  const pending = service.interpret('淡蓝色，安静一点');
+  await vi.advanceTimersByTimeAsync(8001);
+  expect(await pending).toMatchObject({ source: 'local', preference: { base: 'blue' } });
+  expect(requestSignal?.aborted).toBe(true);
+  expect(await service.load()).toBeUndefined();
+});
+it('does not save or fall back after the user cancels a color change', async () => {
+  const { service } = await fixture(defaultPreference);
+  const controller = new AbortController();
+  controller.abort();
+  await expect(service.interpret('淡蓝色', undefined, controller.signal)).rejects.toThrow('取消');
+  const next = await service.interpret('淡蓝色');
+  await expect(service.save(next, controller.signal)).rejects.toThrow('取消');
+  await expect(service.completeOpening(next, controller.signal)).rejects.toThrow('取消');
+  expect(await service.load()).toBeUndefined();
 });

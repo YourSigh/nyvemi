@@ -87,11 +87,11 @@ class NyvemiAndroidModule : Module() {
       val offset = clock.timeZone.getOffset(clock.timeInMillis) / 60000
       "【本轮设备时钟】现在是 $text（24小时制，$period，时区 ${clock.timeZone.id}，UTC偏移 $offset 分钟）。这是用户设备本地当前时间，你和用户共用这一时钟。现在/今天/明天和上午/下午以此为准，历史消息仅是过去。不要用训练日期、UTC时间或角色所在地替代，不要声称自己与用户有另一套时间。"
     }
-    AsyncFunction("prepareThemeTransition") { themeTransition.prepare(appContext.currentActivity) }.runOnQueue(Queues.MAIN)
-    AsyncFunction("revealThemeTransition") { duration: Int, promise: expo.modules.kotlin.Promise ->
-      themeTransition.reveal(duration) { promise.resolve(null) }
+    AsyncFunction("prepareThemeTransition") { id: String -> themeTransition.prepare(appContext.currentActivity, id) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("revealThemeTransition") { id: String, duration: Int, promise: expo.modules.kotlin.Promise ->
+      themeTransition.reveal(id, duration) { promise.resolve(null) }
     }.runOnQueue(Queues.MAIN)
-    AsyncFunction("finishThemeTransition") { themeTransition.finish() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("finishThemeTransition") { id: String -> themeTransition.finish(id) }.runOnQueue(Queues.MAIN)
     Events("voicePartial")
     AsyncFunction("startVoice") { id: String -> voiceInput.start(context(), id) }.runOnQueue(Queues.MAIN)
     AsyncFunction("finishVoice") { id: String, cancel: Boolean, promise: expo.modules.kotlin.Promise -> voiceInput.finish(id, cancel, promise) }.runOnQueue(Queues.MAIN)

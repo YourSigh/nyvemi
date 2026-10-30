@@ -29,10 +29,14 @@ class NyvemiThemeTransition {
   private var overlay: RevealView? = null
   private var animator: ValueAnimator? = null
   private var completion: (() -> Unit)? = null
+  private var transitionId: String? = null
+  private val cancelled = linkedSetOf<String>()
   private val timeout = Runnable { finish() }
 
-  fun prepare(activity: Activity?): Boolean {
+  fun prepare(activity: Activity?, id: String): Boolean {
+    if (id in cancelled) return false
     finish()
+    transitionId = id
     val decor = activity?.window?.decorView as? ViewGroup ?: return false
     if (decor.width <= 0 || decor.height <= 0 || !decor.isAttachedToWindow) return false
     // Cap memory on high-density devices, while drawing at the actual window size.
@@ -65,7 +69,8 @@ class NyvemiThemeTransition {
     }
   }
 
-  fun reveal(durationMs: Int, done: () -> Unit) {
+  fun reveal(id: String, durationMs: Int, done: () -> Unit) {
+    if (id != transitionId) { done(); return }
     val view = overlay
     if (view == null || !view.isAttachedToWindow) { finish(); done(); return }
     completion = done
@@ -84,8 +89,16 @@ class NyvemiThemeTransition {
     }
   }
 
-  fun finish() {
-    if (Looper.myLooper() != Looper.getMainLooper()) { handler.post { finish() }; return }
+  fun finish(id: String? = null) {
+    if (Looper.myLooper() != Looper.getMainLooper()) { handler.post { finish(id) }; return }
+    if (id != null) {
+      cancelled.add(id)
+      if (cancelled.size > 32) cancelled.remove(cancelled.first())
+      if (id != transitionId) return
+    }
+    transitionId?.let { cancelled.add(it) }
+    if (cancelled.size > 32) cancelled.remove(cancelled.first())
+    transitionId = null
     handler.removeCallbacks(timeout)
     val previous = animator
     animator = null

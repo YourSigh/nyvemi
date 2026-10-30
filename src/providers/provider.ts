@@ -28,6 +28,7 @@ export interface LLMProvider {
     messages: ChatTurn[],
     schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     purpose: string,
+    signal?: AbortSignal,
   ): Promise<T>;
 }
 export interface SecretStore {

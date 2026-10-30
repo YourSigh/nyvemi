@@ -185,6 +185,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           </Pressable>
           <Card>
             <Row
+              title="换颜色"
+              onPress={() => navigation.navigate('Theme', { mode: 'settings' })}
+            />
+            <Row
               title="图片与识图"
               onPress={() => navigation.navigate('MediaSettings', { characterId: cid })}
             />

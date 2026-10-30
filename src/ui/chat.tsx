@@ -198,7 +198,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           await closeKeyboard();
           const current = await runtime.themes.load();
           const next = await runtime.themes.interpret(description, current?.preference);
-          await apply(next, () => runtime.themes.save(next));
+          await apply(next, (signal) => runtime.themes.save(next, signal));
         },
         attachments,
       );

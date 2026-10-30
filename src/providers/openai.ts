@@ -160,10 +160,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
     messages: ChatTurn[],
     schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     purpose: string,
+    signal?: AbortSignal,
   ): Promise<T> {
     const result = await this.chat(
       [...messages, { role: 'system', content: '只返回严格 JSON，不要 Markdown 代码围栏。' }],
       purpose,
+      signal,
     );
     let parsed: unknown;
     try {

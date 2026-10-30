@@ -19,9 +19,9 @@ interface AndroidBridge {
     event: 'voicePartial',
     listener: (event: { id: string; text: string }) => void,
   ): { remove(): void };
-  prepareThemeTransition(): Promise<boolean>;
-  revealThemeTransition(duration: number): Promise<void>;
-  finishThemeTransition(): Promise<void>;
+  prepareThemeTransition(id: string): Promise<boolean>;
+  revealThemeTransition(id: string, duration: number): Promise<void>;
+  finishThemeTransition(id: string): Promise<void>;
   intentionWorkState(id: string): Promise<NativeDeliveryState>;
   scheduleRequested(id: string, characterId: string, dueAt: number): Promise<void>;
   cancelRequested(id: string): Promise<void>;
