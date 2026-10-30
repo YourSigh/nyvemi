@@ -1,3 +1,5 @@
+import { requestAgentChat } from './agent-openai';
+import type { AgentModelRequest, AgentModelResult } from '../agent/core';
 import type { z } from 'zod';
 import { id } from '../domain/models';
 import { normalizeUsage } from '../usage/ledger';
@@ -23,6 +25,9 @@ export class OpenAICompatibleProvider implements LLMProvider {
     private request: typeof fetch = fetch,
   ) {
     this.config = validateProviderConfig(config);
+  }
+  toolChat(input: AgentModelRequest, signal?: AbortSignal): Promise<AgentModelResult> {
+    return requestAgentChat(this.config, this.secrets, this.metric, this.request, input, signal);
   }
   private async call(
     messages: ChatTurn[],

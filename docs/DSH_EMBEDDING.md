@@ -29,3 +29,15 @@
 DSH 不是只含一个 HTTP 服务的网页；网页是它的一种客户端。这里选择内嵌核心插件树，让前台及 Headless JS 使用相同运行时。并未声称兼容所有 DSH 第三方插件，也不打包 QQ 登录或 SnowLuma。
 
 工具循环能为自主行为提供基础，不代表主观的“活人感”已经验收。Android 后台仍受系统 Doze、厂商省电和强行停止限制。
+
+## 聊天与能力桥（阶段 2）
+
+App 的生产聊天入口改用 `CompanionAgent`。模型通过原生 tool_calls 选择发消息、wait、排程、记忆检索、读取上下文、搜索/读取公开网页、B站候选浏览、形成经历及换色。普通 assistant 文字不会变成用户可见气泡，不再走旧的参与分类/生成/审核三次固定调用。
+
+工具结果进入真实 DSH Session，写入 SQLite `agentSessions`；每次模型请求与有副作用的工具前保存 checkpoint，恢复时通过上游 interruptedTurnClosers 修复未闭合轮次。单次最多 8 个模型步骤、180 秒，保留原有消息节奏。超过会话字数预算开启新 Session，最近聊天和相关记忆仍显式提供。
+
+网页来源保留 evidenceId；只有当前角色真实读到、未过期的证据能成为 Experience。模型 appraisal 通过 schema 验证后复用 ExperienceEngine 与缓慢 Interest 更新。B站游客接口仍仅提供标题简介，遇到接口失败会返回工具失败，不制造浏览结果。公开网页读取限制 HTTPS、跳转次数、大小和时间，并拒绝本地目标与未受控跳转。
+
+费用统计继续进入现有 UsageLedger，purpose 为 `agent_step`。DSH 核心不持有 Provider Key；传输主机从 SecureStore 读取。存储 checkpoint 和诊断经已知密钥脱敏。
+
+阶段验证：lint / typecheck / 226 单测 / 2 个 Kotlin JVM / Android Debug 通过。新增测试用官方 DSH 核心跑通搜索证据 → 保存经历 → 分条发消息、跨轮静默、自然语言约定的工具排程，以及通知 outbox 故障恢复；Provider 原生工具协议单测通过。后台路由和真实 API 验证在阶段 3 完成。

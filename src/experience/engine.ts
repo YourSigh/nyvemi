@@ -1,4 +1,10 @@
-import { id, type Character, type Experience } from '../domain/models';
+import {
+  id,
+  type Character,
+  type Experience,
+  type ExperienceAppraisal,
+  type Memory,
+} from '../domain/models';
 import type { Storage } from '../storage/store';
 import { MemoryRepository } from '../memory/repository';
 import { appraiseExperience, updateInterests } from './appraisal';
@@ -10,6 +16,11 @@ export class ExperienceEngine {
     sources: ExperienceSource[],
     now: number,
     onError: (source: string) => Promise<void> = async () => {},
+    evaluate: (
+      item: Experience,
+      character: Character,
+      memories: Memory[],
+    ) => ExperienceAppraisal = appraiseExperience,
   ): Promise<void> {
     const existing = await this.store.list('experiences', character.id, 10000);
     const seen = new Set(existing.map((e) => `${e.source}:${e.externalId}`));
@@ -46,10 +57,10 @@ export class ExperienceEngine {
           rssContents.add(contentKey);
           if (item.url) rssUrls.add(item.url);
         }
-        const experience = { ...item, appraisal: appraiseExperience(item, current, memories) };
+        const experience = { ...item, appraisal: evaluate(item, current, memories) };
         await this.store.atomic(async (tx) => {
           current = (await tx.get('characters', character.id)) ?? current;
-          experience.appraisal = appraiseExperience(item, current, memories);
+          experience.appraisal = evaluate(item, current, memories);
           await tx.put('experiences', experience);
           current = {
             ...current,
@@ -77,7 +88,7 @@ export class ExperienceEngine {
               },
             };
           await tx.put('characters', current);
-          if (['bilibili', 'mock-bilibili'].includes(experience.source))
+          if (['bilibili', 'mock-bilibili', 'agent-web'].includes(experience.source))
             await new MemoryRepository(tx).upsert(
               character.id,
               'experience',
@@ -91,7 +102,7 @@ export class ExperienceEngine {
           if (
             experience.appraisal.shareImpulse >= 0.7 &&
             (experience.source.startsWith('rss:') ||
-              ['bilibili', 'mock-bilibili'].includes(experience.source))
+              ['bilibili', 'mock-bilibili', 'agent-web'].includes(experience.source))
           )
             await tx.put('intentions', {
               id: id(),

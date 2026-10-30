@@ -29,6 +29,19 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
     const diagnostics = await runtime.store.list('diagnostics', undefined, 200);
     setSnapshot({
       人格: character?.persona,
+      'DSH 工具': diagnostics.filter((d) => d.characterId === cid && d.data.event === 'agent_tool'),
+      'DSH 状态': await runtime.store
+        .get('agentSessions', cid)
+        .then((session) =>
+          session
+            ? {
+                sessionId: session.sessionId,
+                status: session.lastRunStatus,
+                events: session.events.length,
+                updatedAt: session.updatedAt,
+              }
+            : null,
+        ),
       参与决策: diagnostics.filter(
         (d) =>
           d.characterId === cid &&

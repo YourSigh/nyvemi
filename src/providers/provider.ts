@@ -14,6 +14,10 @@ export interface LLMResult {
   usage: Usage;
 }
 export interface LLMProvider {
+  toolChat?(
+    request: import('../agent/core').AgentModelRequest,
+    signal?: AbortSignal,
+  ): Promise<import('../agent/core').AgentModelResult>;
   chat(messages: ChatTurn[], purpose: string, signal?: AbortSignal): Promise<LLMResult>;
   streamChat(
     messages: ChatTurn[],

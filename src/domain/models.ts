@@ -1,3 +1,4 @@
+import type { AgentSession, AgentEvidence } from '../agent/model';
 import { MeshAvatarSchema } from '../avatar/model';
 import {
   RigSchema,
@@ -114,6 +115,7 @@ export const IntentionSchema = z
     characterId: z.string(),
     type: z.enum(['follow_up', 'share', 'requested', 'continuation', 'reconnect']),
     sourceMessageId: z.string().optional(),
+    agentWakeup: z.boolean().optional(),
     topic: z.string(),
     earliestAt: z.number(),
     requestedDueAt: z.number().optional(),
@@ -217,6 +219,8 @@ export interface ExtractionJob {
   createdAt: number;
 }
 export interface Entities {
+  agentSessions: AgentSession;
+  agentEvidence: AgentEvidence;
   imageSettings: ImageSettings;
   imageRequests: ImageRequestCache;
   visualDrafts: VisualDraft;

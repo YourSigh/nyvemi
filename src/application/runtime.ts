@@ -1,3 +1,7 @@
+import * as Crypto from 'expo-crypto';
+import { CompanionAgent } from '../agent/service';
+import { PublicAgentWeb } from '../agent/web';
+import { BilibiliContentProvider } from '../exploration/content';
 import { recoverVisualWork } from '../appearance/recovery';
 import { imageAssets, imageHash, imageSecret } from '../appearance/native';
 import { defaultImageSettings } from '../appearance/model';
@@ -28,6 +32,11 @@ import { AppState } from 'react-native';
 import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
 async function createRuntime() {
+  if (!globalThis.crypto?.getRandomValues)
+    Object.defineProperty(globalThis, 'crypto', {
+      configurable: true,
+      value: { getRandomValues: Crypto.getRandomValues, randomUUID: Crypto.randomUUID },
+    });
   const store = await openStore();
   await recoverVisualWork(store);
   const activity = new ActivityMonitor();
@@ -56,7 +65,26 @@ async function createRuntime() {
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const syncIntentionWork = () => reconcileIntentionWork(store, bridge());
+  const agent = new CompanionAgent(store, provider, diagnostics, {
+    web: new PublicAgentWeb(
+      new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
+      nativeFetch as unknown as typeof fetch,
+    ),
+    notifications: androidNotifications,
+    visible: () => AppState.currentState === 'active',
+    clock: () => bridge().deviceTimeContext(),
+    model: async () => (await store.get('provider', 'provider'))?.model ?? 'deepseek-flash',
+    redact: async (value) => redactKnownSecret(value, (await secretStore.get()) ?? undefined),
+    schedule: async (task) => {
+      if (AppState.currentState === 'active') {
+        const character = await store.get('characters', task.characterId);
+        if (character) await bridge().startPresence(character.id, character.persona.name);
+      }
+      await bridge().scheduleRequested(task.id, task.characterId, task.earliestAt);
+    },
+  });
   const chat = new ChatService(store, provider, diagnostics, {
+    agent: (input) => agent.run(input),
     clock: () => bridge().deviceTimeContext(),
     scheduleRequested: async (user, delayMs) => {
       if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
@@ -84,6 +112,7 @@ async function createRuntime() {
   const characters = new CharacterService(store, provider);
   return {
     store,
+    agent,
     visuals: new VisualCreationService(
       store,
       async () => {

@@ -27,6 +27,7 @@ export function streamingPreview(raw: string): string {
   }
 }
 export interface ChatHooks {
+  agent?: (input: import('../agent/service').AgentInput) => Promise<Message[]>;
   clock?: () => string;
   scheduleRequested?: (user: Message, delayMs: number) => Promise<string>;
   retrieve: (characterId: string, query: string) => Promise<Memory[]>;
@@ -158,6 +159,31 @@ export class ChatService {
       await this.store.put('messages', user);
       onSaved();
       this.activities.publish(characterId, { phase: 'thinking' });
+      if (this.hooks.agent) {
+        const delivered = await this.hooks.agent({
+          characterId,
+          user,
+          signal,
+          onSaved,
+          onThemeChange,
+          activity: (value) => this.activities.publish(characterId, value),
+        });
+        user = {
+          ...user,
+          status: 'complete',
+          replyDisposition: delivered.length ? 'reply' : 'silence',
+        };
+        await this.store.put('messages', user);
+        hasReply = true;
+        onPreview('');
+        onSaved();
+        try {
+          await this.hooks.afterRound(characterId, user, delivered);
+        } catch {
+          await this.diagnostics.error(characterId, 'post_round');
+        }
+        return;
+      }
       const acknowledge = async (delay: number) => {
         if (!this.hooks.scheduleRequested) throw new Error('当前无法登记定时来信');
         const acknowledgement = await this.hooks.scheduleRequested(user!, delay);
