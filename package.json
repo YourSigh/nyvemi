@@ -23,7 +23,8 @@
     "avatar:candidates": "node scripts/vtuber/artwork.cjs candidates",
     "avatar:split": "node scripts/vtuber/artwork.cjs split",
     "avatar:rig": "node scripts/vtuber/rig.cjs",
-    "avatar:bundle": "node scripts/vtuber/bundle-player.cjs"
+    "avatar:bundle": "node scripts/vtuber/bundle-player.cjs",
+    "agent:bundle": "node scripts/dsh/bundle.cjs"
   },
   "dependencies": {
     "@react-navigation/native": "^7.3.14",
@@ -56,9 +57,13 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@noble/hashes": "2.0.1",
     "@types/node": "^24.0.0",
     "@types/react": "~19.2.2",
     "ag-psd": "^33.0.0",
+    "buffer": "6.0.3",
+    "dsh-zod": "npm:zod@4.4.3",
+    "esbuild": "0.28.2",
     "eslint": "^9.39.0",
     "eslint-config-expo": "~55.0.0",
     "jpeg-js": "^0.4.4",

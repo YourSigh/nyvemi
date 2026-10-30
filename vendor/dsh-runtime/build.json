@@ -1,0 +1,11 @@
+{
+  "upstream": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness",
+    "commit": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
+    "version": "0.2.2-alpha.2",
+    "license": "MIT",
+    "selection": "AgentLoop, Cordis, Session, Llm, Tools, NativeExecutor, browser compatibility sources; no CLI, shell, subprocess, telemetry or package installation."
+  },
+  "sha256": "e3e9b33fe5048fc3590b403eb5d570e3ab201610901e0cfbc456d0a459045112",
+  "bytes": 1354532
+}

@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 npm run avatar:bundle
+npm run agent:bundle
 git status --short
 npm run lint
 npm run typecheck
