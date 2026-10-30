@@ -16,6 +16,8 @@ export type MediaAsset = z.infer<typeof MediaAssetSchema>;
 export const MediaSettingsSchema = z
   .object({
     id: z.literal('media'),
+    // Missing on 0.14.0 records: preserve an explicitly configured visual endpoint.
+    visionSource: z.enum(['chat', 'custom']).default('custom'),
     visionBaseUrl: z.string().url(),
     visionModel: z.string().trim().min(1).max(150),
     reuseImageKey: z.boolean(),
@@ -26,9 +28,10 @@ export const MediaSettingsSchema = z
 export type MediaSettings = z.infer<typeof MediaSettingsSchema>;
 export const defaultMediaSettings: MediaSettings = {
   id: 'media',
-  visionBaseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-  visionModel: 'doubao-seed-2-1-pro-260915',
-  reuseImageKey: true,
+  visionSource: 'chat',
+  visionBaseUrl: 'https://api.deepseek.com',
+  visionModel: 'deepseek-flash',
+  reuseImageKey: false,
   drawingEnabled: false,
   autonomousDrawing: false,
 };

@@ -23,21 +23,28 @@ const result = spawnSync(
   [
     'node_modules/vitest/vitest.mjs',
     'run',
-    process.argv.includes('--extensions')
-      ? 'tests/live-extensions.test.ts'
-      : process.argv.includes('--agent-autonomy')
-        ? 'tests/live-agent-autonomy.test.ts'
-        : process.argv.includes('--agent')
-          ? 'tests/live-agent.test.ts'
-          : process.argv.includes('--conversation')
-            ? 'tests/live-conversation.test.ts'
-            : 'tests/live-provider.test.ts',
+    process.argv.includes('--vision')
+      ? 'tests/live-vision.test.ts'
+      : process.argv.includes('--extensions')
+        ? 'tests/live-extensions.test.ts'
+        : process.argv.includes('--agent-autonomy')
+          ? 'tests/live-agent-autonomy.test.ts'
+          : process.argv.includes('--agent')
+            ? 'tests/live-agent.test.ts'
+            : process.argv.includes('--conversation')
+              ? 'tests/live-conversation.test.ts'
+              : 'tests/live-provider.test.ts',
   ],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_RUN_LIVE_VISION: process.argv.includes('--vision') ? '1' : '0',
+      NYVEMI_LIVE_VISION_SOURCE: 'chat',
+      NYVEMI_VISION_API_KEY: key,
+      NYVEMI_VISION_BASE_URL: base,
+      NYVEMI_VISION_MODEL: local.NYVEMI_TEST_MODEL || 'deepseek-flash',
       NYVEMI_RUN_LIVE_EXTENSIONS: process.argv.includes('--extensions') ? '1' : '0',
       NYVEMI_RUN_LIVE_AUTONOMY: process.argv.includes('--agent-autonomy') ? '1' : '0',
       NYVEMI_RUN_LIVE_AGENT: process.argv.includes('--agent') ? '1' : '0',

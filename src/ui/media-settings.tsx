@@ -27,7 +27,8 @@ export function MediaSettingsScreen() {
         setSettings(s);
         setDraw((await runtime.store.get('imageSettings', 'images')) ?? defaultImageSettings);
         setHasKey(
-          Boolean(await (s.reuseImageKey ? imageSecret : visionSecret).get(s.visionBaseUrl)),
+          s.visionSource === 'custom' &&
+            Boolean(await (s.reuseImageKey ? imageSecret : visionSecret).get(s.visionBaseUrl)),
         );
       })().catch(() => setError('读取失败'));
     }, [runtime]),
@@ -66,29 +67,39 @@ export function MediaSettingsScreen() {
     <Page>
       <Card>
         <Text style={{ color: palette.ink, fontSize: 17 }}>看懂你发来的图片</Text>
-        <Field
-          label="识图 Base URL"
-          value={settings.visionBaseUrl}
-          onChangeText={(v) => setSettings({ ...settings, visionBaseUrl: v })}
-          autoCapitalize="none"
-        />
-        <Field
-          label="视觉模型 / Endpoint ID"
-          value={settings.visionModel}
-          onChangeText={(v) => setSettings({ ...settings, visionModel: v })}
-          autoCapitalize="none"
-        />
-        {toggle('识图与生图共用Key', settings.reuseImageKey, (v) =>
-          setSettings({ ...settings, reuseImageKey: v }),
+        {toggle('使用聊天模型识图', settings.visionSource === 'chat', (v) => {
+          setKey('');
+          setSettings({ ...settings, visionSource: v ? 'chat' : 'custom' });
+        })}
+        {settings.visionSource === 'chat' ? (
+          <Note>自动使用聊天模型和Key，DeepSeek请选择deepseek-flash。</Note>
+        ) : (
+          <>
+            <Field
+              label="识图 Base URL"
+              value={settings.visionBaseUrl}
+              onChangeText={(v) => setSettings({ ...settings, visionBaseUrl: v })}
+              autoCapitalize="none"
+            />
+            <Field
+              label="视觉模型 / Endpoint ID"
+              value={settings.visionModel}
+              onChangeText={(v) => setSettings({ ...settings, visionModel: v })}
+              autoCapitalize="none"
+            />
+            {toggle('识图与生图共用Key', settings.reuseImageKey, (v) =>
+              setSettings({ ...settings, reuseImageKey: v }),
+            )}
+            <Field
+              label={settings.reuseImageKey ? '豆包共用 API Key' : '视觉模型 API Key'}
+              placeholder={hasKey ? '已保存，留空保留' : '填入你自己的Key'}
+              value={key}
+              onChangeText={setKey}
+              secureTextEntry
+              autoCapitalize="none"
+            />
+          </>
         )}
-        <Field
-          label={settings.reuseImageKey ? '豆包共用 API Key' : '视觉模型 API Key'}
-          placeholder={hasKey ? '已保存，留空保留' : '填入你自己的Key'}
-          value={key}
-          onChangeText={setKey}
-          secureTextEntry
-          autoCapitalize="none"
-        />
       </Card>
       <Card>
         <Text style={{ color: palette.ink, fontSize: 17 }}>她画给你的图片</Text>
@@ -110,7 +121,7 @@ export function MediaSettingsScreen() {
           onChangeText={(v) => setDraw({ ...draw, imageModel: v })}
           autoCapitalize="none"
         />
-        {!settings.reuseImageKey ? (
+        {settings.visionSource === 'chat' || !settings.reuseImageKey ? (
           <Field
             label="生图 API Key"
             placeholder="留空保留"

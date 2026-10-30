@@ -28,14 +28,19 @@ export async function saveMediaConfiguration(
       ...drawing,
       provider: media.drawingEnabled ? 'seedream' : drawing.provider,
     });
-  if (media.reuseImageKey && new URL(image.baseUrl).origin !== new URL(media.visionBaseUrl).origin)
+  const custom = media.visionSource === 'custom';
+  if (
+    custom &&
+    media.reuseImageKey &&
+    new URL(image.baseUrl).origin !== new URL(media.visionBaseUrl).origin
+  )
     throw Error('共用Key需要识图与生图地址同域');
-  if (keys.vision.trim())
+  if (custom && keys.vision.trim())
     await (media.reuseImageKey ? secrets.image : secrets.vision).set(
       keys.vision.trim(),
       media.reuseImageKey ? image.baseUrl : media.visionBaseUrl,
     );
-  if (keys.drawing.trim() && !media.reuseImageKey)
+  if (keys.drawing.trim() && (!custom || !media.reuseImageKey))
     await secrets.image.set(keys.drawing.trim(), image.baseUrl);
   if (media.drawingEnabled && !(await secrets.image.get(image.baseUrl)))
     throw Error('请填写生图Key');
@@ -46,8 +51,10 @@ export async function saveMediaConfiguration(
   return {
     media,
     image,
-    hasKey: Boolean(
-      await (media.reuseImageKey ? secrets.image : secrets.vision).get(media.visionBaseUrl),
-    ),
+    hasKey:
+      custom &&
+      Boolean(
+        await (media.reuseImageKey ? secrets.image : secrets.vision).get(media.visionBaseUrl),
+      ),
   };
 }

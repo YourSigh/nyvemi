@@ -77,6 +77,10 @@ async function createRuntime() {
       JSON.stringify((await store.get('imageSettings', 'images')) ?? defaultImageSettings),
     hash: imageHash,
     secret: async (base, reuse) => (reuse ? imageSecret.get(base) : visionSecret.get(base)),
+    chatVision: async () => {
+      const config = await store.get('provider', 'provider');
+      return config ? { ...config, key: await secretStore.get() } : null;
+    },
     metric: async (metric) => {
       await usage.record(metric, await usage.price(metric.endpoint, metric.model));
       await diagnostics.record('api', '', { ...metric });
