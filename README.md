@@ -12,6 +12,8 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
+**0.14.2 repairs theme switching and shared form interactions.** Settings has a dedicated color editor, separate from onboarding. Theme interpretation/transition callbacks have cancellation and bounded waits; interrupted native overlays cannot keep the app locked. Form pages add a keyboard toolbar and safe-area spacing, stop keyboard handling when unfocused, and standardize button/single-line input alignment. See [audit, regression evidence and device-validation limits](docs/UI_REVIEW_0_14_2.md).
+
 **0.14.1 reuses the chat model and Key for vision by default.** DeepSeek `deepseek-flash` reads uploaded images; Seedream remains the drawing provider. No separate visual Key is needed in the default setup. Existing custom visual configurations are preserved; enable “使用聊天模型识图” to switch them.
 
 **0.14.0 adds installable skills/plugins and image messages.** Characters can persist learned methods, compose existing tools into reusable workflows, install compatible JSON or SKILL.md packages, and use uploaded/generated images. Settings → 技能与插件 manages versions and permissions; Settings → 图片与识图 configures visual understanding and drawing. See [formats, setup and validation](docs/PLUGINS_AND_IMAGES.md).
