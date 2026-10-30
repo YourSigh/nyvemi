@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { MediaAsset } from '../media/model';
 import { useRuntime } from './context';
 export function MessageImages({ ids, characterId }: { ids: string[]; characterId: string }) {
-  const { transitioning } = useTheme();
+  const { transitioning, palette } = useTheme();
   const runtime = useRuntime(),
     [assets, setAssets] = useState<MediaAsset[]>([]),
     [view, setView] = useState<MediaAsset>(),
@@ -57,7 +57,7 @@ export function MessageImages({ ids, characterId }: { ids: string[]; characterId
           />
         </Pressable>
       ))}
-      {failed ? <Text>图片文件不可用</Text> : null}
+      {failed ? <Text style={{ color: palette.muted }}>图片文件不可用</Text> : null}
       <Modal visible={!!view} animationType="fade" onRequestClose={() => setView(undefined)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#111' }}>
           <Pressable
