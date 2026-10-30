@@ -379,13 +379,22 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 }}
                 style={{
                   width: 36,
-                  height: 44,
+                  height: 48,
                   alignItems: 'center',
                   justifyContent: 'center',
                   opacity: busy || picking ? 0.4 : 1,
                 }}
               >
-                <Text style={{ fontSize: 28, color: theme.primary }}>＋</Text>
+                <Text
+                  style={{
+                    fontSize: 28,
+                    color: theme.primary,
+                    includeFontPadding: false,
+                    textAlignVertical: 'center',
+                  }}
+                >
+                  ＋
+                </Text>
               </Pressable>
 
               <Pressable
@@ -407,7 +416,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 }}
                 style={{
                   width: 44,
-                  height: 44,
+                  height: 48,
                   alignItems: 'center',
                   justifyContent: 'center',
                   opacity: busy || dictating ? 0.4 : 1,
@@ -518,11 +527,13 @@ const createStyles = (theme: CharacterTheme) =>
     input: {
       flex: 1,
       maxHeight: 100,
-      minHeight: 44,
+      minHeight: 48,
       padding: 10,
       backgroundColor: theme.surface,
       borderRadius: 14,
       fontSize: 15,
       color: theme.text,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
     },
   });

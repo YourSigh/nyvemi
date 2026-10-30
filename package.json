@@ -60,6 +60,7 @@
     "@noble/hashes": "2.0.1",
     "@types/node": "^24.0.0",
     "@types/react": "~19.2.2",
+    "@types/react-test-renderer": "^19.1.0",
     "ag-psd": "^33.0.0",
     "buffer": "6.0.3",
     "dsh-zod": "npm:zod@4.4.3",
@@ -69,6 +70,7 @@
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0",
     "prettier": "^3.6.2",
+    "react-test-renderer": "^19.2.0",
     "typescript": "~5.9.2",
     "vitest": "^5.0.5"
   },

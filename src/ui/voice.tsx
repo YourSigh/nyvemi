@@ -119,7 +119,7 @@ export function HoldToTalk({
         accessibilityRole="button"
         accessibilityLabel="按住说话，上滑取消"
         style={{
-          minHeight: 46,
+          minHeight: 48,
           padding: 12,
           borderWidth: 1,
           borderRadius: 18,
@@ -141,7 +141,14 @@ export function HoldToTalk({
         onResponderTerminationRequest={() => false}
         onResponderTerminate={() => controller.current?.cancel()}
       >
-        <Text style={{ color: canceling ? palette.error : palette.ink, fontSize: 15 }}>
+        <Text
+          style={{
+            color: canceling ? palette.error : palette.ink,
+            fontSize: 15,
+            includeFontPadding: false,
+            textAlign: 'center',
+          }}
+        >
           {canceling
             ? '松开取消'
             : phase === 'processing'

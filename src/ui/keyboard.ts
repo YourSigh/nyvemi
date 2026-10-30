@@ -1,6 +1,9 @@
 import { Keyboard } from 'react-native';
 export async function closeKeyboard(): Promise<void> {
-  if (!Keyboard.isVisible()) return;
+  if (!Keyboard.isVisible()) {
+    Keyboard.dismiss();
+    return;
+  }
   await new Promise<void>((resolve) => {
     const finish = () => {
       clearTimeout(timeout);

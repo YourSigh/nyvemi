@@ -207,7 +207,15 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                         onPress={() => setAnswer(c)}
                         style={s.chip}
                       >
-                        <Text style={{ color: palette.accent }}>{c}</Text>
+                        <Text
+                          style={{
+                            color: palette.accent,
+                            includeFontPadding: false,
+                            textAlign: 'center',
+                          }}
+                        >
+                          {c}
+                        </Text>
                       </Pressable>
                     ))}
                   </View>
@@ -268,7 +276,8 @@ const createStyles = (palette: Palette) =>
       padding: 12,
       color: palette.ink,
       fontSize: 16,
-      textAlignVertical: 'top',
+      textAlignVertical: 'center',
+      includeFontPadding: false,
     },
     choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: {
@@ -277,5 +286,7 @@ const createStyles = (palette: Palette) =>
       padding: 10,
       borderRadius: 12,
       backgroundColor: palette.tint,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });

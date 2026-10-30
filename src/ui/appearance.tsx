@@ -184,13 +184,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 accessibilityState={{ selected: mode === id }}
                 style={{
                   padding: 12,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   borderRadius: 16,
                   backgroundColor: mode === id ? palette.tint : palette.paper,
                   borderWidth: 1,
                   borderColor: mode === id ? palette.accent : palette.line,
                 }}
               >
-                <Text style={{ color: palette.ink }}>{label}</Text>
+                <Text
+                  style={{ color: palette.ink, includeFontPadding: false, textAlign: 'center' }}
+                >
+                  {label}
+                </Text>
               </Pressable>
             ))}
           </View>

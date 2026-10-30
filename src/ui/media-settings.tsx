@@ -35,7 +35,7 @@ export function MediaSettingsScreen() {
   );
   const toggle = (label: string, value: boolean, change: (v: boolean) => void) => (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-      <Text style={{ color: palette.ink }}>{label}</Text>
+      <Text style={{ color: palette.ink, flex: 1, flexShrink: 1, marginRight: 12 }}>{label}</Text>
       <Switch
         disabled={busy}
         value={value}

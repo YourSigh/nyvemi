@@ -61,7 +61,9 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
         <View
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
         >
-          <Text style={{ color: palette.ink }}>允许她学习与安装兼容插件</Text>
+          <Text style={{ color: palette.ink, flex: 1, flexShrink: 1, marginRight: 12 }}>
+            允许她学习与安装兼容插件
+          </Text>
           <Switch
             disabled={busy}
             value={autonomy}

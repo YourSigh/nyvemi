@@ -23,9 +23,15 @@ function Row({ title, value, onPress }: { title: string; value?: string; onPress
       onPress={onPress}
       style={{ minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12 }}
     >
-      <Text style={{ color: palette.ink, fontSize: 16, flex: 1 }}>{title}</Text>
-      {value ? <Text style={{ color: palette.muted, fontSize: 13 }}>{value}</Text> : null}
-      <Text style={{ color: palette.muted, fontSize: 20 }}>›</Text>
+      <Text style={{ color: palette.ink, fontSize: 16, flex: 1, includeFontPadding: false }}>
+        {title}
+      </Text>
+      {value ? (
+        <Text style={{ color: palette.muted, fontSize: 13, includeFontPadding: false }}>
+          {value}
+        </Text>
+      ) : null}
+      <Text style={{ color: palette.muted, fontSize: 20, includeFontPadding: false }}>›</Text>
     </Pressable>
   );
 }
@@ -45,7 +51,9 @@ function Toggle({
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: palette.ink, fontSize: 16 }}>{title}</Text>
+        <Text style={{ color: palette.ink, fontSize: 16, flex: 1, flexShrink: 1, marginRight: 12 }}>
+          {title}
+        </Text>
         <Switch
           accessibilityLabel={title}
           trackColor={{ false: palette.line, true: palette.tint }}

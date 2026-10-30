@@ -65,9 +65,19 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
                 key={text}
                 accessibilityRole="button"
                 onPress={() => setDescription(text)}
-                style={{ padding: 10, backgroundColor: palette.tint, borderRadius: 14 }}
+                style={{
+                  padding: 10,
+                  backgroundColor: palette.tint,
+                  borderRadius: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
-                <Text style={{ color: palette.accent }}>{text}</Text>
+                <Text
+                  style={{ color: palette.accent, includeFontPadding: false, textAlign: 'center' }}
+                >
+                  {text}
+                </Text>
               </Pressable>
             ),
           )}

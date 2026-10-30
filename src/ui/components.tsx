@@ -1,8 +1,12 @@
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
+import { NavigationContext } from '@react-navigation/native';
+import { HeaderShownContext } from '@react-navigation/elements';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -10,20 +14,62 @@ import {
   View,
   type TextInputProps,
 } from 'react-native';
-import { usePalette } from '../theme/context';
+import { usePalette, useTheme } from '../theme/context';
 import type { Palette } from '../theme/model';
 export function Page({ children }: PropsWithChildren) {
-  const palette = usePalette();
+  const { palette, transitioning } = useTheme();
+  const navigation = useContext(NavigationContext);
+  const headerShown = useContext(HeaderShownContext);
+  const insets = useSafeAreaInsets();
+  const [focused, setFocused] = useState(() => navigation?.isFocused() ?? true);
+  useEffect(() => {
+    if (!navigation) return;
+    setFocused(navigation.isFocused());
+    const focus = navigation.addListener('focus', () => setFocused(true));
+    const blur = navigation.addListener('blur', () => {
+      setFocused(false);
+      Keyboard.dismiss();
+    });
+    return () => {
+      focus();
+      blur();
+    };
+  }, [navigation]);
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const keyboardColors = {
+    primary: palette.accent,
+    disabled: palette.muted,
+    background: palette.paper,
+    ripple: palette.tint,
+  };
   return (
-    <KeyboardAwareScrollView
-      bottomOffset={24}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      contentContainerStyle={styles.page}
-    >
-      {children}
-    </KeyboardAwareScrollView>
+    <View style={{ flex: 1, backgroundColor: palette.background }}>
+      <KeyboardAwareScrollView
+        style={{ flex: 1 }}
+        enabled={focused && !transitioning}
+        bottomOffset={64}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={[
+          styles.page,
+          {
+            paddingTop: 22 + (headerShown ? 0 : insets.top),
+            paddingBottom: 48 + insets.bottom,
+            paddingLeft: 22 + insets.left,
+            paddingRight: 22 + insets.right,
+          },
+        ]}
+      >
+        {children}
+      </KeyboardAwareScrollView>
+      {focused && !transitioning ? (
+        <KeyboardToolbar theme={{ light: keyboardColors, dark: keyboardColors }} insets={insets}>
+          <KeyboardToolbar.Prev />
+          <KeyboardToolbar.Next />
+          <KeyboardToolbar.Done text="收起" />
+        </KeyboardToolbar>
+      ) : null}
+    </View>
   );
 }
 export function Heading({ children }: PropsWithChildren) {
@@ -52,13 +98,14 @@ export function Button({
   disabled?: boolean;
   secondary?: boolean;
 }) {
-  const palette = usePalette();
+  const { palette, transitioning } = useTheme();
   const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
-      disabled={disabled}
+      disabled={disabled || transitioning}
+      accessibilityState={{ disabled: disabled || transitioning }}
       onPress={onPress}
       style={[styles.button, secondary && styles.secondary, disabled && { opacity: 0.45 }]}
     >
@@ -66,19 +113,31 @@ export function Button({
     </Pressable>
   );
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
-  const palette = usePalette();
+export function Field({
+  label,
+  style,
+  multiline = false,
+  ...props
+}: TextInputProps & { label: string }) {
+  const { palette, transitioning } = useTheme();
   const styles = useMemo(() => createStyles(palette), [palette]);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
+        {...props}
         accessibilityLabel={label}
         placeholderTextColor={palette.muted}
         selectionColor={palette.accent}
         cursorColor={palette.accent}
-        style={[styles.input, props.multiline && { minHeight: 72, textAlignVertical: 'top' }]}
-        {...props}
+        multiline={multiline}
+        editable={!transitioning && props.editable !== false}
+        returnKeyType={props.returnKeyType ?? (multiline ? 'default' : 'done')}
+        submitBehavior={props.submitBehavior ?? (multiline ? 'newline' : 'blurAndSubmit')}
+        autoCorrect={
+          props.autoCorrect ?? (!props.secureTextEntry && props.autoCapitalize !== 'none')
+        }
+        style={[styles.input, multiline && { minHeight: 96, textAlignVertical: 'top' }, style]}
       />
     </View>
   );
@@ -150,15 +209,24 @@ const createStyles = (palette: Palette) =>
       borderColor: palette.line,
     },
     button: {
-      paddingVertical: 15,
+      paddingVertical: 12,
       paddingHorizontal: 18,
       borderRadius: 14,
       backgroundColor: palette.accent,
       alignItems: 'center',
+      justifyContent: 'center',
       minHeight: 48,
     },
     secondary: { backgroundColor: palette.tint },
-    buttonText: { color: palette.onAccent, fontSize: 15, fontWeight: '600' },
+    buttonText: {
+      color: palette.onAccent,
+      fontSize: 15,
+      fontWeight: '600',
+      includeFontPadding: false,
+      textAlign: 'center',
+      textAlignVertical: 'center',
+      flexShrink: 1,
+    },
     field: { gap: 8 },
     label: { fontSize: 14, color: palette.ink, fontWeight: '500' },
     input: {
@@ -166,7 +234,11 @@ const createStyles = (palette: Palette) =>
       borderWidth: 1,
       borderColor: palette.line,
       borderRadius: 12,
-      padding: 13,
+      minHeight: 48,
+      paddingHorizontal: 13,
+      paddingVertical: 12,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
       fontSize: 16,
       color: palette.ink,
     },
