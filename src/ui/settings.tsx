@@ -185,6 +185,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           </Pressable>
           <Card>
             <Row
+              title="技能与插件"
+              onPress={() => navigation.navigate('Plugins', { characterId: cid })}
+            />
+            <Row
               title="角色形象"
               onPress={() => navigation.navigate('Appearance', { characterId: cid })}
             />

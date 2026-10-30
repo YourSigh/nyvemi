@@ -6,6 +6,41 @@ const string = (description: string, required = true) => ({
 });
 export const agentTools: AgentTool[] = [
   {
+    name: 'develop_plugin',
+    description:
+      '把已有工具组合成新的可复用插件，保存并立即可用。只接受 nyvemi-plugin/v1 JSON，不能运行JS、Node或shell。步骤最多4个，变量用 {{input.字段}} 或 {{step.0}}。工具操作仅限 read_context/web_search/web_fetch/browse_bilibili/recall_memory/remember_experience/schedule_wakeup/inspect_image/draw_image，必须声明相应权限。',
+    parameters: {
+      manifestJson: string(
+        '完整插件JSON：format、id(2~24字符)、name、version(1.0.0)、description、instructions、permissions、tools。tools元素：name、description、inputs(字段到string/number/boolean类型)、steps(operation和args对象)。',
+      ),
+    },
+  },
+
+  { name: 'list_plugins', description: '查看已安装技能、工具及启用状态。', parameters: {} },
+  {
+    name: 'install_plugin',
+    description:
+      '从公开HTTPS地址安装 Nyvemi JSON 插件或 SKILL.md。不是 npm/Node 插件。新增权限会等待用户在插件页同意。',
+    parameters: { url: string('插件文件地址') },
+  },
+  {
+    name: 'learn_skill',
+    description:
+      '把相处中学到的可复用方法保存为技能，或更新自己已有的技能。只保存实际有用的方法，不改变人格、联系边界或系统规则。',
+    parameters: {
+      id: string('小写英文技能ID，2到24字符'),
+      name: string('技能名称'),
+      instructions: string('具体做法与适用条件'),
+      description: string('一句话用途'),
+    },
+  },
+  {
+    name: 'run_plugin',
+    description: '运行已启用插件工具，含本轮刚安装的工具；名称从插件列表获取。',
+    parameters: { name: string('插件工具名称'), argumentsJson: string('参数JSON对象字符串') },
+  },
+
+  {
     name: 'send_message',
     description:
       '真正发出聊天气泡。每个 messages 元素是一个独立表达，分段想法分条发送；只有此工具会说给用户听。可一次发送数条，也可稍后再补。',

@@ -1,3 +1,4 @@
+import { PluginManager } from '../extensions/manager';
 import * as Crypto from 'expo-crypto';
 import { CompanionAgent } from '../agent/service';
 import { PublicAgentWeb } from '../agent/web';
@@ -65,11 +66,17 @@ async function createRuntime() {
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const syncIntentionWork = () => reconcileIntentionWork(store, bridge());
+  const agentWeb = new PublicAgentWeb(
+    new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
+    nativeFetch as unknown as typeof fetch,
+  );
+  const plugins = new PluginManager(store, {
+    load: (url) => agentWeb.pluginSource(url),
+    hash: imageHash,
+  });
   const agent = new CompanionAgent(store, provider, diagnostics, {
-    web: new PublicAgentWeb(
-      new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
-      nativeFetch as unknown as typeof fetch,
-    ),
+    web: agentWeb,
+    plugins,
     notifications: androidNotifications,
     activity: (stage, cid) => activity.report(stage, cid),
     visible: () => AppState.currentState === 'active',
@@ -114,6 +121,7 @@ async function createRuntime() {
   return {
     store,
     agent,
+    plugins,
     visuals: new VisualCreationService(
       store,
       async () => {

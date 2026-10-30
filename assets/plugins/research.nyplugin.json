@@ -1,0 +1,15 @@
+{
+  "format": "nyvemi-plugin/v1",
+  "id": "reading-notes",
+  "name": "找一篇想读的东西",
+  "version": "1.0.0",
+  "description": "按自己的兴趣搜一搜，读完再决定是否分享。",
+  "instructions": "候选结果只是搜索片段。选择感兴趣的网页后，再用 web_fetch 阅读，确有感触时记成经历；没有值得说的就等待。",
+  "permissions": ["web"],
+  "tools": [{
+    "name": "find-reading",
+    "description": "按主题搜少量候选网页",
+    "inputs": {"topic": "string"},
+    "steps": [{"operation": "web_search", "args": {"query": "{{input.topic}}"}}]
+  }]
+}

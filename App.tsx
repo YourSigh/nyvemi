@@ -1,3 +1,4 @@
+import { PluginsScreen } from './src/ui/plugins';
 import { upgradeBuiltinMeshModels } from './src/avatar/native';
 import { AppearanceScreen } from './src/ui/appearance';
 import { reconcileIntentionWork } from './src/proactive/requested-delivery';
@@ -176,6 +177,11 @@ function Application() {
                       contentStyle: { backgroundColor: palette.background },
                     }}
                   >
+                    <Stack.Screen
+                      name="Plugins"
+                      component={PluginsScreen}
+                      options={{ title: '技能与插件' }}
+                    />
                     <Stack.Screen
                       name="Usage"
                       component={UsageScreen}

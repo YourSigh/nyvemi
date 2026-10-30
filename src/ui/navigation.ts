@@ -2,6 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { CharacterAnswers } from '../characters/service';
 export type Routes = {
   Welcome: undefined;
+  Plugins: { characterId: string };
   Usage: undefined;
   Provider: { onboarding?: boolean; skipTheme?: boolean } | undefined;
   Theme: undefined;

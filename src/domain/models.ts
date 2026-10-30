@@ -1,3 +1,4 @@
+import type { InstalledPlugin, PluginPolicy } from '../extensions/model';
 import type { AgentSession, AgentEvidence } from '../agent/model';
 import { MeshAvatarSchema } from '../avatar/model';
 import {
@@ -219,6 +220,8 @@ export interface ExtractionJob {
   createdAt: number;
 }
 export interface Entities {
+  plugins: InstalledPlugin;
+  pluginPolicies: PluginPolicy;
   agentSessions: AgentSession;
   agentEvidence: AgentEvidence;
   imageSettings: ImageSettings;

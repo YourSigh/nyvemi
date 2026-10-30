@@ -109,6 +109,9 @@ export class PublicAgentWeb implements AgentWeb {
       parent?.removeEventListener('abort', abort);
     }
   }
+  async pluginSource(url: string): Promise<string> {
+    return (await this.text(url)).text;
+  }
   async search(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
     const response = await this.text(
       `https://www.bing.com/search?format=rss&q=${encodeURIComponent(query)}`,
