@@ -67,6 +67,7 @@ var _a, _b, _c, _d, _e, _ends, _size, _consumed, _mode, _escape, _keyStart, _key
 Object.defineProperty(exports, "__esModule", { value: true });
 const __dsh$def = (t, k, get) => Object.defineProperty(t, k, { enumerable: true, configurable: true, get });
 __dsh$def(exports, "run", () => run);
+__dsh$def(exports, "runtimeStats", () => runtimeStats);
 var __create = Object.create;
 var __defProp2 = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -231,6 +232,7 @@ var init_async_hooks = __esm({
        * @returns the exact value the callback returned.
        */
       run(store, callback, ...args) {
+        instances.add(this);
         const entry = { store };
         this.entries.push(entry);
         const remove = () => {
@@ -298,10 +300,12 @@ var init_async_hooks = __esm({
        * @param store - value {@link getStore} answers from now on.
        */
       enterWith(store) {
+        instances.add(this);
         this.entries.push({ store });
       }
       /** Drop every slot; teardown calls this unconditionally. */
       disable() {
+        instances.delete(this);
         this.entries.length = 0;
         this.overlay = void 0;
         this.ambients.length = 0;
@@ -19170,6 +19174,7 @@ var require_dsh_zod = __commonJS({
   }
 });
 init_als();
+init_async_hooks();
 init_compat();
 init_als();
 init_als();
@@ -31992,6 +31997,10 @@ __publicField(_k, "Config", stdin_default.object({
   })).default([])
 })), _k);
 var stdin_default8 = AgentLoop;
+var runtimeStats = () => {
+  var _a3, _b2;
+  return { ambientStores: (_b2 = (_a3 = __snapshotAll()) == null ? void 0 : _a3.length) != null ? _b2 : 0 };
+};
 async function run(input, ports) {
   var _a3, _b2, _c2;
   const ctx = new Context();
@@ -32009,7 +32018,10 @@ async function run(input, ports) {
         if (++calls > input.maxSteps) throw Error("DSH step budget exceeded");
         __als.resume(yield new __await(__als.pause(ports.checkpoint(agent.session.snapshotEvents()))));
         if ((_a4 = ports.signal) == null ? void 0 : _a4.aborted) throw Error("DSH canceled");
-        const result = __als.resume(yield new __await(__als.pause(ports.generate(options, ports.signal))));
+        const result = __als.resume(yield new __await(__als.pause(ports.generate(
+          options,
+          AbortSignal.any([options.signal, ports.signal].filter(Boolean))
+        ))));
         if (result.reasoning) {
           __als.afterYield(__als.snapshot(), yield { type: "block-start", index: 0, blockType: "reasoning" });
           __als.afterYield(__als.snapshot(), yield { type: "block-end", index: 0, block: { type: "reasoning", text: result.reasoning } });
@@ -32063,7 +32075,8 @@ async function run(input, ports) {
             __als.resume(await __als.pause(ports.checkpoint(agent.session.snapshotEvents())));
             const result = __als.resume(await __als.pause(ports.execute(tool.name, args, {
               signal: exec.signal,
-              callId: exec.callId
+              callId: exec.callId,
+              sequence: agent.session.snapshotEvents().findLast((e) => e.type === "tool/call" && e.data.callId === exec.callId).seq
             })));
             if (tool.terminal) exec.concludeTurn();
             return result;

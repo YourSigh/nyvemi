@@ -23,15 +23,21 @@ const result = spawnSync(
   [
     'node_modules/vitest/vitest.mjs',
     'run',
-    process.argv.includes('--conversation')
-      ? 'tests/live-conversation.test.ts'
-      : 'tests/live-provider.test.ts',
+    process.argv.includes('--agent-autonomy')
+      ? 'tests/live-agent-autonomy.test.ts'
+      : process.argv.includes('--agent')
+        ? 'tests/live-agent.test.ts'
+        : process.argv.includes('--conversation')
+          ? 'tests/live-conversation.test.ts'
+          : 'tests/live-provider.test.ts',
   ],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_RUN_LIVE_AUTONOMY: process.argv.includes('--agent-autonomy') ? '1' : '0',
+      NYVEMI_RUN_LIVE_AGENT: process.argv.includes('--agent') ? '1' : '0',
       NYVEMI_LIVE_BASELINE: process.argv.includes('--baseline') ? '1' : '0',
       NYVEMI_LIVE_FOCUS: process.argv.includes('--focus-memory') ? 'memory' : 'full',
       NYVEMI_TEST_API_KEY: key,

@@ -27,18 +27,29 @@ export class HeartbeatEngine {
     private diagnostics: Diagnostics,
     private clock: () => number = Date.now,
     private activity: (stage: CompanionActivity, characterId: string) => void = () => {},
+    private agent?: {
+      due(kind?: 'requested' | 'continuation' | 'reconnect', targetId?: string): Promise<void>;
+      heartbeat(): Promise<void>;
+    },
   ) {}
   // User-requested delivery is independent of unsolicited initiative and its cooldowns.
   async runRequested(targetId?: string): Promise<void> {
-    return this.runConversationIntention('requested', targetId);
+    return this.agent
+      ? this.agent.due('requested', targetId)
+      : this.runConversationIntention('requested', targetId);
   }
   async runContinuations(targetId?: string): Promise<void> {
-    return this.runConversationIntention('continuation', targetId);
+    return this.agent
+      ? this.agent.due('continuation', targetId)
+      : this.runConversationIntention('continuation', targetId);
   }
   async runReconnects(targetId?: string): Promise<void> {
-    return this.runConversationIntention('reconnect', targetId);
+    return this.agent
+      ? this.agent.due('reconnect', targetId)
+      : this.runConversationIntention('reconnect', targetId);
   }
   async runIntention(id: string): Promise<void> {
+    if (this.agent) return this.agent.due(undefined, id);
     const task = await this.store.get('intentions', id);
     if (task?.type === 'requested') await this.runRequested(id);
     else if (task?.type === 'continuation') await this.runContinuations(id);
@@ -241,6 +252,11 @@ export class HeartbeatEngine {
     }
   }
   async run(targetId?: string): Promise<void> {
+    if (this.agent) {
+      await this.agent.due(undefined, targetId);
+      if (!targetId) await this.agent.heartbeat();
+      return;
+    }
     if (!targetId) {
       await this.runRequested();
       await this.runContinuations();

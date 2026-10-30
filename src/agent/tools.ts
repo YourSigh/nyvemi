@@ -10,19 +10,28 @@ export const agentTools: AgentTool[] = [
     description:
       '真正发出聊天气泡。每个 messages 元素是一个独立表达，分段想法分条发送；只有此工具会说给用户听。可一次发送数条，也可稍后再补。',
     parameters: {
-      messages: { type: 'array', required: true, items: { type: 'string' } },
+      messages: {
+        type: 'array',
+        required: true,
+        description: '1到4条，每条最多1200字。不同段落分条。',
+        items: { type: 'string' },
+      },
       emotion: string('amused/curious/excited/annoyed/embarrassed/sad/calm/tired，可省略', false),
     },
   },
   {
     name: 'wait',
     description:
-      '结束这次活动，什么也不发。用户想独处、不用回复或正在说话时可用；untilUser=true 会暂停自主来信，直到新的对话中决定重新开口。不是把“安静”发给用户。',
+      '结束本轮，什么也不发。只表示现在没有要说的话，不取消已经登记的唤醒，也不修改来信偏好。',
     terminal: true,
-    parameters: {
-      reason: string('简短决定，不写推理过程'),
-      untilUser: { type: 'boolean', required: true },
-    },
+    parameters: { reason: string('简短决定，不写推理过程') },
+  },
+  {
+    name: 'pause_contact',
+    description:
+      '仅当用户明确要求独处、暂停主动联系时，持久保存这条边界并取消未来来信。普通等待用户回复不使用它。没有任何确认气泡。',
+    terminal: true,
+    parameters: { reason: string('用户表达的联系边界') },
   },
   {
     name: 'schedule_wakeup',

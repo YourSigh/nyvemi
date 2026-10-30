@@ -72,7 +72,12 @@ export function updateInterests(
   if (!appraisal || appraisal.selfInterest < 0.5) return interests;
   // A user's relevance alone never creates an identical character preference.
   const updated = interests.map((interest) => {
-    if (overlap(`${experience.title} ${experience.content}`, interest.topic) < 0.05)
+    if (
+      overlap(
+        `${experience.topics.join(' ')} ${experience.title} ${experience.content}`,
+        interest.topic,
+      ) < 0.05
+    )
       return interest;
     const elapsed = Math.max(0, now - interest.updatedAt) / 3600000;
     const delta = Math.min(0.02, elapsed * 0.002) * appraisal.selfInterest;

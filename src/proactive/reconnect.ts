@@ -58,6 +58,8 @@ export async function planReconnect(store: Storage, user: Message, now: number):
 export async function recoverReconnects(store: Storage, now = Date.now()): Promise<void> {
   for (const c of await store.list('characters')) {
     await store.atomic(async (tx) => {
+      // DSH owns its own follow-up decisions; do not create legacy heuristic wakeups.
+      if (await tx.get('agentSessions', c.id)) return;
       const messages = await tx.list('messages', c.id, 100);
       const user = messages.find((m) => m.role === 'user');
       if (
@@ -93,7 +95,13 @@ export async function autonomousBlock(
     records.filter((n) => n.characterId === characterId),
     now,
   );
-  if (state.latestUser && asksForSpace(state.latestUser.content)) return 'user_wants_space';
+  // DSH records the semantic contact decision; legacy sessions retain their old text gate.
+  if (
+    !(await store.get('agentSessions', characterId)) &&
+    state.latestUser &&
+    asksForSpace(state.latestUser.content)
+  )
+    return 'user_wants_space';
   if (state.unansweredCount >= 2) return 'awaiting_user_reply';
   return undefined;
 }

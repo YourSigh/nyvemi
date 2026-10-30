@@ -47,7 +47,7 @@ export interface AgentPorts {
   execute(
     name: string,
     args: unknown,
-    execution: { signal: AbortSignal; callId: string },
+    execution: { signal: AbortSignal; callId: string; sequence: number },
   ): Promise<unknown>;
 }
 export type AgentRunner = (

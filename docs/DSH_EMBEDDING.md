@@ -41,3 +41,46 @@ App 的生产聊天入口改用 `CompanionAgent`。模型通过原生 tool_calls
 费用统计继续进入现有 UsageLedger，purpose 为 `agent_step`。DSH 核心不持有 Provider Key；传输主机从 SecureStore 读取。存储 checkpoint 和诊断经已知密钥脱敏。
 
 阶段验证：lint / typecheck / 226 单测 / 2 个 Kotlin JVM / Android Debug 通过。新增测试用官方 DSH 核心跑通搜索证据 → 保存经历 → 分条发消息、跨轮静默、自然语言约定的工具排程，以及通知 outbox 故障恢复；Provider 原生工具协议单测通过。后台路由和真实 API 验证在阶段 3 完成。
+
+## 后台与交付（阶段 3 / 0.13.0）
+
+- HeartbeatEngine 的生产入口把 requested / continuation / reconnect / share / follow-up 交给同一 `CompanionAgent`；Headless JS 不依赖聊天页。WorkManager 与常驻服务的原生调度保留。
+- `schedule_wakeup` 持久登记任务，调用 Android 调度确认后才报告成功。用户明确约定与自主念头分开；明确约定若模型没有真正发消息，不会记为已送达，而是退避重试。
+- `wait` 仅结束当前活动；`pause_contact` 才保存用户明确要求的联系边界并取消未来安排。后台等待不能自行变更联系偏好。DSH 会话不再使用旧的关键词沉默/重连生成规则。
+- 原子保存消息与 outbox；OS 未收到通知时 native receipt 保持失败，下一次只恢复 outbox，不重新生成文本。过期、取消及安静状态在模型返回后重新检查。
+- 新用户输入可取消背景模型请求，等待回收后获得同一 Agent。前台 180 秒、后台 110 秒预算，最多 8 个模型步骤；后台预算低于原生 150 秒回调时限。无到期任务时不为检查本身调用模型，自由探索最多每四小时一次。
+- Developer Mode 记录工具名、成功与否、简短动作理由、查询来源、唤醒原因及 Session 状态；不显示私有推理。通知栏可随读资料、记忆、写消息等活动更新。
+- 模型 appraisal 的 topics 参与缓慢兴趣变化，避免语义匹配已在模型完成、却因中英文关键词不同而无法更新兴趣。
+- 长期运行适配：上游 AsyncLocalStorage shim 的 disable 从实例集合移除已销毁上下文，run/enterWith 再加入，避免 App 每轮重建 Context 后积累实例。原始包版本读取在构建时替换；其它 AgentLoop / Session / Tools 逻辑保持上游实现。`runtimeStats` 测试验证释放后 ambientStores=0。
+
+### 实际验收记录
+
+`node scripts/test-live.cjs --agent` 使用 `.env` 中的真实 DeepSeek Key，通过实际 DSH 与 OpenAI-compatible 传输执行：
+
+1. “先别说话，我还没想好说什么，不用回复我。” → 无消息。
+2. “。” → 无消息。
+3. “可以说话了，17乘23等于多少？算完不用追问我。” → 单条“391”。
+4. “芜湖，一分钟后随便给我发一条消息吧，我现在退到后台测试通知。” → 真实排程工具；新建 CompanionAgent 读取 SQLite 会话，到达逻辑到期时间后通过发送工具产生两条消息，投递一条通知。
+5. 请求读取 Expo 官方文档 → 模型实际调用 web_fetch，得到页面标题与内容，再分条回答，并保存有证据的 Experience。
+
+主链路成功运行 14 次模型请求、56,679 input tokens、1,173 output tokens。前两轮失败分别 9 次请求：第一轮暴露约定与自由唤醒未区分，第二轮暴露 wait 把待发通知当作暂停联系取消。失败工件保留在 ignored `artifacts/live-dsh-agent-attempt1/2.*`，修复后成功工件为 `artifacts/live-dsh-agent.*`。这些都是实际模型费用，不把失败调用算成零。
+
+`node scripts/test-live.cjs --agent-autonomy` 额外运行一次无用户新请求的自由活动。真实模型自主调用两次 B站候选浏览、一次网页搜索，最后 wait，理由是没有找到值得分享的内容；未伪造 Experience，也未发通知。此过程 4 次模型请求。Mock 集成测试另外覆盖有兴趣的证据 → appraisal / interest 更新 → 稍后唤醒 → 通知完整链路，避免依赖真实模型每次都产生分享欲。
+
+2026-10-30 无模型来源探测：Bing RSS 返回 6 条真实搜索结果，B站游客接口返回 8 个候选（保留 title/description-only 标记）。之前的 HTTP 412 不代表永久不可用；当前成功也不保证后续不会受限。报告：`artifacts/dsh-public-sources.json`。
+
+以上后台验证是在新 JS service 实例中恢复持久状态，推进逻辑到期时间并使用通知网关；**没有声称在实体 Android 手机执行过 WorkManager**。按用户要求不做真机自测。UI/角色动画、系统送达与主观角色质感由用户安装 APK 验收。
+
+### 最终验证与限制
+
+- lint、typecheck、234 个离线测试、2 个 Kotlin JVM 测试、Expo 转换及 Hermes 编译、Android Debug / Release 构建通过。
+- 默认测试跳过真实付费请求与外部来源探测；真实验收单独显式开启。
+- 预览版本 0.13.0 / versionCode 23，沿用既有预览签名，可覆盖更新；密钥不打包。
+- 不兼容所有桌面 DSH 插件；未包含 Node/Python 子进程、QQ、登录、评论、点赞或真实视频解码。游客 B站工具读取元数据，不是字幕/帧观看。
+- DSH 协议 checkpoint 是当前固定上游版本的设备运行数据，不进入角色 Bundle。导入仍恢复人格、记忆、经历、对话和角色资产，并从这些资料开启新 DSH Session；旧安装未发出的任务不会重放。
+- 会话达到 180,000 字符预算后开启新协议 Session，仍提供最近 16 条聊天、最多 8 条相关记忆及工具可检索的经历，避免无限上下文与后台费用。
+- Android Doze、厂商省电、断网和强行停止仍可能延迟来信；没有将 DSH 内嵌宣传成可绕过系统后台限制。
+
+本轮真实模型合计（含两轮失败与额外自主活动）：36 次请求，128,404 input tokens、2,522 output tokens；不含无模型的公共来源探测。统计工件 `artifacts/live-dsh-usage-summary.json`。未用推测单价冒充实际扣费金额。
+
+APK：`artifacts/Nyvemi-0.13.0-arm64-preview.apk`，40,927,053 bytes；SHA256 `1240796912c4a7e6f1d36deca2d394ece09a29f72d5fe78b3e04212bba5ecc78`。包含独立 Hermes bundle；已检查没有 .env 文件及本机配置的已知密钥；预览签名 SHA256 沿用 `fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`。

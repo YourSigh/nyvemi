@@ -1,6 +1,10 @@
 import type { Settings, Intention, NotificationRecord } from '../domain/models';
 import { policyBlock } from './policies';
 const reasons: Record<string, string> = {
+  agent_sent: '她刚给你发了消息',
+  agent_waited: '这次没有想补充的话，先安静陪着',
+  agent_busy: '正在处理当前对话，稍后再想这件事',
+  agent_run_failed: '处理或投递失败，等待重试',
   silence_reconnect: '停聊后，她又想起了你们刚才的话题',
   reconnect_specific_intention: '有更具体的待办或话题，先给它留位置',
   reconnect_declined: '她回看了刚才的交流，暂时没有新的话想说',

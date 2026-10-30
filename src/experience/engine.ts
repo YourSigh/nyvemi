@@ -88,7 +88,7 @@ export class ExperienceEngine {
               },
             };
           await tx.put('characters', current);
-          if (['bilibili', 'mock-bilibili', 'agent-web'].includes(experience.source))
+          if (['bilibili', 'mock-bilibili', 'mock-web', 'agent-web'].includes(experience.source))
             await new MemoryRepository(tx).upsert(
               character.id,
               'experience',
@@ -102,7 +102,7 @@ export class ExperienceEngine {
           if (
             experience.appraisal.shareImpulse >= 0.7 &&
             (experience.source.startsWith('rss:') ||
-              ['bilibili', 'mock-bilibili', 'agent-web'].includes(experience.source))
+              ['bilibili', 'mock-bilibili', 'mock-web', 'agent-web'].includes(experience.source))
           )
             await tx.put('intentions', {
               id: id(),

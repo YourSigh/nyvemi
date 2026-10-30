@@ -12,7 +12,9 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
-This is an early MVP implementation. **0.11.1** fixes a background activity timestamp bug, replaces the indefinite JS companion loop with native-triggered finite headless runs, and adds 15-minute durable background recovery plus execution diagnostics. Version **0.11.0** refreshes per-turn native device time, recognizes personal color preferences, locks input during theme reveal, hides the default character placeholder, and adds hold-to-talk with slide-up cancellation. Version 0.10.1 adds capability-gated nod/shake/wink/smile actions and removes Tongza-specific defaults from the generic material pipeline. Version 0.10.0 rebuilds the Tongza demo material for small, stable mesh animation: hidden forehead/scalp and neck underpaint, connected hair roots, occlusion overlap and a continuous rest-pose garment. The bundled sample has 16 meshes and 27 parameters in the existing offline PSD2Live WASM/WebGL renderer. Default motion focuses on idle, blink, breath, talking, gentle thinking/happy; large arm actions are suspended in this profile. The stage remains roughly one third of the screen and shrinks with the keyboard. **Rig compilation currently runs on the local development computer, not on the phone.** Android previews the bundled sample or imports a `.p2lrt`; mobile-only one-click rig compilation is not implemented. See [material repair and validation](docs/AVATAR_MATERIAL_V2.md). No physical-device test was performed.
+**0.13.0 embeds the official DeepSeek Harness core in the Android app.** DSH owns the model → tools → observations loop and durable sessions. Only `send_message` creates a visible bubble; ordinary model text stays internal, and `wait` ends a turn without sending anything. Tools connect the existing memory, experiences, interests, web search/fetch, guest Bilibili metadata, theme changes and durable wakeups. User-requested delivery and optional autonomous thoughts are distinct. See [integration, real-API evidence and limits](docs/DSH_EMBEDDING.md).
+
+The existing PSD2Live WASM/WebGL character, one-third stage, keyboard behavior and pink-white theme remain. Rig compilation still runs on the development computer; the phone loads bundled/imported rigs. No physical-device test was performed. Subjective character quality and Android background delivery remain user acceptance items.
 
 ## Local-first and BYOK
 
@@ -32,7 +34,7 @@ On first launch: Welcome → Provider → character questions → persona genera
 - Model: the service's model identifier.
 - Use **Test connection** to make one small request; model usage is billable by your provider.
 
-The adapter exposes `chat`, `streamChat`, and schema-validated `structuredOutput<T>`. Native streaming uses `expo/fetch`. Provider requests have timeouts, bounded output, sanitized errors and usage metrics. Gemini remains future work; appearance creation has interchangeable Mock and Seedream `ImageProvider` implementations. OpenRouter or a compatible local service can use the existing adapter.
+The adapter exposes `chat`, `streamChat`, schema-validated `structuredOutput<T>` and native `toolChat` for DSH. The selected model must support OpenAI-compatible tool calls. Native streaming uses `expo/fetch`. Provider requests have timeouts, bounded output, sanitized errors and usage metrics. Gemini remains future work; appearance creation has interchangeable Mock and Seedream `ImageProvider` implementations. OpenRouter or a compatible local service can use the existing adapter.
 
 ### DeepSeek
 
@@ -44,7 +46,7 @@ For Ollama or a LAN endpoint, use its OpenAI-compatible `/v1` API. Local/private
 
 Creation is a 12-round conversational interview: one question at a time, a short model acknowledgement, then the next question. Progress is explicit; all but the name can be skipped. A local draft survives interruption, and a review/edit step precedes final persona generation. Appearance, relationship, tone, independent interests, boundaries and a venting scenario are covered. Offline acknowledgements are explicitly labeled as local guidance. It uses natural questions rather than personality percentages. The model generates a validated Persona. A **桶砸** development persona is also available; it skips persona generation, but does not invent model responses or bypass BYOK for chat.
 
-Chat uses a private-messenger layout with avatars, timestamps, local history, streaming and 0–6 reply bubbles chosen by context. A complete reply is validated before any assistant bubble appears; generation only shows a typing status. Intentional silence creates no placeholder bubble and still preserves the user turn for memory extraction. Additional bubbles appear about 400–1000 ms apart. Failed requests can be retried without duplicating the user message. Requests and multi-part replies survive interruption with recoverable state. Older history loads on demand; model prompts remain bounded to 16 recent messages and up to 8 selected memories.
+Chat retains avatars, timestamps, local history and incoming-bubble animation. DSH chooses whether to send zero or several independent messages. Only completed `send_message` arguments appear as bubbles; model generation shows a typing status. Composition time scales with message length, up to 12 seconds per bubble. `wait` does not create a placeholder; `pause_contact` persists an explicit request for space. Recent chat, up to eight relevant memories and a bounded DSH session provide context; all history is not resent indefinitely.
 
 ## Memory and relationship
 
@@ -54,9 +56,9 @@ Meaningful rounds create durable extraction jobs. Structured extraction produces
 
 ## Proactive engine
 
-A heartbeat first cleans expired data and evaluates local gates: enabled setting, quiet hours, recent activity, minimum interval, daily limits, due intentions and notification permission. It then scores relevance, urgency, emotional value, novelty, relationship value and interruption cost. Most runs skip without any model request.
+Foreground and native Headless JS use the same embedded DSH session. Local checks enforce quiet hours, recent activity, limits and pending tasks before model calls. An explicit user appointment resumes DSH at the requested time; an optional thought may still be declined. With exploration enabled, free-time activity is admitted at most once per four hours, claimed before network I/O. Ordinary heartbeat checks remain local.
 
-Only a sufficiently strong candidate generates a short contextual message. The engine checks activity and intention state again after generation. A persistent notification outbox makes delivery recoverable and idempotent. Tapping a notification, or opening its character chat, promotes the pending proactive message into normal conversation history. Developer Mode explains each evaluated decision.
+Messages and the notification outbox are stored atomically. A completed model turn is not a successful native receipt while OS notification delivery is still pending. Retries recover the outbox without regenerating messages. New user input can interrupt background model work. Developer Mode shows tool actions, wakeup reasons and status without displaying private reasoning.
 
 New characters enable proactive messages according to the interview initiative answer; an explicit opt-out remains off. Existing settings are preserved. Default quiet hours: 23:00–08:00; at most 2 per character/day; 180-minute character interval; 30-minute recent-activity suppression. This MVP also enforces a global cap of 4/day and 30 minutes between different characters. These are conservative hard caps in this version.
 
@@ -68,7 +70,7 @@ Sources implement `ExperienceSource`:
 - `ConversationExperienceSource`: important shared episodic events.
 - `RSSExperienceSource`: up to 5 configured HTTPS feeds, polled at most every 4 hours while proactive behavior is enabled.
 
-RSS/Atom is bounded text input, not a source of instructions. Deduplicated experiences are appraised for self-interest, user relevance, novelty, emotional value and memory association. A strong share impulse creates a future Share Intention; the sending language is generated later. Character interests change slowly, and user relevance alone does not copy a user's taste into the character. Rule-based appraisal can miss semantic associations; embeddings and richer appraisal are future options.
+RSS/Atom is bounded text input, not a source of instructions. Deduplicated experiences are appraised for self-interest, user relevance, novelty, emotional value and memory association. A strong share impulse creates a future Share Intention; the sending language is generated later. Character interests change slowly, and user relevance alone does not copy a user's taste into the character. RSS/time appraisal uses local rules. DSH-created experiences use validated model appraisal based on actual tool evidence; declared topics also inform slow interest updates. No embeddings are included.
 
 ## Android background limitations
 
@@ -184,11 +186,11 @@ There is no “meet another character” action. **清空当前角色并重新�
 
 ### 明确约好的稍后来信
 
-说“芜湖，一分钟后随便给我发一条消息吧”“你过一分钟来找我”等直接请求时，应用会检查通知、开启可见陪伴，保存本地任务，等待 Android WorkManager 确认登记成功后才确认约定。支持 10 秒至 24 小时的相对时间请求（秒、分钟、小时，中文或阿拉伯数字），最多同时等待三条。聊天顶部显示约定时间及取消入口；清空角色同时取消原生任务。内容到期才根据人格和最近对话生成，不是预先写好的提醒。生成与系统通知失败会退避重试，复用已有 outbox，避免重复生成；通知成功后可在聊天中直接看到。
+说“芜湖，一分钟后随便给我发一条消息吧”“你过一分钟来找我”等直接请求时，应用会检查通知、开启可见陪伴，保存本地任务，等待 Android WorkManager 确认登记成功后才确认约定。由模型理解自然表达并调用排程工具，支持 30 秒至 7 天的相对唤醒，最多保留六个 DSH 待续安排。聊天顶部显示约定时间及取消入口；清空角色同时取消原生任务。内容到期才根据人格和最近对话生成，不是预先写好的提醒。生成与系统通知失败会退避重试，复用已有 outbox，避免重复生成；通知成功后可在聊天中直接看到。
 
 这类用户明确请求的来信独立于普通主动聊天，不受最近聊天、静默时段和每日主动消息上限拦截。每条约定使用唯一原生一次性 WorkManager 任务，冷启动时直接启动对应 Headless JS，再检查 SQLite 并投递；成功回执依据持久化状态，不能把 JS 函数结束当成通知成功。可见常驻会话存活时另有原生截止时间回调，JS 10 秒检查仅保留为补充。重开 App 会补登记旧版未过期任务，不推迟原截止时间。无到期任务时不调用模型。结束常驻不会取消已约定的来信，需要点击聊天顶部的取消。
 
-这不是精确闹钟。断网、Doze、系统杀进程、强行停止或厂商电池限制仍可能延后执行；强行停止后要重新打开 App。超出约定时间一小时的任务过期。导入角色不会重放旧安装尚未送出的定时任务。Developer Mode 的未来意图、通知历史与 Heartbeat 可追踪排程和失败原因。0.3.1 的手机后台送达效果仍由用户安装验证，不能将本地替身测试等同于实机送达。
+这不是精确闹钟。断网、Doze、系统杀进程、强行停止或厂商电池限制仍可能延后执行；强行停止后要重新打开 App。超过六小时投递窗口的 DSH 约定会过期。导入角色不会重放旧安装尚未送出的定时任务。Developer Mode 的未来意图、通知历史与 Heartbeat 可追踪排程和失败原因。手机后台送达效果仍由用户安装验证，不能将本地替身测试等同于实机送达。
 
 聊天生成期间只在顶部显示“正在输入…”。完整回复生成并校验后，分段消息依次淡入并轻轻上移；本地历史不会重复播放入场。聊天列表从底部锚定，以便键盘出现时最新消息和输入框一起上移。
 
@@ -196,7 +198,7 @@ There is no “meet another character” action. **清空当前角色并重新�
 
 首次开场会问“你喜欢什么颜色呀？”，可以回答“淡粉色，柔和、不太艳”或“蓝灰色，安静一点”。回答先保存在本机；连接 BYOK Provider 后，模型只输出颜色、氛围、饱和度、明暗和冷暖等结构化语义，本地 Theme Engine 生成整套配色。背景、文字、按钮、气泡、表单和导航一起从左上向右下揭开新主题，随后进入原有的 12 题角色访谈。
 
-颜色只在首次开场询问。以后可在聊天中说“把这里换成淡紫色”或“调暗一点”，不必清空角色或进入设置。普通聊到喜欢什么颜色不会自动换色。支持浅色和深色；已确认的同一描述不重复调用主题模型，换色请求计入“颜色偏好理解”的用量记录。模型不可用时，能识别的颜色会明确使用本地配色；无法理解时保留现有主题并请你补充，也可以跳过。
+颜色只在首次开场询问。以后可在聊天中说“把这里换成淡紫色”或“调暗一点”，不必清空角色或进入设置。清楚表达自己想要或喜欢的界面配色也可由模型调用换色工具，无需固定口令。支持浅色和深色；已确认的同一描述不重复调用主题模型，换色请求计入“颜色偏好理解”的用量记录。模型不可用时，能识别的颜色会明确使用本地配色；无法理解时保留现有主题并请你补充，也可以跳过。
 
 文字与背景的颜色由本地规则约束，支持的配色组合检查正常文字至少 4.5:1 对比度。系统开启减少动态效果时直接换色。原生捕获未准备好时保留旧主题并提示重试；已开始的动画中断时释放覆盖层。过渡仅在 Android 内存中保留本 App 的旧画面，不复制导航树，不写截图文件或上传；旧画面以 2.2 秒柔边渐变从左上向右下揭开新主题。主题保存在设备内，Bundle v2 携带主题并兼容导入 v1；已有安装环境的主题优先保留。旧版 App 不能读取新版 v2 Bundle，请先升级。
 
@@ -208,7 +210,7 @@ Settings → notification setup shows task health, can repair registrations, and
 
 ## Silence-triggered initiative (0.5.0)
 
-Ordinary chat can now leave a local evaluation even when the model does not explicitly return a continuation. After roughly 12–25 minutes of user-message silence, local checks run before any model call. The character may send several contextual messages or stay quiet. New user activity invalidates the old evaluation; specific due follow-ups take priority. Declining ends that evaluation rather than polling the model repeatedly.
+Historical behavior through 0.12.3: ordinary chat could leave a local evaluation even when the model did not explicitly return a continuation. In 0.13.0, DSH owns follow-up planning; the heuristic reconnect creator does not run for a DSH session. After roughly 12–25 minutes of user-message silence, local checks run before any model call. The character may send several contextual messages or stay quiet. New user activity invalidates the old evaluation; specific due follow-ups take priority. Declining ends that evaluation rather than polling the model repeatedly.
 
 Two unanswered autonomous bursts pause further autonomous messages until the user speaks again. Explicit user-requested reminders remain separate. Reconnects share the ordinary daily budget and respect quiet hours, time between messages and opt-out; failures stop after three attempts. Android scheduling remains best-effort. Imported evaluations do not replay.
 
@@ -269,3 +271,11 @@ See [contextual participation](docs/CONVERSATION_PARTICIPATION.md) for the decis
 ### Quiet contact repair (0.12.3)
 
 Real DeepSeek testing with reconstructed screenshot history reproduced a classifier returning roleplay narration instead of JSON. Control calls now isolate transcript data, enable DeepSeek JSON mode, fail without forcing a reply, persist quiet mode and review proposed replies before delivery. A real seven-turn acceptance run stayed silent until an explicit new question, answered it, then stopped again; pending follow-up was canceled. See [evidence and limitations](docs/QUIET_CONTACT_REPAIR.md).
+
+## Embedded DSH (0.13.0)
+
+Pinned official core: `f3803c96974ad4a94195fb97e5c637e9c2a3afe3` (`0.2.2-alpha.2`, MIT). It runs inside the app JS engine and does not require a separately installed Node server. The Android composition omits desktop shell, subprocesses, dynamic plugin installation and QQ/account tools; it does not promise compatibility with every third-party DSH plugin. Original notices and the reproducible build source are in `vendor/`.
+
+Run `npm run agent:bundle` to rebuild the embedded core; `npm run verify` also checks Expo/Hermes compilation. For a deliberately enabled, billed real-model acceptance run, put `NYVEMI_TEST_API_KEY` in ignored `.env` and run `node scripts/test-live.cjs --agent`. The test limits requests and reports actual usage without saving the key. Mock source and orchestrator tests remain the default.
+
+Real DeepSeek acceptance verified silent turns, reopening with a substantive question, an explicit wakeup restored in a new JS service instance, and reading a real public webpage through tools. This simulates cold background JS and the notification gateway; it does not claim physical WorkManager execution. A separate no-model source probe fetched real Bing RSS and guest Bilibili candidates, but those interfaces can become unavailable. Bilibili tools read title/description metadata, not video frames/subtitles. DSH protocol checkpoints are local runtime data; character bundles retain persona/memory/experience/conversation/intentions and reconstruct a fresh runtime session on import.

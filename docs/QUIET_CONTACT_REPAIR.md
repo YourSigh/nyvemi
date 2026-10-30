@@ -1,3 +1,5 @@
+> 历史修复记录（0.12.3）。0.13.0 生产聊天已由 [内嵌 DSH](DSH_EMBEDDING.md) 接管，不再使用本文的三段式分类/生成/审核路径。
+
 # Quiet contact and real-model acceptance — 0.12.3
 
 ## Reproduced failure

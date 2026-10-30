@@ -1,3 +1,4 @@
+import { runtimeStats } from '../vendor/dsh-runtime';
 import { describe, expect, it } from 'vitest';
 import {
   runEmbeddedAgent,
@@ -113,4 +114,8 @@ describe('official embedded DSH core', () => {
     ).rejects.toThrow('did not complete');
     expect(calls).toBe(2);
   });
+});
+
+it('disposes ambient stores after a run in the long-lived app process', () => {
+  expect(runtimeStats().ambientStores).toBe(0);
 });

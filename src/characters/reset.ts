@@ -24,6 +24,7 @@ export async function resetCharacter(
       'background-cycle',
       'heartbeat',
       'requested-delivery',
+      'agent-runtime',
       'memory-extraction',
       `chat:${characterId}`,
     ]) {

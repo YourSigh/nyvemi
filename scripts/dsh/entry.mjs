@@ -1,3 +1,5 @@
+import { __snapshotAll } from '../../vendor/deepseek-harness/packages/experimental/webworker-runtime/src/node/builtin_modules/implemented/async_hooks.ts';
+export const runtimeStats = () => ({ ambientStores: __snapshotAll()?.length ?? 0 });
 import './compat.mjs';
 import { Context } from '@deepseek-ai/cordis';
 import LlmRuntime, { LlmAdapter, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm';
@@ -23,7 +25,10 @@ export async function run(input, ports) {
       if (++calls > input.maxSteps) throw Error('DSH step budget exceeded');
       await ports.checkpoint(agent.session.snapshotEvents());
       if (ports.signal?.aborted) throw Error('DSH canceled');
-      const result = await ports.generate(options, ports.signal);
+      const result = await ports.generate(
+        options,
+        AbortSignal.any([options.signal, ports.signal].filter(Boolean)),
+      );
       if (result.reasoning) {
         yield { type: 'block-start', index: 0, blockType: 'reasoning' };
         yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: result.reasoning } };
@@ -77,6 +82,9 @@ export async function run(input, ports) {
             const result = await ports.execute(tool.name, args, {
               signal: exec.signal,
               callId: exec.callId,
+              sequence: agent.session
+                .snapshotEvents()
+                .findLast((e) => e.type === 'tool/call' && e.data.callId === exec.callId).seq,
             });
             if (tool.terminal) exec.concludeTurn();
             return result;

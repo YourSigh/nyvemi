@@ -151,7 +151,12 @@ export class PublicAgentWeb implements AgentWeb {
   async bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
     if (signal?.aborted) throw new Error('已取消');
     // Public guest recommendations. Selection is the agent's own, not a user-profile ranking.
-    const items: ContentItem[] = await this.content.candidates();
+    let items: ContentItem[];
+    try {
+      items = await this.content.candidates();
+    } catch {
+      throw new Error('B站游客接口暂不可用，没有读取到视频内容');
+    }
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const ranked = items
       .map((item) => ({

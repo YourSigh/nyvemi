@@ -86,6 +86,7 @@ export class AsyncLocalStorage<T> {
    * @returns the exact value the callback returned.
    */
   run<R>(store: T | undefined, callback: (...args: never[]) => R, ...args: never[]): R {
+    instances.add(this) // A disabled ALS can be entered again, as in Node.
     const entry: Entry<T> = { store }
     this.entries.push(entry)
     // Removal is by entry identity: overlapping boundaries settle out of order,
@@ -168,11 +169,14 @@ export class AsyncLocalStorage<T> {
    * @param store - value {@link getStore} answers from now on.
    */
   enterWith(store: T): void {
+    instances.add(this)
     this.entries.push({ store })
   }
 
   /** Drop every slot; teardown calls this unconditionally. */
   disable(): void {
+    // Nyvemi: release per-run contexts in a long-lived Hermes process.
+    instances.delete(this)
     this.entries.length = 0
     this.overlay = undefined
     this.ambients.length = 0

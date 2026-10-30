@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 npm run avatar:bundle
 npm run agent:bundle
+node scripts/dsh/check-hermes.cjs
 git status --short
 npm run lint
 npm run typecheck

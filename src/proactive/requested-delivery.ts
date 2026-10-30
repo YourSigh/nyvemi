@@ -36,7 +36,12 @@ export async function executeIntentionWork(
   id: string,
 ): Promise<boolean> {
   const task = await store.get('intentions', id);
-  if (!task || task.status !== 'pending') return true;
+  if (!task) return true;
+  if (task.status !== 'pending') {
+    if ((await store.get('notifications', `agent:${id}`))?.status !== 'pending') return true;
+    await run(id);
+    return (await store.get('notifications', `agent:${id}`))?.status !== 'pending';
+  }
   if (
     task.type !== 'requested' &&
     !(await store.get('settings', task.characterId))?.proactiveEnabled
@@ -44,7 +49,9 @@ export async function executeIntentionWork(
     return true;
   await run(id);
   const fresh = await store.get('intentions', id);
-  return !fresh || fresh.status !== 'pending';
+  if (fresh?.status === 'pending') return false;
+  // DSH may have finished composing while its durable notification outbox still needs OS delivery.
+  return (await store.get('notifications', `agent:${id}`))?.status !== 'pending';
 }
 
 export async function cancelRequestedWork(
