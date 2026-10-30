@@ -47,7 +47,9 @@ export class SeedreamImageProvider implements ImageProvider {
     input: unknown,
     body: Record<string, unknown>,
     decode: (value: unknown, cacheId: string) => Promise<T>,
+    signal?: AbortSignal,
   ): Promise<T> {
+    if (signal?.aborted) throw new Error('生图已取消');
     const cacheId = await this.hash(JSON.stringify([this.identity, operation, input]));
     const lock = `image-request:${cacheId}`;
     if (!(await this.store.lease(lock, Date.now(), 45 * 60_000)))
@@ -72,6 +74,9 @@ export class SeedreamImageProvider implements ImageProvider {
         record = { id: cacheId, createdAt: Date.now(), status: 'started' };
         await this.store.put('imageRequests', record);
         const controller = new AbortController();
+        const abort = () => controller.abort();
+        signal?.addEventListener('abort', abort);
+        if (signal?.aborted) abort();
         const timer = setTimeout(() => controller.abort(), 180_000);
         try {
           const response = await this.http(`${this.config.baseUrl}/images/generations`, {
@@ -101,8 +106,10 @@ export class SeedreamImageProvider implements ImageProvider {
           throw new Error('生图请求中断；结果可能已计费，已保留请求状态，请先核对服务商记录');
         } finally {
           clearTimeout(timer);
+          signal?.removeEventListener('abort', abort);
         }
       }
+      if (signal?.aborted) throw new Error('生图已取消，已收到的结果可稍后继续下载');
       const result = await decode(record.response, cacheId);
       await this.store.put('imageRequests', { ...record, status: 'done', result });
       return result;
@@ -132,6 +139,30 @@ export class SeedreamImageProvider implements ImageProvider {
         const asset = await this.assets.download(output.url, cacheId);
         return asset;
       },
+    );
+  }
+  async illustrate(
+    prompt: string,
+    reference?: ImageAsset,
+    signal?: AbortSignal,
+  ): Promise<ImageAsset> {
+    return this.cached(
+      'illustration',
+      [prompt, reference ? await this.assets.fingerprint(reference) : null],
+      {
+        model: this.config.imageModel,
+        prompt,
+        size: '2K',
+        response_format: 'url',
+        watermark: false,
+        ...(reference ? { image: await this.assets.dataUrl(reference) } : {}),
+      },
+      async (value, cacheId) => {
+        const response = ResponseSchema.parse(value);
+        if (response.data.length !== 1) throw Error('生图数量异常，响应已缓存');
+        return this.assets.download(response.data[0].url, cacheId, signal);
+      },
+      signal,
     );
   }
   private async decompositionImage(image: ImageAsset) {

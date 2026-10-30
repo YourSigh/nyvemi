@@ -420,3 +420,72 @@ it('round-trips a real embedded mesh model without local paths or provider confi
   const imported = await b.service.importCharacter(bytes);
   expect(hash(b.assets.get(imported.meshAvatar!.uri)!)).toBe(hash(model));
 });
+it('round-trips chat pictures and learned plugins with remapped IDs and no automatic activation', async () => {
+  const a = await setup(),
+    b = await setup();
+  await a.store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    state: { energy: 0.6, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+    interests: [],
+    createdAt: 1,
+  });
+  await a.store.put('settings', defaultSettings('c'));
+  const png = Uint8Array.from(
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lN0AAAAASUVORK5CYII=',
+      'base64',
+    ),
+  );
+  a.assets.set('file://photo', png);
+  await a.store.put('mediaAssets', {
+    id: 'pic',
+    characterId: 'c',
+    createdAt: 1,
+    uri: 'file://photo',
+    fingerprint: 'fpic',
+    mime: 'image/png',
+    width: 1,
+    height: 1,
+    origin: 'upload',
+  });
+  await a.store.put('messages', {
+    id: 'm',
+    characterId: 'c',
+    role: 'user',
+    content: '看看',
+    attachments: ['pic'],
+    createdAt: 1,
+    origin: 'chat',
+    status: 'complete',
+  });
+  await a.store.put('plugins', {
+    id: 'c:writing',
+    characterId: 'c',
+    createdAt: 1,
+    updatedAt: 1,
+    enabled: true,
+    granted: ['context'],
+    source: 'learned',
+    history: [],
+    manifest: {
+      format: 'nyvemi-plugin/v1',
+      id: 'writing',
+      name: '写作',
+      version: '1.0.0',
+      description: '方法',
+      instructions: '先说结论',
+      permissions: ['context'],
+      tools: [],
+    },
+  });
+  const bytes = await a.service.exportCharacter('c');
+  expect(readBundle(bytes).manifest.version).toBe(5);
+  const c = await b.service.importCharacter(bytes),
+    message = (await b.store.list('messages', c.id))[0],
+    asset = (await b.store.list('mediaAssets', c.id))[0];
+  expect(message.attachments).toEqual([asset.id]);
+  expect(asset.id).not.toBe('pic');
+  expect(b.assets.get(asset.uri)).toEqual(png);
+  expect((await b.store.list('plugins', c.id))[0].enabled).toBe(false);
+});

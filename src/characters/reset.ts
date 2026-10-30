@@ -33,6 +33,7 @@ export async function resetCharacter(
       acquired.push(name);
     }
     const notifications = await store.list('notifications', characterId, 100000);
+    const media = await store.list('mediaAssets', characterId, 10000);
     // Fail before deletion if the OS service cannot be stopped/cancelled.
     await cleanup.stop(characterId);
     await cleanup.cancelRequested(characterId);
@@ -45,6 +46,7 @@ export async function resetCharacter(
     });
     // File cleanup is retryable. Never report a destructive transaction as failed after it committed.
     if (c.avatar) await cleanup.removeAvatar(c.avatar).catch(() => undefined);
+    for (const asset of media) await cleanup.removeAvatar(asset.uri).catch(() => undefined);
     await cleanup.removeAppearance?.().catch(() => undefined);
   } finally {
     for (const name of acquired.reverse()) await store.release(name);

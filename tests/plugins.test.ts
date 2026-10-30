@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { PluginManager, pluginToolName } from '../src/extensions/manager';
+import { PluginManager, pluginToolName, type PluginLoader } from '../src/extensions/manager';
 import { PluginManifestSchema, defaultPluginPolicy } from '../src/extensions/model';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
@@ -33,7 +33,7 @@ async function setup() {
     createdAt: 1,
   });
   let loads = 0;
-  const loader = {
+  const loader: PluginLoader = {
     load: async () => {
       loads++;
       return JSON.stringify(manifest);
@@ -126,4 +126,52 @@ it('rejects code execution, missing permissions and unbounded workflows', () => 
     }),
   ).toThrow();
   expect(pluginToolName('ab_cd', 'ef')).not.toBe(pluginToolName('ab', 'cd_ef'));
+});
+it('keeps user-disabled plugins disabled on update and binds safe result paths as real JSON values', async () => {
+  const f = await setup();
+  const row = await f.manager.install('c', {
+    ...manifest,
+    tools: [
+      {
+        ...manifest.tools[0],
+        steps: [
+          { operation: 'web_search', args: { query: '{{input.topic}}' } },
+          { operation: 'web_fetch', args: { url: '{{step.0.0.url}}' } },
+        ],
+      },
+    ],
+  });
+  let calls = 0;
+  await f.manager.execute(
+    'c',
+    pluginToolName('reading-notes', 'find'),
+    { topic: 'robotics' },
+    async (name, args) => {
+      calls++;
+      if (name === 'web_search') return [{ url: 'https://example.com/a' }];
+      expect(args).toEqual({ url: 'https://example.com/a' });
+      return 'page';
+    },
+  );
+  expect(calls).toBe(2);
+  await f.manager.setEnabled('c', row.id, false);
+  const updated = await f.manager.install(
+    'c',
+    { ...manifest, version: '1.0.1' },
+    'developed',
+    'agent',
+  );
+  expect(updated.enabled).toBe(false);
+});
+it('imports local Markdown skills and normalizes GitHub blob links to source files', async () => {
+  const f = await setup();
+  let url = '';
+  f.loader.load = async (source) => {
+    url = source;
+    return '# Reading\n只根据读到的来源回答';
+  };
+  await f.manager.installUrl('c', 'https://github.com/owner/repo/blob/main/SKILL.md');
+  expect(url).toBe('https://raw.githubusercontent.com/owner/repo/main/SKILL.md');
+  await f.manager.installText('c', '# Local\n先看清问题', 'local.md');
+  expect((await f.manager.list('c')).some((p) => p.manifest.name === 'Local')).toBe(true);
 });

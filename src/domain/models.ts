@@ -1,3 +1,4 @@
+import type { MediaAsset, MediaSettings, ImageAnalysis, MediaDrawRequest } from '../media/model';
 import type { InstalledPlugin, PluginPolicy } from '../extensions/model';
 import type { AgentSession, AgentEvidence } from '../agent/model';
 import { MeshAvatarSchema } from '../avatar/model';
@@ -107,6 +108,7 @@ export const MessageSchema = z
     status: z.enum(['pending', 'complete', 'error']),
     groupId: z.string().optional(),
     replyDisposition: z.enum(['reply', 'silence']).optional(),
+    attachments: z.array(z.string()).max(3).optional(),
   })
   .strict();
 export type Message = z.infer<typeof MessageSchema>;
@@ -220,6 +222,10 @@ export interface ExtractionJob {
   createdAt: number;
 }
 export interface Entities {
+  mediaAssets: MediaAsset;
+  mediaDrawRequests: MediaDrawRequest;
+  mediaSettings: MediaSettings;
+  imageAnalyses: ImageAnalysis;
   plugins: InstalledPlugin;
   pluginPolicies: PluginPolicy;
   agentSessions: AgentSession;

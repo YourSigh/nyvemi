@@ -20,7 +20,32 @@ export const operationPermissions: Record<string, PluginPermission> = {
   draw_image: 'images',
 };
 const safeName = z.string().regex(/^[a-z][a-z0-9_-]{1,23}$/);
-const Value = z.union([z.string().max(4000), z.number().finite(), z.boolean()]);
+export type PluginValue =
+  | string
+  | number
+  | boolean
+  | null
+  | PluginValue[]
+  | { [key: string]: PluginValue };
+const scalar = z.union([z.string().max(4000), z.number().finite(), z.boolean(), z.null()]);
+const makeValue = (depth: number): z.ZodType<PluginValue> =>
+  depth
+    ? z.union([
+        scalar,
+        z.array(makeValue(depth - 1)).max(16),
+        z
+          .record(
+            z
+              .string()
+              .max(60)
+              .refine((k) => !['__proto__', 'constructor', 'prototype'].includes(k)),
+            makeValue(depth - 1),
+          )
+          .refine((v) => Object.keys(v).length <= 16),
+      ])
+    : scalar;
+export const PluginValueSchema = makeValue(4);
+const Value = PluginValueSchema;
 export const PluginManifestSchema = z
   .object({
     format: z.literal('nyvemi-plugin/v1'),

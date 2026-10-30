@@ -12,6 +12,13 @@ const avatars = () => {
 };
 export const bundleAssets: BundleAssets = {
   writeImage: importRigImage,
+  writeMedia: async (cid, bytes) => {
+    const dir = new Directory(Paths.document, 'chat-images');
+    dir.create({ idempotent: true, intermediates: true });
+    const file = new File(dir, `${cid}-${id()}.bin`);
+    file.write(bytes);
+    return file.uri;
+  },
   writeModel: writeMeshAvatar,
   readAvatar: (uri) => new File(uri).bytes(),
   writeAvatar: async (cid, bytes) => {

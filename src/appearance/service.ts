@@ -11,7 +11,7 @@ import { mockCandidate, mockRig } from './mock';
 export interface ImageAssets {
   fingerprint(asset: ImageAsset): Promise<string>;
   dataUrl(asset: ImageAsset): Promise<string>;
-  download(url: string, key: string): Promise<ImageAsset>;
+  download(url: string, key: string, signal?: AbortSignal): Promise<ImageAsset>;
   exists(asset: ImageAsset): Promise<boolean>;
 }
 export interface ImageProvider {

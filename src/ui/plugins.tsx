@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { useCallback, useState } from 'react';
 import { Switch, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -43,7 +44,13 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
       await work();
       await refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : '操作失败');
+      setError(
+        e instanceof z.ZodError
+          ? '插件格式不正确，请使用兼容的Nyvemi插件'
+          : e instanceof Error
+            ? e.message
+            : '操作失败',
+      );
     } finally {
       setBusy(false);
     }
@@ -58,6 +65,8 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
           <Switch
             disabled={busy}
             value={autonomy}
+            trackColor={{ false: palette.line, true: palette.tint }}
+            thumbColor={palette.accent}
             onValueChange={(value) =>
               void act(async () => {
                 const policy = await runtime.plugins.policy(cid);
@@ -90,7 +99,7 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
               if (picked.canceled) return;
               const file = new File(picked.assets[0].uri);
               if (file.size > 64000) throw Error('插件文件不能超过64 KB');
-              await runtime.plugins.install(cid, JSON.parse(await file.text()), 'file');
+              await runtime.plugins.installText(cid, await file.text(), picked.assets[0].name);
             })
           }
         />

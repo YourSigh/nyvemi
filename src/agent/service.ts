@@ -1,3 +1,4 @@
+import type { MediaService } from '../media/service';
 import type { PluginManager } from '../extensions/manager';
 import { pluginToolName } from '../extensions/manager';
 import { MemoryRepository } from '../memory/repository';
@@ -32,6 +33,7 @@ import type { AgentWeb, WebDocument } from './web';
 export interface AgentHost {
   web: AgentWeb;
   plugins?: PluginManager;
+  media?: MediaService;
   notifications: NotificationGateway;
   visible(): boolean;
   clock(): string;
@@ -138,6 +140,10 @@ export class CompanionAgent {
             id: input.user.id,
             at: new Date(input.user.createdAt).toISOString(),
             text: input.user.content,
+            images: input.user.attachments ?? [],
+            imageInstruction: input.user.attachments?.length
+              ? '收到图片，但还没看过；先inspect_image读取，再依据结果回应。'
+              : undefined,
           })
         : JSON.stringify({
             event:
@@ -195,6 +201,7 @@ export class CompanionAgent {
         raw,
         execution,
       ) => {
+        if (execution.signal.aborted) throw Error('已取消');
         await assertCurrent();
         const args = z.record(z.unknown()).parse(raw);
         const log = async (success: boolean) =>
@@ -220,7 +227,59 @@ export class CompanionAgent {
             cid,
           );
           let result: unknown;
-          if (this.host.plugins && name === 'develop_plugin') {
+          if (this.host.media && name === 'inspect_image') {
+            const text = await this.host.media.inspect(
+              cid,
+              z.string().parse(args.imageId),
+              z.string().min(1).max(1500).parse(args.question),
+              execution.signal,
+            );
+            result = { observation: text, source: 'vision-model', imageId: args.imageId };
+          } else if (this.host.media && name === 'draw_image') {
+            const parsed = z
+              .object({
+                prompt: z.string().min(1).max(2000),
+                referenceImageId: z.string().optional(),
+              })
+              .parse(args);
+            const asset = await this.host.media.draw(
+              cid,
+              parsed.prompt,
+              parsed.referenceImageId,
+              !input.user,
+              execution.signal,
+            );
+            result = { imageId: asset.id, generated: true };
+          } else if (this.host.media && name === 'send_image') {
+            if (bubbleCount >= 6) throw Error('这一轮已经发了几条，先停一停');
+            const parsed = z
+                .object({ imageId: z.string(), caption: z.string().max(800).optional() })
+                .parse(args),
+              asset = await this.host.media.asset(cid, parsed.imageId);
+            const message: Message = {
+              id: `${cid}:${session!.sessionId}:${execution.sequence}:image`,
+              characterId: cid,
+              role: 'assistant',
+              content: parsed.caption ?? '',
+              attachments: [asset.id],
+              createdAt: Date.now(),
+              origin: input.user ? 'chat' : 'proactive',
+              status: 'complete',
+              groupId,
+            };
+            await assertCurrent();
+            await this.store.atomic(async (tx) => {
+              await tx.put('messages', message);
+              if (!input.user || !this.host.visible())
+                await this.queueNotification(input, groupId, [...saved, message], tx);
+            });
+            saved.push(message);
+            bubbleCount++;
+            input.onSaved?.();
+            input.activity?.({ phase: 'talking' });
+            if (input.user) await setContactMode(this.store, cid, false);
+            result = { sent: message.id };
+          } else if (this.host.plugins && name === 'develop_plugin') {
             const row = await this.host.plugins.install(
               cid,
               JSON.parse(z.string().max(64000).parse(args.manifestJson)),
@@ -532,6 +591,8 @@ export class CompanionAgent {
             ...agentTools.filter(
               (t) =>
                 (t.name !== 'change_theme' || input.onThemeChange) &&
+                (!['inspect_image', 'draw_image', 'send_image'].includes(t.name) ||
+                  this.host.media) &&
                 (![
                   'develop_plugin',
                   'list_plugins',
@@ -781,7 +842,9 @@ export class CompanionAgent {
               ? 'reconnect'
               : 'initiative',
       title: character.persona.name,
-      body: messages.map((m) => m.content).join('\n\n'),
+      body: messages
+        .map((m) => m.content || (m.attachments?.length ? '发来一张图片' : ''))
+        .join('\n\n'),
       createdAt: messages[0].createdAt,
       status: 'pending',
     };

@@ -1,3 +1,5 @@
+import { MediaAssetSchema } from '../media/model';
+import { PluginManifestSchema } from '../extensions/model';
 import { validateP2lrt } from '../avatar/model';
 import { validateRig, type CharacterRig } from '../appearance/model';
 import { z } from 'zod';
@@ -31,7 +33,7 @@ const JobSchema = z
 const ManifestSchema = z
   .object({
     format: z.literal('nyvemi'),
-    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
+    version: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]),
     theme: ThemeRecordSchema.optional(),
     exportedAt: z.number(),
     character: CharacterSchema.omit({ avatar: true }).extend({
@@ -44,6 +46,11 @@ const ManifestSchema = z
     notifications: z.array(NotificationSchema).max(100000),
     extractions: z.array(JobSchema).max(100000),
     settings: SettingsSchema,
+    media: z.array(MediaAssetSchema).max(350).optional(),
+    plugins: z
+      .array(z.object({ manifest: PluginManifestSchema, source: z.string().max(2000) }).strict())
+      .max(24)
+      .optional(),
   })
   .strict();
 export type BundleManifest = z.infer<typeof ManifestSchema>;
@@ -52,6 +59,7 @@ export interface BundleAssets {
   writeAvatar(characterId: string, bytes: Uint8Array): Promise<string>;
   writeImage?(characterId: string, bytes: Uint8Array): Promise<string>;
   writeModel?(characterId: string, bytes: Uint8Array): Promise<string>;
+  writeMedia?(characterId: string, bytes: Uint8Array): Promise<string>;
   removeAvatar(uri: string): Promise<void>;
 }
 const MAX_ZIP = 100 * 1024 * 1024,
@@ -81,6 +89,7 @@ export function readBundle(bytes: Uint8Array): {
   avatar?: Uint8Array;
   images: Record<string, Uint8Array>;
   model?: Uint8Array;
+  media: Record<string, Uint8Array>;
 } {
   if (bytes.byteLength > MAX_ZIP) throw new Error('Bundle 不能超过 100 MB');
   let total = 0;
@@ -89,9 +98,10 @@ export function readBundle(bytes: Uint8Array): {
     filter: (file) => {
       if (
         (!['manifest.json', 'avatar.bin', 'avatar.p2lrt'].includes(file.name) &&
-          !/^rig\/\d{1,2}\.bin$/.test(file.name)) ||
+          !/^rig\/\d{1,2}\.bin$/.test(file.name) &&
+          !/^media\/\d{1,5}\.bin$/.test(file.name)) ||
         names.has(file.name) ||
-        names.size >= 35
+        names.size >= 390
       )
         throw new Error('Bundle 包含不支持或重复的文件');
       names.add(file.name);
@@ -127,6 +137,7 @@ export function readBundle(bytes: Uint8Array): {
     ...manifest.experiences,
     ...manifest.notifications,
     ...manifest.extractions,
+    ...(manifest.media ?? []),
   ];
   if (all.some((item) => item.characterId !== cid)) throw new Error('Bundle 混入了其它角色的数据');
   const ids = new Map<string, Set<string>>();
@@ -137,6 +148,7 @@ export function readBundle(bytes: Uint8Array): {
     experiences: manifest.experiences,
     notifications: manifest.notifications,
     extractions: manifest.extractions,
+    media: manifest.media ?? [],
   })) {
     const set = new Set(rows.map((r) => r.id));
     if (set.size !== rows.length) throw new Error('Bundle 包含重复实体 ID');
@@ -162,7 +174,8 @@ export function readBundle(bytes: Uint8Array): {
   );
   const used = new Set<string>();
   if (manifest.character.rig) {
-    if (manifest.version !== 3 && manifest.version !== 4) throw new Error('分层形象需要 Bundle v3');
+    if (manifest.version !== 3 && manifest.version !== 4 && manifest.version !== 5)
+      throw new Error('分层形象需要 Bundle v3');
     const rig = validateRig(manifest.character.rig);
     for (const layer of rig.layers) {
       if (layer.asset.svg) {
@@ -181,11 +194,32 @@ export function readBundle(bytes: Uint8Array): {
   if (Boolean(model) !== Boolean(manifest.character.meshAvatar))
     throw new Error('网格模型资产与清单不一致');
   if (model) {
-    if (manifest.version !== 4 || manifest.character.meshAvatar?.uri !== 'avatar.p2lrt')
+    if (
+      (manifest.version !== 4 && manifest.version !== 5) ||
+      manifest.character.meshAvatar?.uri !== 'avatar.p2lrt'
+    )
       throw new Error('网格模型引用不正确');
     validateP2lrt(model);
   }
-  return { manifest, avatar, images, model };
+  const media = Object.fromEntries(
+    Object.entries(files).filter(([name]) => name.startsWith('media/')),
+  );
+  for (const item of manifest.media ?? [])
+    if (
+      !/^media\/\d{1,5}\.bin$/.test(item.uri) ||
+      !media[item.uri] ||
+      media[item.uri].length > 6 * 1024 * 1024 ||
+      !isAvatar(media[item.uri])
+    )
+      throw Error('聊天图片缺失或格式不支持');
+  const referenced = new Set((manifest.media ?? []).map((a) => a.uri));
+  if (Object.keys(media).some((name) => !referenced.has(name))) throw Error('包含未引用的聊天图片');
+  for (const message of manifest.messages)
+    for (const aid of message.attachments ?? [])
+      if (!ids.get('media')?.has(aid)) throw Error('消息引用的图片不存在');
+  if ((manifest.media?.length || manifest.plugins?.length) && manifest.version !== 5)
+    throw Error('图片与技能需要Bundle v5');
+  return { manifest, avatar, images, model, media };
 }
 export class CharacterBundleService {
   constructor(
@@ -204,15 +238,33 @@ export class CharacterBundleService {
           ? { ...character.meshAvatar, uri: 'avatar.p2lrt' }
           : undefined,
       };
+      const messages = await tx.list('messages', characterId, 100001),
+        imageIds = new Set(messages.flatMap((m) => m.attachments ?? []));
+      const media = (await tx.list('mediaAssets', characterId, 10000)).filter((a) =>
+        imageIds.has(a.id),
+      );
+      const plugins = (await tx.list('plugins', characterId, 100)).map((p) => ({
+        manifest: p.manifest,
+        source: p.source,
+      }));
       return {
+        ...(media.length ? { media } : {}),
+        ...(plugins.length ? { plugins } : {}),
         format: 'nyvemi' as const,
-        version: character.meshAvatar ? (4 as const) : character.rig ? (3 as const) : (2 as const),
+        version:
+          media.length || plugins.length
+            ? (5 as const)
+            : character.meshAvatar
+              ? (4 as const)
+              : character.rig
+                ? (3 as const)
+                : (2 as const),
         theme: await tx.get('themes', 'app'),
         exportedAt: Date.now(),
         character: portable,
         settings,
         memories: await tx.list('memories', characterId, 100001),
-        messages: await tx.list('messages', characterId, 100001),
+        messages,
         intentions: await tx.list('intentions', characterId, 100001),
         experiences: await tx.list('experiences', characterId, 100001),
         notifications: await tx.list('notifications', characterId, 100001),
@@ -238,6 +290,13 @@ export class CharacterBundleService {
       }
       manifest.character.rig = rig;
     }
+    for (const [i, asset] of (manifest.media ?? []).entries()) {
+      const bytes = await this.assets.readAvatar(asset.uri);
+      if (bytes.length > 6 * 1024 * 1024 || !isAvatar(bytes)) throw Error('聊天图片过大或损坏');
+      const name = `media/${i}.bin`;
+      rigFiles[name] = bytes;
+      asset.uri = name;
+    }
     const json = JSON.stringify(redactKnownSecret(clean(manifest), knownSecret));
     ManifestSchema.parse(JSON.parse(json));
     const content = strToU8(json);
@@ -259,7 +318,7 @@ export class CharacterBundleService {
     return bytes;
   }
   async importCharacter(bytes: Uint8Array): Promise<Character> {
-    const { manifest: m, avatar, images, model } = readBundle(bytes);
+    const { manifest: m, avatar, images, model, media } = readBundle(bytes);
     const cid = id();
     const maps = new Map<string, string>();
     const remap = (kind: string, old: string): string => {
@@ -267,6 +326,7 @@ export class CharacterBundleService {
       if (!maps.has(key)) maps.set(key, id());
       return maps.get(key)!;
     };
+    const mediaUris = new Map<string, string>();
     let avatarUri: string | undefined;
     const imageUris: string[] = [];
     let rig: CharacterRig | undefined;
@@ -295,6 +355,14 @@ export class CharacterBundleService {
         const uri = await (this.assets.writeModel ?? this.assets.writeAvatar)(cid, model);
         imageUris.push(uri);
         meshAvatar = { format: 'p2lrt', version: 1, uri };
+      }
+      for (const asset of m.media ?? []) {
+        const uri = await (this.assets.writeMedia ?? this.assets.writeAvatar)(
+          cid,
+          media[asset.uri],
+        );
+        imageUris.push(uri);
+        mediaUris.set(asset.id, uri);
       }
       const received = new Set(
         m.notifications
@@ -332,10 +400,30 @@ export class CharacterBundleService {
                 ? remap('messages', memory.source)
                 : memory.source,
           });
+        for (const asset of m.media ?? [])
+          await tx.put('mediaAssets', {
+            ...asset,
+            id: remap('media', asset.id),
+            characterId: cid,
+            uri: mediaUris.get(asset.id)!,
+          });
+        for (const plugin of m.plugins ?? [])
+          await tx.put('plugins', {
+            id: `${cid}:${plugin.manifest.id}`,
+            characterId: cid,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            manifest: plugin.manifest,
+            source: plugin.source,
+            enabled: false,
+            granted: [],
+            history: [],
+          });
         for (const message of m.messages)
           await tx.put('messages', {
             ...message,
             id: remap('messages', message.id),
+            attachments: message.attachments?.map((aid) => remap('media', aid)),
             characterId: cid,
             groupId: message.groupId ? remap('messages', message.groupId) : undefined,
             status:

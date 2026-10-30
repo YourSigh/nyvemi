@@ -2,6 +2,8 @@ import { z } from 'zod';
 import type { Storage } from '../storage/store';
 import type { AgentTool } from '../agent/core';
 import {
+  PluginValueSchema,
+  type PluginValue,
   defaultPluginPolicy,
   PluginManifestSchema,
   type PluginManifest,
@@ -53,7 +55,8 @@ export class PluginManager {
     const granted = manifest.permissions.filter(
       (p) => old?.granted.includes(p) || policy.allowed.includes(p),
     );
-    const enabled = manifest.permissions.every((p) => granted.includes(p));
+    const enabled =
+      (old?.enabled ?? true) && manifest.permissions.every((p) => granted.includes(p));
     const row: InstalledPlugin = {
       id: key,
       characterId: cid,
@@ -75,26 +78,44 @@ export class PluginManager {
   }
   async installUrl(cid: string, url: string, actor: 'user' | 'agent' = 'user') {
     if (actor === 'agent' && !(await this.policy(cid)).autonomy) throw Error('自主学习已关闭');
-    const text = await this.loader.load(url);
+    const parsed = new URL(url);
+    if (parsed.hostname === 'github.com' && parsed.pathname.includes('/blob/')) {
+      parsed.hostname = 'raw.githubusercontent.com';
+      parsed.pathname = parsed.pathname.replace('/blob/', '/');
+      parsed.search = '';
+      parsed.hash = '';
+      url = parsed.href;
+    }
+    return this.installText(cid, await this.loader.load(url), url, actor);
+  }
+  async installText(cid: string, text: string, source: string, actor: 'user' | 'agent' = 'user') {
     if (text.length > 64000) throw Error('插件文件过大');
-    if (text.trimStart().startsWith('{')) return this.install(cid, JSON.parse(text), url, actor);
-    // A Markdown skill is instruction material, never executable JS or a shell script.
-    if (!/\.md(?:$|[?#])/i.test(url)) throw Error('请使用 Nyvemi JSON 插件或 SKILL.md');
+    if (text.trimStart().startsWith('{')) return this.install(cid, JSON.parse(text), source, actor);
+    if (!/\.md(?:$|[?#])/i.test(source)) throw Error('请使用 Nyvemi JSON 插件或 SKILL.md');
     if (text.length > 12000) throw Error('技能说明最多12000字，请精简后再导入');
-    const title = /^#\s+(.+)$/m.exec(text)?.[1] ?? '导入的技能';
+    const title = /^#\s+(.+)$/m.exec(text)?.[1] ?? '导入的技能',
+      pluginId = `skill-${(await this.loader.hash(source)).slice(0, 16)}`;
+    const old = await this.store.get('plugins', `${cid}:${pluginId}`);
+    if (old?.manifest.instructions === text) return old;
+    const version = old
+      ? old.manifest.version
+          .split('.')
+          .map((n, i) => (i === 2 ? Number(n) + 1 : Number(n)))
+          .join('.')
+      : '1.0.0';
     return this.install(
       cid,
       {
         format: 'nyvemi-plugin/v1',
-        id: `skill-${(await this.loader.hash(url)).slice(0, 16)}`,
+        id: pluginId,
         name: title.slice(0, 60),
-        version: '1.0.0',
+        version,
         description: '从 Markdown 导入的技能',
-        instructions: text.slice(0, 12000),
+        instructions: text,
         permissions: ['context'],
         tools: [],
       },
-      url,
+      source,
       actor,
     );
   }
@@ -218,15 +239,35 @@ export class PluginManager {
       .strict()
       .parse(args);
     const results: unknown[] = [];
-    const bind = (value: string | number | boolean) =>
-      typeof value !== 'string'
-        ? value
-        : value.replace(/\{\{(input\.[a-z0-9_-]+|step\.[0-3])\}\}/g, (_, ref: string) => {
-            const [kind, key] = ref.split('.');
-            const v = kind === 'input' ? checked[key] : results[Number(key)];
-            if (v === undefined) throw Error('流程引用了未提供的参数或结果');
-            return (typeof v === 'string' ? v : JSON.stringify(v)).slice(0, 12000);
-          });
+    const resolve = (ref: string): unknown => {
+      const [kind, index, ...path] = ref.split('.');
+      let value: unknown = kind === 'input' ? checked[index] : results[Number(index)];
+      for (const key of path) {
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          ['constructor', 'prototype', '__proto__'].includes(key) ||
+          !Object.hasOwn(value, key)
+        )
+          throw Error('流程引用不存在');
+        value = (value as Record<string, unknown>)[key];
+      }
+      if (value === undefined) throw Error('流程引用了未提供的参数或结果');
+      return value;
+    };
+    const token = /\{\{(input\.[a-z0-9_-]+|step\.[0-3](?:\.[a-zA-Z0-9_-]+)*)\}\}/g;
+    const bind = (value: PluginValue): PluginValue => {
+      if (Array.isArray(value)) return value.map(bind);
+      if (value && typeof value === 'object')
+        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, bind(v)]));
+      if (typeof value !== 'string') return value;
+      const exact = new RegExp('^' + token.source + '$').exec(value);
+      if (exact) return PluginValueSchema.parse(resolve(exact[1]));
+      return value.replace(token, (_, ref: string) => {
+        const v = resolve(ref);
+        return (typeof v === 'string' ? v : JSON.stringify(v)).slice(0, 12000);
+      });
+    };
     try {
       for (const step of tool.steps) {
         const current = await this.owned(cid, row.id),

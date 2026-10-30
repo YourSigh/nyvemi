@@ -1,3 +1,6 @@
+import { pickChatImages } from '../media/native';
+import type { MediaAsset } from '../media/model';
+import { MessageImages } from './message-images';
 import { useCharacterDebug } from './character/debug';
 import { HoldToTalk, requestVoiceAccess } from './voice';
 import { timeMarkers } from '../chat/presentation';
@@ -14,6 +17,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   AppState,
   FlatList,
   Pressable,
@@ -83,6 +87,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
   const [draft, setDraft] = useState('');
+  const [pictures, setPictures] = useState<MediaAsset[]>([]);
+  const [picking, setPicking] = useState(false);
   const interaction = useCharacterInteraction(
     runtime.chat,
     cid,
@@ -169,12 +175,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const send = async (retry?: Message, spoken?: string) => {
     if (sending.current || transitioning) return;
     const text = retry?.content ?? spoken ?? draft;
-    if (!text.trim()) return;
+    const attachments = retry?.attachments ?? pictures.map((p) => p.id);
+    if (!text.trim() && !attachments.length) return;
     sending.current = true;
     autoScroll.current = true;
     setBusy(true);
     setError('');
     if (!retry && !spoken) setDraft('');
+    if (!retry) setPictures([]);
     abort.current = new AbortController();
     try {
       await runtime.chat.send(
@@ -192,6 +200,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           const next = await runtime.themes.interpret(description, current?.preference);
           await apply(next, () => runtime.themes.save(next));
         },
+        attachments,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : '发送失败，消息已保留');
@@ -298,9 +307,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                         </Text>
                       ) : null}
                       <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
-                        <Text selectable style={s.message}>
-                          {m.content}
-                        </Text>
+                        {m.attachments?.length ? (
+                          <MessageImages ids={m.attachments} characterId={cid} />
+                        ) : null}
+                        {m.content ? (
+                          <Text selectable style={s.message}>
+                            {m.content}
+                          </Text>
+                        ) : null}
                       </View>
                       {m.status === 'error' ? (
                         <Pressable
@@ -322,7 +336,58 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           </View>
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
+            {pictures.length ? (
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                {pictures.map((p) => (
+                  <View key={p.id}>
+                    <Image
+                      source={{ uri: p.uri }}
+                      style={{ width: 64, height: 64, borderRadius: 8 }}
+                    />
+                    <Pressable
+                      disabled={busy || transitioning}
+                      accessibilityLabel="移除待发送图片"
+                      onPress={() => {
+                        setPictures((rows) => rows.filter((r) => r.id !== p.id));
+                        void runtime.media.removeUnused(cid, p.id).catch(() => undefined);
+                      }}
+                    >
+                      <Text style={{ color: theme.primary, textAlign: 'center' }}>移除</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
             <View style={s.composer}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="添加图片"
+                disabled={busy || picking || transitioning || pictures.length >= 3}
+                onPress={() => {
+                  setPicking(true);
+                  setError('');
+                  void pickChatImages(runtime.store, cid, 3 - pictures.length)
+                    .then((rows) =>
+                      setPictures((old) =>
+                        [...old, ...rows]
+                          .filter((r, i, all) => all.findIndex((x) => x.id === r.id) === i)
+                          .slice(0, 3),
+                      ),
+                    )
+                    .catch((e) => setError(e instanceof Error ? e.message : '选择图片失败'))
+                    .finally(() => setPicking(false));
+                }}
+                style={{
+                  width: 36,
+                  height: 44,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: busy || picking ? 0.4 : 1,
+                }}
+              >
+                <Text style={{ fontSize: 28, color: theme.primary }}>＋</Text>
+              </Pressable>
+
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={voiceMode ? '切换键盘输入' : '切换按住说话'}
@@ -392,7 +457,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   />
                   <Button
                     title={busy ? '…' : '发送'}
-                    disabled={busy || !draft.trim()}
+                    disabled={busy || picking || (!draft.trim() && !pictures.length)}
                     onPress={() => void send()}
                   />
                 </>

@@ -1,3 +1,5 @@
+import { MediaService } from '../media/service';
+import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
 import { PluginManager } from '../extensions/manager';
 import * as Crypto from 'expo-crypto';
 import { CompanionAgent } from '../agent/service';
@@ -42,9 +44,12 @@ async function createRuntime() {
   await recoverVisualWork(store);
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
+  const redactRuntime = async (value: unknown) => {
+    const keys = await Promise.all([secretStore.get(), imageSecret.get(), visionSecret.get()]);
+    return keys.reduce((data, key) => redactKnownSecret(data, key ?? undefined), value);
+  };
   const diagnostics = new Diagnostics(store, async (json) => {
-    const key = await secretStore.get();
-    return JSON.stringify(redactKnownSecret(JSON.parse(json), key ?? undefined));
+    return JSON.stringify(await redactRuntime(JSON.parse(json)));
   });
   const provider = async (): Promise<LLMProvider> => {
     const config = await store.get('provider', 'provider');
@@ -66,6 +71,58 @@ async function createRuntime() {
   const retriever = new KeywordMemoryRetriever();
   const extraction = new MemoryExtractionService(store, provider, diagnostics);
   const syncIntentionWork = () => reconcileIntentionWork(store, bridge());
+  const media = new MediaService(store, {
+    files: mediaFiles,
+    generationIdentity: async () =>
+      JSON.stringify((await store.get('imageSettings', 'images')) ?? defaultImageSettings),
+    hash: imageHash,
+    secret: async (base, reuse) => (reuse ? imageSecret.get(base) : visionSecret.get(base)),
+    metric: async (metric) => {
+      await usage.record(metric, await usage.price(metric.endpoint, metric.model));
+      await diagnostics.record('api', '', { ...metric });
+    },
+    request: nativeFetch as unknown as typeof fetch,
+    generate: async (cid, prompt, reference, signal) => {
+      const settings = (await store.get('imageSettings', 'images')) ?? defaultImageSettings;
+      if (settings.provider !== 'seedream') throw Error('请先在角色形象页配置真实生图服务');
+      const startedAt = Date.now();
+      let success = false,
+        requests = 0;
+      try {
+        const provider = new SeedreamImageProvider(
+          settings,
+          () => imageSecret.get(settings.baseUrl),
+          store,
+          imageAssets,
+          imageHash,
+          (async (...args: Parameters<typeof fetch>) => {
+            requests++;
+            const response = await (nativeFetch as unknown as typeof fetch)(...args);
+            success = response.ok;
+            return response;
+          }) as typeof fetch,
+        );
+        const result = await provider.illustrate(prompt, reference, signal);
+        const asset = await saveChatImage(store, cid, result.uri, 'generated');
+        success = true;
+        return asset;
+      } finally {
+        if (requests)
+          await usage.record(
+            {
+              requestId: Crypto.randomUUID(),
+              startedAt,
+              endpoint: settings.baseUrl,
+              model: settings.imageModel,
+              duration: Date.now() - startedAt,
+              purpose: 'chat_image_generation',
+              success,
+            },
+            await usage.price(settings.baseUrl, settings.imageModel),
+          );
+      }
+    },
+  });
   const agentWeb = new PublicAgentWeb(
     new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
     nativeFetch as unknown as typeof fetch,
@@ -77,12 +134,13 @@ async function createRuntime() {
   const agent = new CompanionAgent(store, provider, diagnostics, {
     web: agentWeb,
     plugins,
+    media,
     notifications: androidNotifications,
     activity: (stage, cid) => activity.report(stage, cid),
     visible: () => AppState.currentState === 'active',
     clock: () => bridge().deviceTimeContext(),
     model: async () => (await store.get('provider', 'provider'))?.model ?? 'deepseek-flash',
-    redact: async (value) => redactKnownSecret(value, (await secretStore.get()) ?? undefined),
+    redact: redactRuntime,
     schedule: async (task) => {
       if (AppState.currentState === 'active') {
         const character = await store.get('characters', task.characterId);
@@ -122,6 +180,7 @@ async function createRuntime() {
     store,
     agent,
     plugins,
+    media,
     visuals: new VisualCreationService(
       store,
       async () => {

@@ -119,9 +119,16 @@ export class ChatService {
     signal?: AbortSignal,
     retryId?: string,
     onThemeChange?: (description: string) => Promise<void>,
+    attachments: string[] = [],
   ): Promise<void> {
     const content = text.trim();
-    if (!content || content.length > 6000) throw new Error('请输入 1～6000 字消息');
+    if ((!content && !attachments.length) || content.length > 6000 || attachments.length > 3)
+      throw new Error('请输入文字或最多3张图片');
+    for (const assetId of attachments) {
+      const asset = await this.store.get('mediaAssets', assetId);
+      if (!asset || asset.characterId !== characterId)
+        throw new Error('图片不存在或不属于当前角色');
+    }
     const lease = `chat:${characterId}`;
     if (!(await this.store.lease(lease, Date.now(), 420000)))
       throw new Error('这一轮还没聊完，请稍候');
@@ -155,6 +162,7 @@ export class ChatService {
             createdAt: Math.max(Date.now(), latestAt + 1),
             origin: 'chat',
             status: 'pending',
+            ...(attachments.length ? { attachments } : {}),
           };
       await this.store.put('messages', user);
       onSaved();

@@ -44,7 +44,7 @@ export const imageAssets: ImageAssets = {
     const mime = b[0] === 137 ? 'image/png' : b[0] === 255 ? 'image/jpeg' : 'image/webp';
     return `data:${mime};base64,${await file.base64()}`;
   },
-  download: async (url, key) => {
+  download: async (url, key, signal) => {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password)
       throw new Error('图片下载地址不安全');
@@ -57,7 +57,11 @@ export const imageAssets: ImageAssets = {
       }
     }
     // No Authorization header is ever forwarded to image/CDN hosts.
-    const response = await nativeFetch(url, { signal: AbortSignal.timeout(60_000) });
+    const response = await nativeFetch(url, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
+        : AbortSignal.timeout(60_000),
+    });
     if (!response.ok) throw new Error(`下载图片失败（${response.status}），重试不会重新生图`);
     if (Number(response.headers.get('content-length')) > 12 * 1024 * 1024)
       throw new Error('输出图片过大');

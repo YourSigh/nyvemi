@@ -6,9 +6,27 @@ const string = (description: string, required = true) => ({
 });
 export const agentTools: AgentTool[] = [
   {
+    name: 'inspect_image',
+    description:
+      '真正查看当前角色收到的图片，读取画面、文字或细节。图片句柄本身不表示你已看过图，先用此工具再描述。',
+    parameters: { imageId: string('附件图片ID'), question: string('想看清的内容') },
+  },
+  {
+    name: 'draw_image',
+    description:
+      '生成一张图片，可选参考收到的图片。使用用户自己配置的生图服务和额度；受生图开关与每日上限控制。成功返回图片ID，再用send_image发出。',
+    parameters: { prompt: string('想画的内容'), referenceImageId: string('可选参考图片ID', false) },
+  },
+  {
+    name: 'send_image',
+    description: '把当前角色收到或生成的图片发成一个气泡。只能用真实存在的图片ID，不会执行生图。',
+    parameters: { imageId: string('图片ID'), caption: string('简短附言，可省略', false) },
+  },
+
+  {
     name: 'develop_plugin',
     description:
-      '把已有工具组合成新的可复用插件，保存并立即可用。只接受 nyvemi-plugin/v1 JSON，不能运行JS、Node或shell。步骤最多4个，变量用 {{input.字段}} 或 {{step.0}}。工具操作仅限 read_context/web_search/web_fetch/browse_bilibili/recall_memory/remember_experience/schedule_wakeup/inspect_image/draw_image，必须声明相应权限。',
+      '把已有工具组合成新的可复用插件，保存并立即可用。只接受 nyvemi-plugin/v1 JSON，不能运行JS、Node或shell。步骤最多4个，变量用 {{input.字段}} 或 {{step.0.0.url}}（前一步结果路径）。工具操作仅限 read_context/web_search/web_fetch/browse_bilibili/recall_memory/remember_experience/schedule_wakeup/inspect_image/draw_image，必须声明权限：web网页，memory记忆，context上下文，experience经历，schedule唤醒，images图片。',
     parameters: {
       manifestJson: string(
         '完整插件JSON：format、id(2~24字符)、name、version(1.0.0)、description、instructions、permissions、tools。tools元素：name、description、inputs(字段到string/number/boolean类型)、steps(operation和args对象)。',

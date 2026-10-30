@@ -274,3 +274,29 @@ it('does not charge another body repair for the same selected appearance', async
   await service.repairBody('c');
   expect(repairBody).toHaveBeenCalledTimes(2);
 });
+it('illustrates ordinary chat prompts without rig constraints and reuses paid results', async () => {
+  const { store, assets } = await setup();
+  let prompt = '';
+  const http = vi.fn(async (_url, init) => {
+    prompt = JSON.parse(String(init?.body)).prompt;
+    return new Response(
+      JSON.stringify({ data: [{ url: 'https://cdn.example/art.png', size: '1024x1024' }] }),
+    );
+  });
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'test-key',
+    store,
+    assets,
+    hash,
+    http as typeof fetch,
+  );
+  await provider.illustrate('画一片安静的海');
+  await provider.illustrate('画一片安静的海');
+  expect(prompt).toBe('画一片安静的海');
+  expect(http).toHaveBeenCalledTimes(1);
+  const canceled = new AbortController();
+  canceled.abort();
+  await expect(provider.illustrate('another', undefined, canceled.signal)).rejects.toThrow('取消');
+  expect(http).toHaveBeenCalledTimes(1);
+});
