@@ -45,6 +45,7 @@ export const imageAssets: ImageAssets = {
     return `data:${mime};base64,${await file.base64()}`;
   },
   download: async (url, key, signal) => {
+    if (signal?.aborted) throw new Error('图片下载已取消，已生成结果会保留');
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:' || parsed.username || parsed.password)
       throw new Error('图片下载地址不安全');
@@ -56,24 +57,46 @@ export const imageAssets: ImageAssets = {
         target.delete();
       }
     }
-    // No Authorization header is ever forwarded to image/CDN hosts.
-    const response = await nativeFetch(url, {
-      signal: signal
-        ? AbortSignal.any([signal, AbortSignal.timeout(60_000)])
-        : AbortSignal.timeout(60_000),
-    });
-    if (!response.ok) throw new Error(`下载图片失败（${response.status}），重试不会重新生图`);
-    if (Number(response.headers.get('content-length')) > 12 * 1024 * 1024)
-      throw new Error('输出图片过大');
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.length > 12 * 1024 * 1024 || !isAvatar(bytes))
-      throw new Error('输出图片格式或尺寸不支持');
-    target.write(bytes);
+    // RN's AbortSignal polyfill has neither timeout() nor any(). Use the same
+    // AbortController primitives supported by the generation transport.
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort);
+    if (signal?.aborted) abort();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 60_000);
     try {
-      return await inspect(target);
-    } catch (e) {
-      target.delete();
-      throw e;
+      // No Authorization header is ever forwarded to image/CDN hosts.
+      const response = await nativeFetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`下载图片失败（${response.status}），重试不会重新生图`);
+      if (Number(response.headers.get('content-length')) > 12 * 1024 * 1024)
+        throw new Error('输出图片过大');
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (controller.signal.aborted) throw new Error('download_aborted');
+      if (bytes.length > 12 * 1024 * 1024 || !isAvatar(bytes))
+        throw new Error('输出图片格式或尺寸不支持');
+      target.write(bytes);
+      try {
+        return await inspect(target);
+      } catch (e) {
+        if (target.exists) target.delete();
+        throw e;
+      }
+    } catch (error) {
+      if (signal?.aborted) throw new Error('图片下载已取消，已生成结果会保留');
+      if (timedOut) throw new Error('下载图片超时，重试不会重新生图');
+      if (
+        error instanceof Error &&
+        /^(下载图片失败|输出图片|请使用小于|仅支持|图片尺寸)/.test(error.message)
+      )
+        throw error;
+      throw new Error('下载或保存图片失败，重试会继续使用已生成结果');
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
     }
   },
 };
