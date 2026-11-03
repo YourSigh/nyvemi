@@ -10,7 +10,7 @@ async function main() {
     const description = fs.readFileSync(input, 'utf8');
     const reference = process.argv[4];
     const response = await request('rig-portrait', {
-      model: env.NYVEMI_ARK_LAYER_MODEL,
+      model: env.NYVEMI_ARK_IMAGE_MODEL,
       prompt: `${rigPortrait}\nCharacter identity: ${description}`,
       size: '2K',
       response_format: 'url',
@@ -25,7 +25,7 @@ async function main() {
     const reference = process.argv[4];
     for (let i = 0; i < 3; i++) {
       const response = await request(`candidate-${i + 1}`, {
-        model: env.NYVEMI_ARK_LAYER_MODEL,
+        model: env.NYVEMI_ARK_IMAGE_MODEL,
         prompt: `${constraints}\nCharacter description: ${description}\nAlternative outfit design ${i + 1}; retain every identifying feature.`,
         size: '2K',
         response_format: 'url',

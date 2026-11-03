@@ -1,3 +1,8 @@
+import {
+  upgradeImageSettings,
+  imageRoutingLabel,
+  qualityImageSettings,
+} from '../appearance/settings';
 import { ImageProviderError, type ImageRequestFailure } from '../appearance/errors';
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
@@ -78,7 +83,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         if (!c) throw new Error('角色不存在');
         setName(c.persona.name);
         setDescription(c.persona.appearance || '正面全身，可爱的二次元角色，简单背景');
-        if (settings) setConfig({ ...settings, provider: 'seedream' });
+        if (settings) setConfig(upgradeImageSettings({ ...settings, provider: 'seedream' }));
         setHasKey(Boolean(secret));
         if (d) {
           setDraft(d);
@@ -306,6 +311,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             />
           )}
           <Details title="自定义生图模型">
+            <TextButton
+              title="省钱组合：Pro生图 + Flash拆层"
+              disabled={Boolean(busy)}
+              onPress={() => setConfig(defaultImageSettings)}
+            />
+            <TextButton
+              title="使用Pro生图 + Pro拆层"
+              disabled={Boolean(busy)}
+              onPress={() => setConfig(qualityImageSettings)}
+            />
+            <Note>
+              Flash需在方舟开通，复杂形象效果可能有差异。失败不自动换用Pro；保存不会生图。
+            </Note>
             <Field
               label="Base URL"
               value={config.baseUrl}
@@ -324,9 +342,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               onChangeText={(layerModel) => setConfig({ ...config, layerModel })}
               autoCapitalize="none"
             />
-            <TextButton title="恢复豆包默认配置" onPress={() => setConfig(defaultImageSettings)} />
           </Details>
-          <Note>先用聊天模型确认要求；确认参考后才使用豆包额度生图。</Note>
+          <Note>{imageRoutingLabel(config)}。确认参考后才付费生图。</Note>
           <Button
             title={mode === 'animate' ? '使用这张参考图' : '先确认角色与参考'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}

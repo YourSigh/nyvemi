@@ -7,7 +7,7 @@ import {
   type ImageSettings,
 } from '../src/appearance/model';
 import { upgradeImageSettings, qualityImageSettings } from '../src/appearance/settings';
-import { SeedreamImageProvider } from '../src/appearance/seedream';
+import { SeedreamImageProvider, layerBounds } from '../src/appearance/seedream';
 import { VisualCreationService, type ImageAssets } from '../src/appearance/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
@@ -175,4 +175,20 @@ it('resumes a partly downloaded batch across a layer switch without repeating th
   active = provider(defaultImageSettings);
   expect((await service.generate('c', input)).candidates).toHaveLength(3);
   expect(http).toHaveBeenCalledTimes(3);
+});
+
+it('prefers native pixel layer placement and rejects malformed bounds without guessing', () => {
+  expect(
+    layerBounds({ normalized: [309, 432, 693, 964], absolute: [633, 885, 1420, 1975] }, 2048, 2048),
+  ).toEqual([633 / 2048, 885 / 2048, 787 / 2048, 1090 / 2048]);
+  expect(layerBounds({ normalized: [0, 100, 1000, 900] }, 2048, 2048)).toEqual([0, 0.1, 1, 0.8]);
+  for (const absolute of [
+    [0, 0, 2049, 2048],
+    [10, 0, 5, 100],
+    [0, -1, 10, 100],
+    [0, 0, NaN, 100],
+  ] as [number, number, number, number][])
+    expect(() => layerBounds({ normalized: [0, 0, 1000, 1000], absolute }, 2048, 2048)).toThrow(
+      '图层坐标无效',
+    );
 });

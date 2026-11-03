@@ -20,7 +20,15 @@ const Output = z.object({
   z_index: z.number().int().nonnegative().max(100).optional(),
   bounding_box: z
     .object({
-      normalized: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+      normalized: z.tuple([
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+        z.number().finite(),
+      ]),
+      absolute: z
+        .tuple([z.number().finite(), z.number().finite(), z.number().finite(), z.number().finite()])
+        .optional(),
       name: z.string().optional(),
       description: z.string().optional(),
     })
@@ -39,7 +47,32 @@ export function referenceGenerationPrompt(input: VisualInput, index: number) {
   return `角色立绘，用户要求：${input.description}。${input.reference ? '图1是用户确认的身份参考，保留其发型轮廓、发色、瞳色、服装与标志饰物，只按用户要求改动。' : '按用户要求设计同一个原创角色。'}${input.anchor ? '最后一张参考是本批已核对形象，保持其角色设计一致。' : ''}${features ? `参考观察（用户改动优先）：${features}。` : ''}正面、头摆正、单人全身含脚、中立站姿、双手自然分开不挡身体、双眼睁开，简单背景。Q版仅简化比例与线条，不改角色身份和装束。第${index + 1}个候选，只微调表情与明暗，无文字拼贴。`;
 }
 export const decompositionPrompt =
-  'Decompose this character into animation-ready transparent PNG layers. Separate: body, head (face skin with eyes and mouth removed and cleanly filled), hair, arms, eyes (both open eyes), mouth. English names: body, head, hair, arm, eyes, mouth. Complete occluded anatomy, hair and face beneath removed parts. Background only in base layer; do not duplicate the character in base. Preserve original alignment and identity. Each layer contains only the named part. Do not leave eyes or mouth painted on the head layer.';
+  'Decompose the source into aligned, animation-ready transparent PNG layers without redesigning it. English part names: body, arm, head, hair, eyes, mouth. body: torso, neck, lower body and torso clothing only; remove both arms AND their entire sleeves/cuffs from this layer, fill the hidden torso behind them. arm: both complete arms INCLUDING original sleeves/cuffs and hands, preserving their exact original pose, silhouette and alignment; do not expose new bare skin where the source has sleeves. head: complete face/scalp skin, removing eyes, mouth and hair and filling the skin underneath; a blank face is required. eyes: both original open eyes. mouth: original mouth. hair: original hair and attached accessories. Each visible feature must appear in exactly one layer, no duplicated sleeves/limbs/eyes/mouth. Complete hidden neck, shoulder roots and scalp with overlapping margins under covering parts, not transparent cuts. Keep layer placement/bounding boxes in the original canvas. Background only in the base; omit character duplicates from base. Return only the six named part groups plus the base. Preserve identity, clothes and colors.';
+/** Prefer native pixel placement; normalized 0..1000 coordinates lose sub-pixel alignment. */
+export function layerBounds(
+  box: {
+    normalized: [number, number, number, number];
+    absolute?: [number, number, number, number];
+  },
+  width: number,
+  height: number,
+): [number, number, number, number] {
+  const a = box.absolute;
+  const [left, top, right, bottom] = a
+    ? [a[0] / width, a[1] / height, a[2] / width, a[3] / height]
+    : box.normalized.map((n) => n / 1000);
+  if (
+    ![left, top, right, bottom].every(Number.isFinite) ||
+    left < 0 ||
+    top < 0 ||
+    right > 1 ||
+    bottom > 1 ||
+    right <= left ||
+    bottom <= top
+  )
+    throw new Error('图层坐标无效，已保留付费响应，不会重新请求');
+  return [left, top, right - left, bottom - top];
+}
 export class SeedreamImageProvider implements ImageProvider {
   identity: string;
   private config: ImageSettings;
@@ -277,6 +310,7 @@ export class SeedreamImageProvider implements ImageProvider {
     const dataUrl = await this.decompositionImage(image);
     return this.cached(
       'split',
+      // Prompt refinements apply to new requests only. Keep paid receipts reusable.
       await this.assets.fingerprint(image),
       {
         model: this.config.layerModel,
@@ -295,7 +329,7 @@ export class SeedreamImageProvider implements ImageProvider {
         const layers: CharacterRig['layers'] = [];
         for (const [i, item] of response.data.entries()) {
           // Base backgrounds are intentionally omitted: character stage must stay transparent.
-          if (!item.bounding_box) continue;
+          if (item === base || !item.bounding_box) continue;
           const name = (item.name ?? item.bounding_box.name ?? '').toLowerCase();
           const role = /eye|眼/.test(name)
             ? 'eyes'
@@ -310,11 +344,10 @@ export class SeedreamImageProvider implements ImageProvider {
                     : /body|torso|身体|躯干|服装|衣/.test(name)
                       ? 'body'
                       : 'detail';
-          const [left, top, right, bottom] = item.bounding_box.normalized.map((n) => n / 1000);
           layers.push({
             role,
             asset: await this.assets.download(item.url, `${cacheId}-${i}`),
-            bounds: [left, top, right - left, bottom - top],
+            bounds: layerBounds(item.bounding_box, width, height),
             z: item.z_index ?? i,
           });
         }
@@ -344,7 +377,10 @@ export class SeedreamImageProvider implements ImageProvider {
           (d) => d.bounding_box && /body|身体|躯干/.test(d.name ?? d.bounding_box.name ?? ''),
         );
         if (!item?.bounding_box) throw new Error('修复结果没有可用身体层，已保留原形象');
-        const [left, top, right, bottom] = item.bounding_box.normalized.map((n) => n / 1000);
+        const base = response.data.find((d) => d.z_index === 0 || !d.bounding_box);
+        if (!base && item.bounding_box.absolute)
+          throw new Error('修复结果缺少底图尺寸，已保留付费响应');
+        const [width, height] = base ? base.size.split('x').map(Number) : [rig.width, rig.height];
         const asset = await this.assets.download(item.url, `${cacheId}-body`);
         return validateRig({
           ...rig,
@@ -353,7 +389,7 @@ export class SeedreamImageProvider implements ImageProvider {
             {
               role: 'body',
               asset,
-              bounds: [left, top, right - left, bottom - top],
+              bounds: layerBounds(item.bounding_box, width, height),
               z: rig.layers.find((l) => l.role === 'body')!.z,
             },
           ],

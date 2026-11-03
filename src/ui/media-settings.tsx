@@ -1,3 +1,8 @@
+import {
+  upgradeImageSettings,
+  imageRoutingLabel,
+  qualityImageSettings,
+} from '../appearance/settings';
 import { saveMediaConfiguration } from '../application/media-settings';
 import { useCallback, useState } from 'react';
 import { Linking, Switch, Text, View } from 'react-native';
@@ -27,7 +32,7 @@ export function MediaSettingsScreen() {
         const s = await runtime.media.settings();
         setSettings(s);
         const image = (await runtime.store.get('imageSettings', 'images')) ?? defaultImageSettings;
-        setDraw({ ...image, provider: 'seedream' });
+        setDraw(upgradeImageSettings({ ...image, provider: 'seedream' }));
         setHasDrawKey(Boolean(await imageSecret.get(image.baseUrl)));
         setHasKey(
           s.visionSource === 'custom' &&
@@ -126,7 +131,7 @@ export function MediaSettingsScreen() {
             }
           />
         </View>
-        <Note>填入火山方舟密钥，聊天和角色形象共用。</Note>
+        <Note>{imageRoutingLabel(draw)}；共用一个豆包Key。</Note>
         {toggle('允许聊天中生图', settings.drawingEnabled, (v) =>
           setSettings({ ...settings, drawingEnabled: v }),
         )}
@@ -145,6 +150,22 @@ export function MediaSettingsScreen() {
           />
         ) : null}
         <Details title="自定义生图与后台权限">
+          <TextButton
+            title="省钱组合：Pro生图 + Flash拆层"
+            disabled={busy}
+            onPress={() => {
+              setDraw(defaultImageSettings);
+              setSaved(false);
+            }}
+          />
+          <TextButton
+            title="使用Pro生图 + Pro拆层"
+            disabled={busy}
+            onPress={() => {
+              setDraw(qualityImageSettings);
+              setSaved(false);
+            }}
+          />
           {toggle('允许后台自主生图', settings.autonomousDrawing, (v) =>
             setSettings({ ...settings, autonomousDrawing: v }),
           )}
@@ -166,7 +187,8 @@ export function MediaSettingsScreen() {
             onChangeText={(layerModel) => setDraw({ ...draw, layerModel })}
             autoCapitalize="none"
           />
-          <TextButton title="恢复豆包默认配置" onPress={() => setDraw(defaultImageSettings)} />
+
+          <Note>Flash价格更低，复杂形象拆层效果可能有差异；失败不自动换用更贵模型。</Note>
           <Note>后台自主生图会使用你的额度；每个角色每天最多 5 次尝试。</Note>
         </Details>
         <Note>按服务商规则计费。保存设置不会生成图片。</Note>

@@ -10,6 +10,7 @@ import type { Runtime } from '../src/application/runtime';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { deepSeekPreset } from '../src/providers/provider';
+import { qualityImageSettings } from '../src/appearance/settings';
 import { defaultImageSettings } from '../src/appearance/model';
 import { defaultMediaSettings } from '../src/media/model';
 import { defaultPalette } from '../src/theme/generator';
@@ -325,4 +326,28 @@ it('shows safe provider error details only when requested, including during firs
   await act(async () => button('错误详情').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('safe-request-123');
   expect(JSON.stringify(renderer!.toJSON())).toContain('OutputImageSensitiveContentDetected');
+});
+
+it('image routing presets save without calling models and preserve custom settings until explicitly changed', async () => {
+  const { runtime, store, provider } = await fixture();
+  const custom = {
+    ...qualityImageSettings,
+    baseUrl: 'https://custom.example/v3',
+    imageModel: 'ep-own',
+    layerModel: 'ep-layers',
+  };
+  await store.put('imageSettings', custom);
+  await mount(runtime, createElement(MediaSettingsScreen));
+  await act(async () => button('保存').props.onPress());
+  expect(await store.get('imageSettings', 'images')).toEqual(custom);
+  await act(async () => button('自定义生图与后台权限').props.onPress());
+  await act(async () => button('省钱组合：Pro生图 + Flash拆层').props.onPress());
+  expect(await store.get('imageSettings', 'images')).toEqual(custom);
+  await act(async () => button('保存').props.onPress());
+  expect(await store.get('imageSettings', 'images')).toEqual(defaultImageSettings);
+  await act(async () => button('使用Pro生图 + Pro拆层').props.onPress());
+  await act(async () => button('保存').props.onPress());
+  expect(await store.get('imageSettings', 'images')).toEqual(qualityImageSettings);
+  expect(provider).not.toHaveBeenCalled();
+  expect(runtime.visuals.select).not.toHaveBeenCalled();
 });
