@@ -1,9 +1,21 @@
 import { useTheme } from '../theme/context';
 import { closeKeyboard } from './keyboard';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { useRuntime } from './context';
-import { Avatar, Button, Card, ErrorText, Field, Heading, Note, Page, Busy } from './components';
+import {
+  Avatar,
+  Button,
+  Card,
+  ErrorText,
+  Field,
+  Heading,
+  Note,
+  Page,
+  Busy,
+  Details,
+  TextButton,
+} from './components';
 import { deepSeekPreset } from '../providers/provider';
 import type { ScreenProps } from './navigation';
 import { secretStore } from '../storage/native';
@@ -76,17 +88,19 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
   };
   return (
     <Page>
-      <View style={{ paddingTop: 28, gap: 18 }}>
-        <Avatar name="Nyvemi" size={68} />
-        <Heading>Nyvemi</Heading>
-        <Note>A life that remembers you.</Note>
+      <View style={{ gap: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Avatar name="Nyvemi" size={44} />
+          <View>
+            <Heading>Nyvemi</Heading>
+            <Note>A life that remembers you.</Note>
+          </View>
+        </View>
         <Card>
-          <Text style={{ color: palette.ink, fontSize: 23, lineHeight: 33 }}>
+          <Text style={{ color: palette.ink, fontSize: 22, lineHeight: 30 }}>
             你喜欢什么颜色呀？
           </Text>
-          <Note>
-            一种颜色，或者一种感觉都可以。温柔、清爽、安静、梦幻……我想让这里更像你喜欢的样子。
-          </Note>
+          <Note>先把这里换成你喜欢的样子。现在不需要密钥。</Note>
         </Card>
         <Field
           label="你喜欢的颜色和感觉"
@@ -98,29 +112,27 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
           editable={!busy}
         />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {['淡粉色，柔和、不太艳', '蓝灰色，安静一点', '黑白灰，但是别太冷', '紫色，梦幻一点'].map(
-            (text) => (
-              <Pressable
-                key={text}
-                accessibilityRole="button"
-                disabled={busy}
-                onPress={() => setDescription(text)}
-                style={{
-                  padding: 10,
-                  backgroundColor: palette.tint,
-                  borderRadius: 14,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+          {['淡粉色，柔和', '蓝灰色，安静', '黑白灰，温暖', '淡紫色，梦幻'].map((text) => (
+            <Pressable
+              key={text}
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => setDescription(text)}
+              style={{
+                padding: 10,
+                backgroundColor: palette.tint,
+                borderRadius: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text
+                style={{ color: palette.accent, includeFontPadding: false, textAlign: 'center' }}
               >
-                <Text
-                  style={{ color: palette.accent, includeFontPadding: false, textAlign: 'center' }}
-                >
-                  {text}
-                </Text>
-              </Pressable>
-            ),
-          )}
+                {text}
+              </Text>
+            </Pressable>
+          ))}
         </View>
 
         <ErrorText text={error} />
@@ -140,23 +152,24 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
         {busy && !transitioning ? (
           <Button title="取消" secondary onPress={() => request.current?.abort()} />
         ) : null}
-        <Button
-          title="先用现在的颜色"
-          secondary
-          disabled={busy}
-          onPress={() => void continueOpening(true)}
-        />
-        <Button
-          title="从 Bundle 接她过来"
-          secondary
-          disabled={busy}
-          onPress={() => navigation.navigate('Transfer')}
-        />
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+          <TextButton
+            title="先用现在的颜色"
+            disabled={busy}
+            onPress={() => void continueOpening(true)}
+          />
+          <TextButton
+            title="恢复角色备份"
+            disabled={busy}
+            onPress={() => navigation.navigate('Transfer')}
+          />
+        </View>
       </View>
     </Page>
   );
 }
 export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
+  const { palette } = useTheme();
   const runtime = useRuntime();
   const [config, setConfig] = useState(deepSeekPreset);
   const [key, setKey] = useState('');
@@ -171,7 +184,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         if (saved) setConfig(saved);
         setHasKey(Boolean(secret));
       })
-      .catch(() => setError('无法读取 Provider 设置'));
+      .catch(() => setError('无法读取模型设置'));
   }, [runtime]);
   const save = async (test: boolean) => {
     if (saving.current) return;
@@ -203,34 +216,55 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
   };
   return (
     <Page>
-      <Heading>连接你的模型</Heading>
-      <Note>填写你自己的模型密钥，安全保存在本机。</Note>
-      <Button title="使用 DeepSeek 预设" secondary onPress={() => setConfig(deepSeekPreset)} />
-      <Field
-        label="Base URL"
-        value={config.baseUrl}
-        onChangeText={(baseUrl) => setConfig({ ...config, baseUrl })}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Field
-        label="Model Name"
-        value={config.model}
-        onChangeText={(model) => setConfig({ ...config, model })}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <Field
-        label="API Key"
-        value={key}
-        onChangeText={setKey}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder={hasKey ? '已保存，留空保留现有密钥' : '输入你的 API Key'}
-      />
-      <Note>兼容接口请填写服务商提供的 Base URL。</Note>
-      <Button title="查看用量与费用" secondary onPress={() => navigation.navigate('Usage')} />
+      <Heading>{route.params?.onboarding ? '让她能和你说话' : '聊天模型'}</Heading>
+      <Note>默认使用 DeepSeek，填入密钥就能开始。</Note>
+      <Card>
+        <View
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <Text style={{ fontSize: 17, fontWeight: '600', color: palette.ink }}>
+            {config.baseUrl === deepSeekPreset.baseUrl && config.model === deepSeekPreset.model
+              ? 'DeepSeek'
+              : '自定义聊天模型'}
+          </Text>
+          <TextButton
+            title="获取 Key"
+            onPress={() =>
+              void Linking.openURL('https://platform.deepseek.com/api_keys').catch(() =>
+                setError('无法打开网页，请前往 DeepSeek 开放平台创建密钥'),
+              )
+            }
+          />
+        </View>
+        <Field
+          label="API Key"
+          value={key}
+          onChangeText={setKey}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={hasKey ? '已保存，留空保留' : '粘贴 DeepSeek API Key'}
+        />
+        <Details title="自定义模型">
+          <Field
+            label="Base URL"
+            value={config.baseUrl}
+            onChangeText={(baseUrl) => setConfig({ ...config, baseUrl })}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <Field
+            label="Model Name"
+            value={config.model}
+            onChangeText={(model) => setConfig({ ...config, model })}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TextButton title="恢复 DeepSeek 默认配置" onPress={() => setConfig(deepSeekPreset)} />
+          <Note>更换服务地址后，请重新填写对应的密钥。</Note>
+        </Details>
+      </Card>
+      <Note>密钥仅存本机。豆包画图可以稍后单独设置。</Note>
       <ErrorText text={error} />
       {notice ? <Note>{notice}</Note> : null}
       <Button
@@ -238,12 +272,10 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         disabled={busy}
         onPress={() => void save(false)}
       />
-      <Button
-        title="测试连接（会发起一次模型请求）"
-        disabled={busy}
-        secondary
-        onPress={() => void save(true)}
-      />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <TextButton title="测试连接（一次请求）" disabled={busy} onPress={() => void save(true)} />
+        <TextButton title="用量与费用" onPress={() => navigation.navigate('Usage')} />
+      </View>
     </Page>
   );
 }

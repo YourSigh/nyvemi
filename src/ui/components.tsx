@@ -21,6 +21,17 @@ export function Page({ children }: PropsWithChildren) {
   const navigation = useContext(NavigationContext);
   const headerShown = useContext(HeaderShownContext);
   const insets = useSafeAreaInsets();
+  const [viewport, setViewport] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
   const [focused, setFocused] = useState(() => navigation?.isFocused() ?? true);
   useEffect(() => {
     if (!navigation) return;
@@ -48,15 +59,23 @@ export function Page({ children }: PropsWithChildren) {
         style={{ flex: 1 }}
         enabled={focused && !transitioning}
         bottomOffset={64}
+        onLayout={(event) => setViewport(event.nativeEvent.layout.height)}
+        onContentSizeChange={(_width, height) => setContentHeight(height)}
+        scrollEnabled={
+          focused &&
+          !transitioning &&
+          (keyboardVisible || !viewport || !contentHeight || contentHeight > viewport + 2)
+        }
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={[
           styles.page,
           {
-            paddingTop: 22 + (headerShown ? 0 : insets.top),
-            paddingBottom: 48 + insets.bottom,
-            paddingLeft: 22 + insets.left,
-            paddingRight: 22 + insets.right,
+            paddingTop: 16 + (headerShown ? 0 : insets.top),
+            paddingBottom: 16 + insets.bottom,
+            paddingLeft: 16 + insets.left,
+            paddingRight: 16 + insets.right,
           },
         ]}
       >
@@ -113,6 +132,73 @@ export function Button({
     </Pressable>
   );
 }
+/** Secondary actions keep a full touch target without looking like another primary step. */
+export function TextButton({
+  title,
+  onPress,
+  disabled = false,
+}: {
+  title: string;
+  onPress(): void;
+  disabled?: boolean;
+}) {
+  const { palette, transitioning } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      disabled={disabled || transitioning}
+      accessibilityState={{ disabled: disabled || transitioning }}
+      onPress={onPress}
+      style={{
+        minHeight: 44,
+        paddingHorizontal: 8,
+        paddingVertical: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        opacity: disabled ? 0.45 : 1,
+      }}
+    >
+      <Text
+        style={{
+          color: palette.accent,
+          fontSize: 14,
+          textAlign: 'center',
+          includeFontPadding: false,
+        }}
+      >
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+/** Advanced forms are absent until requested, including their keyboard focus targets. */
+export function Details({ title, children }: PropsWithChildren<{ title: string }>) {
+  const [open, setOpen] = useState(false);
+  const { palette, transitioning } = useTheme();
+  return (
+    <View style={{ gap: open ? 8 : 0 }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ expanded: open, disabled: transitioning }}
+        disabled={transitioning}
+        onPress={() => setOpen((v) => !v)}
+        style={{
+          minHeight: 44,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <Text style={{ color: palette.accent, fontSize: 14, flex: 1 }}>{title}</Text>
+        <Text style={{ color: palette.muted }}>{open ? '收起 −' : '展开 ＋'}</Text>
+      </Pressable>
+      {open ? children : null}
+    </View>
+  );
+}
 export function Field({
   label,
   style,
@@ -137,7 +223,7 @@ export function Field({
         autoCorrect={
           props.autoCorrect ?? (!props.secureTextEntry && props.autoCapitalize !== 'none')
         }
-        style={[styles.input, multiline && { minHeight: 96, textAlignVertical: 'top' }, style]}
+        style={[styles.input, multiline && { minHeight: 80, textAlignVertical: 'top' }, style]}
       />
     </View>
   );
@@ -192,17 +278,17 @@ export function Avatar({ name, uri, size = 42 }: { name: string; uri?: string; s
 const createStyles = (palette: Palette) =>
   StyleSheet.create({
     page: {
-      padding: 22,
-      gap: 16,
-      paddingBottom: 48,
+      padding: 16,
+      gap: 12,
+      paddingBottom: 16,
       backgroundColor: palette.background,
       flexGrow: 1,
     },
-    heading: { fontSize: 27, fontWeight: '700', color: palette.ink, marginTop: 12 },
-    note: { fontSize: 14, lineHeight: 23, color: palette.muted },
+    heading: { fontSize: 24, fontWeight: '700', color: palette.ink },
+    note: { fontSize: 14, lineHeight: 21, color: palette.muted },
     card: {
-      padding: 18,
-      gap: 12,
+      padding: 14,
+      gap: 8,
       backgroundColor: palette.paper,
       borderRadius: 18,
       borderWidth: 1,

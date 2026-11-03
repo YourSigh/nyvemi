@@ -5,7 +5,7 @@ import { useState, useCallback, useLayoutEffect } from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 import type { PropsWithChildren } from 'react';
 import type { Character, Settings } from '../domain/models';
-import { Avatar, Button, Card, ErrorText, Field, Note, Page } from './components';
+import { Avatar, Button, Card, ErrorText, Field, Note, Page, Details } from './components';
 import { useFocusEffect } from '@react-navigation/native';
 import { startCompanionPresence } from '../native/presence';
 import type { PresenceState } from '../presence/loop';
@@ -21,7 +21,7 @@ function Row({ title, value, onPress }: { title: string; value?: string; onPress
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={{ minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+      style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12 }}
     >
       <Text style={{ color: palette.ink, fontSize: 16, flex: 1, includeFontPadding: false }}>
         {title}
@@ -179,9 +179,9 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                 if (uri && character) setCharacter({ ...character, avatar: uri });
               })
             }
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 12 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 }}
           >
-            <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={64} />
+            <Avatar name={character?.persona.name ?? 'N'} uri={character?.avatar} size={48} />
             <View style={{ flex: 1, gap: 6 }}>
               <Text style={{ color: palette.ink, fontSize: 22, fontWeight: '600' }}>
                 {character?.persona.name}
@@ -192,61 +192,62 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
             </View>
           </Pressable>
           <Card>
+            <Row title="聊天模型" onPress={() => navigation.navigate('Provider')} />
             <Row
-              title="换颜色"
-              onPress={() => navigation.navigate('Theme', { mode: 'settings' })}
-            />
-            <Row
-              title="图片与识图"
+              title="豆包画图与识图"
               onPress={() => navigation.navigate('MediaSettings', { characterId: cid })}
-            />
-            <Row
-              title="技能与插件"
-              onPress={() => navigation.navigate('Plugins', { characterId: cid })}
             />
             <Row
               title="角色形象"
               onPress={() => navigation.navigate('Appearance', { characterId: cid })}
             />
             <Row
-              title="她记住的事"
-              onPress={() => navigation.navigate('Memory', { characterId: cid })}
+              title="换颜色"
+              onPress={() => navigation.navigate('Theme', { mode: 'settings' })}
             />
-            <Row
-              title="她遇到的事"
-              onPress={() => navigation.navigate('Experiences', { characterId: cid })}
-            />
-            <Row
-              title="添加她到桌面"
-              onPress={() =>
-                void act(async () => {
-                  if (character)
-                    setNotice(
-                      (await pinCharacter(character))
-                        ? '请在系统提示中确认'
-                        : '当前桌面不支持快捷方式',
-                    );
-                })
-              }
-            />
-          </Card>
-          <Card>
             <Row
               title="来信与通知"
               value={settings?.proactiveEnabled ? '已开启' : '已关闭'}
               onPress={() => open('notifications')}
             />
-            <Row title="来信偏好" onPress={() => open('preferences')} />
-            <Row title="用量与费用" onPress={() => navigation.navigate('Usage')} />
-            <Row title="模型连接" onPress={() => navigation.navigate('Provider')} />
           </Card>
-          <Card>
-            <Row
-              title="导出 / 导入"
-              onPress={() => navigation.navigate('Transfer', { characterId: cid })}
-            />
-            <Row title="高级设置" onPress={() => open('advanced')} />
-          </Card>
+          <Details title="更多设置">
+            <Card>
+              <Row title="来信偏好" onPress={() => open('preferences')} />
+              <Row
+                title="她记住的事"
+                onPress={() => navigation.navigate('Memory', { characterId: cid })}
+              />
+              <Row
+                title="她遇到的事"
+                onPress={() => navigation.navigate('Experiences', { characterId: cid })}
+              />
+              <Row
+                title="技能与插件"
+                onPress={() => navigation.navigate('Plugins', { characterId: cid })}
+              />
+              <Row
+                title="添加她到桌面"
+                onPress={() =>
+                  void act(async () => {
+                    if (character)
+                      setNotice(
+                        (await pinCharacter(character))
+                          ? '请在系统提示中确认'
+                          : '当前桌面不支持快捷方式',
+                      );
+                  })
+                }
+              />
+
+              <Row title="用量与费用" onPress={() => navigation.navigate('Usage')} />
+              <Row
+                title="角色备份与恢复"
+                onPress={() => navigation.navigate('Transfer', { characterId: cid })}
+              />
+              <Row title="高级设置" onPress={() => open('advanced')} />
+            </Card>
+          </Details>
         </>
       ) : section === 'notifications' ? (
         <>

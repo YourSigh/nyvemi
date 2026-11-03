@@ -21,7 +21,11 @@ vi.mock('react-native', () => ({
   TextInput: 'TextInput',
   View: 'View',
   StyleSheet: { create: (styles: unknown) => styles },
-  Keyboard: { dismiss: vi.fn(), isVisible: () => false },
+  Keyboard: {
+    dismiss: vi.fn(),
+    isVisible: () => false,
+    addListener: vi.fn(() => ({ remove: vi.fn() })),
+  },
 }));
 vi.mock('@react-navigation/native', async () => {
   const { createContext } = await import('react');
@@ -167,4 +171,28 @@ it('removes a background form keyboard toolbar and dismisses the keyboard on nav
   expect(renderer!.root.findByType('AwareScrollView' as never).props.enabled).toBe(false);
   await act(async () => listeners.focus());
   expect(renderer!.root.findAllByType('Toolbar' as never)).toHaveLength(1);
+});
+it('only scrolls overflowing pages and still scrolls when the keyboard opens', async () => {
+  await act(async () => {
+    renderer = create(createElement(Page, null, createElement(Field, { label: '密钥' })));
+  });
+  const scroll = () => renderer!.root.findByType('AwareScrollView' as never);
+  await act(async () => {
+    scroll().props.onLayout({ nativeEvent: { layout: { height: 640 } } });
+    scroll().props.onContentSizeChange(360, 640);
+  });
+  expect(scroll().props.scrollEnabled).toBe(false);
+  await act(async () => scroll().props.onContentSizeChange(360, 690));
+  expect(scroll().props.scrollEnabled).toBe(true);
+  await act(async () => scroll().props.onContentSizeChange(360, 640));
+  const show = vi
+    .mocked(Keyboard.addListener)
+    .mock.calls.find(([event]) => event === 'keyboardDidShow')![1];
+  const hide = vi
+    .mocked(Keyboard.addListener)
+    .mock.calls.find(([event]) => event === 'keyboardDidHide')![1];
+  await act(async () => show({} as never));
+  expect(scroll().props.scrollEnabled).toBe(true);
+  await act(async () => hide({} as never));
+  expect(scroll().props.scrollEnabled).toBe(false);
 });

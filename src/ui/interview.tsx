@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { interviewQuestions, type InterviewDraft } from '../characters/interview';
 import { type CharacterAnswers } from '../characters/service';
 import { useRuntime } from './context';
-import { Avatar, Button, Card, ErrorText, Field, Note, Busy } from './components';
+import { Avatar, Button, Card, Details, ErrorText, Field, Note, Busy } from './components';
 import type { ScreenProps } from './navigation';
 export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
   const palette = usePalette();
@@ -95,62 +95,73 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
               ) : null}
             </>
           ) : null}
-          {draft?.turns.map((turn, i) => (
-            <View key={i} style={[s.row, turn.role === 'user' && s.mine]}>
-              {turn.role === 'assistant' ? <Avatar name="Nyvemi" size={32} /> : null}
-              <View style={[s.bubble, turn.role === 'user' && { backgroundColor: palette.tint }]}>
-                <Text style={s.message}>{turn.content}</Text>
-                {turn.localFallback ? (
-                  <Text style={s.fallback}>网络回应暂不可用，已用本地引导继续</Text>
-                ) : null}
+          {!finished &&
+            draft?.turns.map((turn, i) => (
+              <View key={i} style={[s.row, turn.role === 'user' && s.mine]}>
+                {turn.role === 'assistant' ? <Avatar name="Nyvemi" size={32} /> : null}
+                <View style={[s.bubble, turn.role === 'user' && { backgroundColor: palette.tint }]}>
+                  <Text style={s.message}>{turn.content}</Text>
+                  {turn.localFallback ? (
+                    <Text style={s.fallback}>网络回应暂不可用，已用本地引导继续</Text>
+                  ) : null}
+                </View>
               </View>
-            </View>
-          ))}
+            ))}
           {finished && draft ? (
             <View style={{ gap: 12 }}>
               <Note>这是共同写下的设定。正式创建后，对话中的反馈仍会慢慢塑造她。</Note>
-              {interviewQuestions.map((q) => (
-                <Card key={q.key}>
-                  <Text style={{ color: palette.ink, fontWeight: '600' }}>{q.question}</Text>
-                  {editing === q.key ? (
-                    <>
-                      <Field
-                        label="修改答案"
-                        value={editText}
-                        onChangeText={setEditText}
-                        multiline
-                        maxLength={q.key === 'name' ? 80 : 1000}
-                      />
-                      <Button
-                        title="保存修改"
-                        onPress={() => {
-                          void runtime.interview
-                            .revise(q.key, editText)
-                            .then((d) => {
-                              setDraft(d);
-                              setEditing(undefined);
-                              setError('');
-                            })
-                            .catch(() => setError('修改失败，请检查名字和答案长度'));
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Text style={s.message}>{draft.answers[q.key] || '留白'}</Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setEditing(q.key);
-                          setEditText(draft.answers[q.key]);
-                        }}
-                      >
-                        <Text style={{ color: palette.accent }}>修改这一项</Text>
-                      </Pressable>
-                    </>
-                  )}
-                </Card>
-              ))}
+              <Card>
+                <Text style={{ color: palette.ink, fontSize: 22, fontWeight: '600' }}>
+                  {draft.answers.name}
+                </Text>
+                <Note>
+                  {[draft.answers.relationship, draft.answers.tone].filter(Boolean).join(' · ')}
+                </Note>
+              </Card>
+              <Details title="查看或修改全部回答">
+                {interviewQuestions.map((q) => (
+                  <Card key={q.key}>
+                    <Text style={{ color: palette.ink, fontWeight: '600' }}>{q.question}</Text>
+                    {editing === q.key ? (
+                      <>
+                        <Field
+                          label="修改答案"
+                          value={editText}
+                          onChangeText={setEditText}
+                          multiline
+                          maxLength={q.key === 'name' ? 80 : 1000}
+                        />
+                        <Button
+                          title="保存修改"
+                          onPress={() => {
+                            void runtime.interview
+                              .revise(q.key, editText)
+                              .then((d) => {
+                                setDraft(d);
+                                setEditing(undefined);
+                                setError('');
+                              })
+                              .catch(() => setError('修改失败，请检查名字和答案长度'));
+                          }}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Text style={s.message}>{draft.answers[q.key] || '留白'}</Text>
+                        <Pressable
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setEditing(q.key);
+                            setEditText(draft.answers[q.key]);
+                          }}
+                        >
+                          <Text style={{ color: palette.accent }}>修改这一项</Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </Card>
+                ))}
+              </Details>
             </View>
           ) : null}
         </ScrollView>
@@ -239,11 +250,11 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
 const createStyles = (palette: Palette) =>
   StyleSheet.create({
     root: { flex: 1, backgroundColor: palette.background },
-    header: { padding: 18, gap: 8, borderBottomWidth: 1, borderColor: palette.line },
+    header: { padding: 14, gap: 6, borderBottomWidth: 1, borderColor: palette.line },
     title: { fontSize: 22, fontWeight: '600', color: palette.ink },
     track: { height: 5, borderRadius: 3, backgroundColor: palette.line, overflow: 'hidden' },
     fill: { height: 5, backgroundColor: palette.accent },
-    thread: { padding: 18, gap: 18, paddingBottom: 28 },
+    thread: { padding: 14, gap: 12, paddingBottom: 16 },
     row: { flexDirection: 'row', gap: 8 },
     mine: { justifyContent: 'flex-end' },
     bubble: {

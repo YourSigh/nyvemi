@@ -6,7 +6,7 @@ import { getDocumentAsync } from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Field, Note, Page } from './components';
+import { Button, Card, ErrorText, Field, Note, Page, Details } from './components';
 import { usePalette } from '../theme/context';
 import type { InstalledPlugin, PluginPermission } from '../extensions/model';
 import type { ScreenProps } from './navigation';
@@ -79,33 +79,35 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
         </View>
         <Note>可保存技能、组合现有工具。新增权限需你同意。</Note>
       </Card>
-      <Card>
-        <Field
-          label="插件地址 / SKILL.md"
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-        />
-        <Button
-          title="从地址安装"
-          disabled={busy || !url.trim()}
-          onPress={() => void act(() => runtime.plugins.installUrl(cid, url.trim()))}
-        />
-        <Button
-          title="导入插件文件"
-          disabled={busy}
-          secondary
-          onPress={() =>
-            void act(async () => {
-              const picked = await getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
-              if (picked.canceled) return;
-              const file = new File(picked.assets[0].uri);
-              if (file.size > 64000) throw Error('插件文件不能超过64 KB');
-              await runtime.plugins.installText(cid, await file.text(), picked.assets[0].name);
-            })
-          }
-        />
-      </Card>
+      <Details title="添加插件">
+        <Card>
+          <Field
+            label="插件地址 / SKILL.md"
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+          />
+          <Button
+            title="从地址安装"
+            disabled={busy || !url.trim()}
+            onPress={() => void act(() => runtime.plugins.installUrl(cid, url.trim()))}
+          />
+          <Button
+            title="导入插件文件"
+            disabled={busy}
+            secondary
+            onPress={() =>
+              void act(async () => {
+                const picked = await getDocumentAsync({ type: '*/*', copyToCacheDirectory: true });
+                if (picked.canceled) return;
+                const file = new File(picked.assets[0].uri);
+                if (file.size > 64000) throw Error('插件文件不能超过64 KB');
+                await runtime.plugins.installText(cid, await file.text(), picked.assets[0].name);
+              })
+            }
+          />
+        </Card>
+      </Details>
       <ErrorText text={error} />
       {!rows.length ? (
         <Note>还没有技能。你可以让她记住一种做事方法，或把现有工具组合成新工具。</Note>

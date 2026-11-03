@@ -8,7 +8,7 @@ import { bundleService, saveBundleToCache } from '../transfer/native';
 import { readBundle, type BundleManifest } from '../transfer/bundle';
 import { secretStore } from '../storage/native';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Heading, Note, Page } from './components';
+import { Button, Card, ErrorText, Heading, Note, Page, Details } from './components';
 import type { ScreenProps } from './navigation';
 export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
   const { palette, hydrate } = useTheme();
@@ -35,7 +35,7 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
       setBytes(content);
       setPreview(parsed.manifest);
     } catch {
-      setError('无法读取这个 Bundle。请确认是兼容的 .nyvemi 文件且不超过 100 MB。');
+      setError('无法读取这个备份。请确认是兼容的 .nyvemi 文件且不超过 100 MB。');
     }
   };
   const importPerson = async () => {
@@ -72,9 +72,9 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
       if (await Sharing.isAvailableAsync())
         await Sharing.shareAsync(uri, {
           mimeType: 'application/zip',
-          dialogTitle: '保存 Nyvemi 角色 Bundle',
+          dialogTitle: '保存 Nyvemi 角色备份',
         });
-      else setNotice(`Bundle 已保存到本地缓存：${uri}`);
+      else setNotice(`备份已保存到本地缓存：${uri}`);
     } catch {
       setError('导出失败，请检查设备剩余空间、头像文件与本地数据后重试。');
     } finally {
@@ -83,14 +83,14 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
   };
   return (
     <Page>
-      <Heading>迁移的是这个人</Heading>
-      <Note>人格、记忆、关系状态、兴趣、经历、对话、未完成事件和头像，放进一个 .nyvemi 文件。</Note>
-      <Card>
+      <Heading>角色备份与恢复</Heading>
+      <Note>保存角色、记忆、聊天和形象。备份包含私人对话，请妥善保管。</Note>
+      <Details title="备份包含什么？">
         <Note>
-          不包含 API Key 和 Provider 配置。Bundle
-          未加密，包含私人对话，请妥善保存。导入后主动来信暂时关闭；配置新设备模型与通知权限后可重新开启。
+          包含人格、记忆、关系、兴趣、经历、对话、未完成事件和头像。不含密钥和模型连接配置，文件未加密。
         </Note>
-      </Card>
+        <Note>恢复后主动来信暂时关闭。重新连接模型并开启通知即可继续。</Note>
+      </Details>
       {cid ? (
         <Button
           title={busy ? '处理中…' : '导出当前角色'}

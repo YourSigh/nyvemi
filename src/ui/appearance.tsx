@@ -1,10 +1,20 @@
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Pressable, Text, View } from 'react-native';
+import { Alert, AppState, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRuntime } from './context';
-import { Button, Busy, Card, ErrorText, Field, Heading, Note, Page } from './components';
+import {
+  Button,
+  Busy,
+  ErrorText,
+  Field,
+  Heading,
+  Note,
+  Page,
+  Details,
+  TextButton,
+} from './components';
 import type { ScreenProps } from './navigation';
 import { usePalette } from '../theme/context';
 import {
@@ -24,12 +34,14 @@ import { startCompanionPresence } from '../native/presence';
 import type { CharacterInteractionState } from '../character/interaction';
 const modes: [CreationMode, string][] = [
   ['text', '文字生成'],
-  ['reference', '文字 + 参考图'],
-  ['animate', '让参考图动起来'],
+  ['reference', '加参考图'],
+  ['animate', '使用原图'],
 ];
 export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'>) {
   const runtime = useRuntime();
   const palette = usePalette();
+  const { width, height } = useWindowDimensions();
+  const candidateWidth = Math.max(56, Math.min(180, (width - 64) / 3));
   const cid = route.params.characterId;
   const [name, setName] = useState('她');
   const [description, setDescription] = useState('');
@@ -38,7 +50,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [config, setConfig] = useState<ImageSettings>(defaultImageSettings);
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
-  const [configure, setConfigure] = useState(false);
+  const [selectedIndex, setSelectedIndex] = useState<number>();
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<VisualDraft>();
   const [rig, setRig] = useState<CharacterRig>();
@@ -63,14 +75,14 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         if (!c) throw new Error('角色不存在');
         setName(c.persona.name);
         setDescription(c.persona.appearance || '正面全身，可爱的二次元角色，简单背景');
-        if (settings) setConfig(settings);
+        if (settings) setConfig({ ...settings, provider: 'seedream' });
         setHasKey(Boolean(secret));
         if (d) {
           setDraft(d);
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
-          if (!d.saved) {
+          if (!d.saved && d.providerId !== 'mock-v1') {
             setEditing(
               d.rig || d.meshAvatar
                 ? false
@@ -155,6 +167,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           },
         );
         setDraft(next);
+        setSelectedIndex(undefined);
         setRig(undefined);
         setEditing(false);
       } catch (error) {
@@ -177,13 +190,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
       <Note>
-        {meshAvatar
-          ? '参数网格角色 · 离线播放'
-          : rig?.source === 'seedream'
-            ? '分层素材 · 尚未绑定网格'
-            : config.provider === 'mock'
-              ? '演示模式 · 不联网、不扣费，参考图也会用示例分层角色演示动作'
-              : '豆包 / Seedream'}
+        {meshAvatar || rig ? '看看她现在的样子。' : '描述你想见到的人，也可以上传一张参考图。'}
       </Note>
       <ErrorText text={error} />
       {!loaded ? <Busy label="读取形象…" /> : null}
@@ -198,7 +205,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 accessibilityRole="button"
                 accessibilityState={{ selected: mode === id }}
                 style={{
-                  padding: 12,
+                  padding: 10,
+                  flex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: 16,
@@ -226,7 +234,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           />
           {mode !== 'text' ? (
             <>
-              {reference ? <CharacterImage asset={reference} width={180} height={200} /> : null}
+              {reference ? <CharacterImage asset={reference} width={90} height={110} /> : null}
               <Button
                 secondary
                 title={reference ? '更换参考图' : '上传参考图'}
@@ -240,112 +248,93 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             </>
           ) : null}
-          <Button
-            title="导入网格角色 (.p2lrt)"
-            disabled={Boolean(busy)}
-            onPress={() =>
-              void run('读取网格角色', async () => {
-                const model = await pickMeshAvatar(runtime.store, cid);
-                if (model) {
-                  setMeshAvatar(model);
-                  setElapsed(0);
-                  setRig(undefined);
-                  setEditing(false);
-                  setPreviewState('idle');
-                }
-              })
-            }
-          />
-          <Button
-            secondary
-            title="导入分层形象文件"
-            disabled={Boolean(busy)}
-            onPress={() =>
-              void run('读取分层形象', async () => {
-                const next = await pickLayeredLook(runtime.store, cid);
-                if (next) {
-                  setRig(next);
-                  setEditing(false);
-                  setPreviewState('idle');
-                }
-              })
-            }
-          />
-          <Button
-            secondary
-            title={configure ? '收起生图设置' : '生图设置'}
-            disabled={Boolean(busy)}
-            onPress={() => setConfigure((v) => !v)}
-          />
-          {configure ? (
-            <Card>
-              <Button
-                title={config.provider === 'mock' ? '当前：免费演示' : '切回免费演示'}
-                secondary
-                disabled={Boolean(busy)}
-                onPress={() => setConfig({ ...config, provider: 'mock' })}
+          {hasKey ? (
+            <Details title="更换豆包密钥">
+              <Field
+                label="豆包 API Key"
+                value={key}
+                onChangeText={setKey}
+                secureTextEntry
+                autoCapitalize="none"
+                placeholder="已保存，留空保留"
               />
-              <Button
-                title={config.provider === 'seedream' ? '当前：豆包付费接口' : '使用豆包付费接口'}
-                disabled={Boolean(busy)}
-                onPress={() =>
-                  Alert.alert(
-                    '启用豆包',
-                    '生成候选图需要 3 次请求；拆层最多可能按 17 张输出图计费。相同输入会复用本机缓存。',
-                    [
-                      { text: '取消', style: 'cancel' },
-                      {
-                        text: '启用',
-                        onPress: () => setConfig({ ...config, provider: 'seedream' }),
-                      },
-                    ],
-                  )
-                }
-              />
-              {config.provider === 'seedream' ? (
-                <>
-                  <Field
-                    label="API Key"
-                    value={key}
-                    onChangeText={setKey}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    placeholder={hasKey ? '已保存，留空保留' : '火山方舟 API Key'}
-                  />
-                  <Field
-                    label="Base URL"
-                    value={config.baseUrl}
-                    onChangeText={(baseUrl) => setConfig({ ...config, baseUrl })}
-                    autoCapitalize="none"
-                  />
-                  <Field
-                    label="生图模型"
-                    value={config.imageModel}
-                    onChangeText={(imageModel) => setConfig({ ...config, imageModel })}
-                    autoCapitalize="none"
-                  />
-                  <Field
-                    label="拆层模型"
-                    value={config.layerModel}
-                    onChangeText={(layerModel) => setConfig({ ...config, layerModel })}
-                    autoCapitalize="none"
-                  />
-                </>
-              ) : null}
-            </Card>
-          ) : null}
-          <Note>立绘素材需要在电脑端绑定网格；可直接试用内置皮套或导入 .p2lrt 模型。</Note>
+            </Details>
+          ) : (
+            <Field
+              label="豆包 API Key"
+              value={key}
+              onChangeText={setKey}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholder="粘贴火山方舟 API Key"
+            />
+          )}
+          <Details title="自定义生图模型">
+            <Field
+              label="Base URL"
+              value={config.baseUrl}
+              onChangeText={(baseUrl) => setConfig({ ...config, baseUrl })}
+              autoCapitalize="none"
+            />
+            <Field
+              label="生图模型"
+              value={config.imageModel}
+              onChangeText={(imageModel) => setConfig({ ...config, imageModel })}
+              autoCapitalize="none"
+            />
+            <Field
+              label="拆层模型"
+              value={config.layerModel}
+              onChangeText={(layerModel) => setConfig({ ...config, layerModel })}
+              autoCapitalize="none"
+            />
+            <TextButton title="恢复豆包默认配置" onPress={() => setConfig(defaultImageSettings)} />
+          </Details>
+          <Note>生成与拆层会使用你的豆包额度，相同内容优先复用本机缓存。</Note>
           <Button
             title={mode === 'animate' ? '使用这张参考图' : '生成 3 张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
             onPress={() => generate()}
           />
+          <Details title="导入已有形象">
+            <TextButton
+              title="导入网格角色 (.p2lrt)"
+              disabled={Boolean(busy)}
+              onPress={() =>
+                void run('读取网格角色', async () => {
+                  const model = await pickMeshAvatar(runtime.store, cid);
+                  if (model) {
+                    setMeshAvatar(model);
+                    setElapsed(0);
+                    setRig(undefined);
+                    setEditing(false);
+                    setPreviewState('idle');
+                  }
+                })
+              }
+            />
+            <TextButton
+              title="导入分层形象文件"
+              disabled={Boolean(busy)}
+              onPress={() =>
+                void run('读取分层形象', async () => {
+                  const next = await pickLayeredLook(runtime.store, cid);
+                  if (next) {
+                    setRig(next);
+                    setEditing(false);
+                    setPreviewState('idle');
+                  }
+                })
+              }
+            />
+            <Note>网格模型可直接播放；分层图片仍需在电脑端绑定网格。</Note>
+          </Details>
         </>
       ) : null}
-      {!editing && !rig && draft ? (
+      {!editing && !rig && !meshAvatar && draft ? (
         <>
           <Note>{mode === 'animate' ? '参考图已就绪' : '选一张你喜欢的，再让她动起来。'}</Note>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
             {(mode === 'animate' && draft.selected ? [draft.selected] : draft.candidates).map(
               (asset, i) => (
                 <Pressable
@@ -353,24 +342,37 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                   accessibilityRole="button"
                   accessibilityLabel={`选择形象 ${i + 1}`}
                   disabled={Boolean(busy)}
-                  onPress={() => select(mode === 'animate' ? undefined : i)}
+                  onPress={() => setSelectedIndex(i)}
+                  accessibilityState={{ selected: selectedIndex === i }}
                   style={{
                     borderRadius: 16,
-                    borderColor: palette.line,
-                    borderWidth: 1,
-                    padding: 8,
+                    borderColor: selectedIndex === i ? palette.accent : palette.line,
+                    backgroundColor: selectedIndex === i ? palette.tint : palette.paper,
+                    borderWidth: 2,
+                    padding: 2,
+                    alignItems: 'center',
+                    flexShrink: 1,
                   }}
                 >
-                  <CharacterImage asset={asset} width={140} height={190} />
+                  <CharacterImage
+                    asset={asset}
+                    width={candidateWidth}
+                    height={Math.min(220, candidateWidth * 1.6)}
+                  />
                   <Text style={{ color: palette.accent, textAlign: 'center' }}>选择 {i + 1}</Text>
                 </Pressable>
               ),
             )}
           </View>
+          <Button
+            title="就选这张，整理图层"
+            disabled={Boolean(busy) || (mode !== 'animate' && selectedIndex === undefined)}
+            onPress={() => select(mode === 'animate' ? undefined : selectedIndex)}
+          />
+          <Note>这一步会请求付费拆层，最多可能按 17 张输出图计费。</Note>
           {mode !== 'animate' ? (
-            <Button
+            <TextButton
               title={config.provider === 'seedream' ? '换一批候选图（重新付费）' : '换一批候选图'}
-              secondary
               disabled={Boolean(busy)}
               onPress={() => {
                 if (config.provider === 'seedream')
@@ -386,16 +388,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               }}
             />
           ) : null}
-          {mode === 'animate' ? (
-            <Button title="整理图层并生成动作" disabled={Boolean(busy)} onPress={() => select()} />
-          ) : null}
         </>
       ) : null}
       {(rig || meshAvatar) && !editing ? (
         <>
           <CharacterStage
             name={name}
-            height={340}
+            height={Math.min(280, height * 0.35)}
             rig={rig}
             meshAvatar={meshAvatar}
             onMeshReady={setMeshReady}
@@ -423,9 +422,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 ['sleepy', '困了'],
               ] as [CharacterInteractionState, string][]
             ).map(([state, label]) => (
-              <Button
+              <TextButton
                 key={state}
-                secondary
                 title={label}
                 disabled={!awake.complete || Boolean(busy)}
                 onPress={() => setPreviewState(state)}
@@ -454,15 +452,33 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         </>
       ) : null}
       {!editing ? (
-        <Button
-          secondary
-          title="重新选择 / 调整描述"
+        <TextButton
+          title="调整描述 / 重新选择"
           disabled={Boolean(busy)}
           onPress={() => {
             setEditing(true);
             setRig(undefined);
             setMeshAvatar(undefined);
           }}
+        />
+      ) : null}
+      {route.params.onboarding ? (
+        <TextButton
+          title="先聊天，稍后设置形象"
+          disabled={Boolean(busy)}
+          onPress={() =>
+            void run('正在进入聊天', async () => {
+              const character = await runtime.store.get('characters', cid);
+              if (!character) throw Error('角色不存在');
+              await runtime.store.put('characters', { ...character, appearancePending: false });
+              if ((await runtime.store.get('settings', cid))?.proactiveEnabled)
+                await startCompanionPresence(character).catch(() => undefined);
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Chat', params: { characterId: cid } }],
+              });
+            })
+          }
         />
       ) : null}
       {busy ? <Busy label={`${busy}…`} /> : null}

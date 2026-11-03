@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Field, Heading, Note, Page } from './components';
+import { Button, Card, ErrorText, Field, Heading, Note, Page, Details } from './components';
 import {
   deepSeekPrices,
   type TokenPrice,
@@ -136,87 +136,89 @@ export function UsageScreen() {
           ) : null}
         </Card>
       ))}
-      <Card>
-        <Heading>当前模型单价</Heading>
-        <Note>
-          {model || '先配置 Provider'} · {endpoint}
-        </Note>
-        <Note>
-          单位：每百万
-          token。固定单价不会自动跟随高峰/空闲或节假日变化；按你的实际计费档位选择，也可以手动填写。不同币种分开统计。
-        </Note>
-        {new URL(endpoint || 'https://example.org').hostname === 'api.deepseek.com'
-          ? deepSeekPrices
-              .filter(
-                (p) =>
-                  p.model === model ||
-                  (model === 'deepseek-v4-flash' && p.model === 'deepseek-flash'),
-              )
-              .map((p) => (
-                <Button
-                  key={p.label}
-                  title={`填入 ${p.label}`}
-                  secondary
-                  onPress={() => {
-                    setCurrency(p.price.currency);
-                    setInput(String(p.price.inputPerMillion));
-                    setCached(String(p.price.cachedInputPerMillion));
-                    setOutput(String(p.price.outputPerMillion));
-                    setNotice('已填入 2026-10-22 官方人民币价格，确认后请保存。');
-                  }}
-                />
-              ))
-          : null}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(['CNY', 'USD'] as const).map((c) => (
-            <Button key={c} title={c} secondary={currency !== c} onPress={() => setCurrency(c)} />
-          ))}
-        </View>
-        <Field
-          label="输入（未命中缓存）"
-          value={input}
-          onChangeText={setInput}
-          keyboardType="decimal-pad"
-        />
-        <Field
-          label="输入（命中缓存）"
-          value={cached}
-          onChangeText={setCached}
-          keyboardType="decimal-pad"
-        />
-        <Field label="输出" value={output} onChangeText={setOutput} keyboardType="decimal-pad" />
-        <Button
-          title={busy ? '保存中…' : '保存单价'}
-          disabled={busy || !model}
-          onPress={() => void save()}
-        />
-        {notice ? <Note>{notice}</Note> : null}
-      </Card>
-      <Heading>最近请求</Heading>
-      <Button
-        title="刷新用量"
-        secondary
-        onPress={() => void refresh().catch(() => setError('刷新失败'))}
-      />
-      {recent.map((r) => (
-        <Card key={r.requestId}>
-          <Text style={{ color: palette.ink }}>
-            {purposeLabel(r.purpose)} · {r.model}
-          </Text>
+      <Details title="调整计费单价">
+        <Card>
           <Note>
-            {new Date(r.startedAt).toLocaleString()} · {(r.duration / 1000).toFixed(1)}s ·{' '}
-            {r.success ? '完成' : '失败 / 中断'}
+            {model || '先连接聊天模型'} · {endpoint}
           </Note>
-          <Text style={{ color: palette.ink }}>
-            输入 {r.inputTokens ?? '未知'} / 输出 {r.outputTokens ?? '未知'} token
-          </Text>
           <Note>
-            {r.estimatedCost === undefined
-              ? '费用未知 / 未计价'
-              : `${r.currency} ${r.estimatedCost.toFixed(6)}（估算）`}
+            单位：每百万
+            token。固定单价不会自动跟随高峰/空闲或节假日变化；按你的实际计费档位选择，也可以手动填写。不同币种分开统计。
           </Note>
+          {new URL(endpoint || 'https://example.org').hostname === 'api.deepseek.com'
+            ? deepSeekPrices
+                .filter(
+                  (p) =>
+                    p.model === model ||
+                    (model === 'deepseek-v4-flash' && p.model === 'deepseek-flash'),
+                )
+                .map((p) => (
+                  <Button
+                    key={p.label}
+                    title={`填入 ${p.label}`}
+                    secondary
+                    onPress={() => {
+                      setCurrency(p.price.currency);
+                      setInput(String(p.price.inputPerMillion));
+                      setCached(String(p.price.cachedInputPerMillion));
+                      setOutput(String(p.price.outputPerMillion));
+                      setNotice('已填入 2026-10-22 官方人民币价格，确认后请保存。');
+                    }}
+                  />
+                ))
+            : null}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {(['CNY', 'USD'] as const).map((c) => (
+              <Button key={c} title={c} secondary={currency !== c} onPress={() => setCurrency(c)} />
+            ))}
+          </View>
+          <Field
+            label="输入（未命中缓存）"
+            value={input}
+            onChangeText={setInput}
+            keyboardType="decimal-pad"
+          />
+          <Field
+            label="输入（命中缓存）"
+            value={cached}
+            onChangeText={setCached}
+            keyboardType="decimal-pad"
+          />
+          <Field label="输出" value={output} onChangeText={setOutput} keyboardType="decimal-pad" />
+          <Button
+            title={busy ? '保存中…' : '保存单价'}
+            disabled={busy || !model}
+            onPress={() => void save()}
+          />
+          {notice ? <Note>{notice}</Note> : null}
         </Card>
-      ))}
+      </Details>
+      <Details title={`最近请求（${recent.length}）`}>
+        <Button
+          title="刷新用量"
+          secondary
+          onPress={() => void refresh().catch(() => setError('刷新失败'))}
+        />
+        {recent.map((r) => (
+          <Card key={r.requestId}>
+            <Text style={{ color: palette.ink }}>
+              {purposeLabel(r.purpose)} · {r.model}
+            </Text>
+            <Note>
+              {new Date(r.startedAt).toLocaleString()} · {(r.duration / 1000).toFixed(1)}s ·{' '}
+              {r.success ? '完成' : '失败 / 中断'}
+            </Note>
+            <Text style={{ color: palette.ink }}>
+              输入 {r.inputTokens ?? '未知'} / 输出 {r.outputTokens ?? '未知'} token
+            </Text>
+            <Note>
+              {r.estimatedCost === undefined
+                ? '费用未知 / 未计价'
+                : `${r.currency} ${r.estimatedCost.toFixed(6)}（估算）`}
+            </Note>
+          </Card>
+        ))}
+      </Details>
     </Page>
   );
 }

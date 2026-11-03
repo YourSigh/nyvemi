@@ -29,7 +29,11 @@ vi.mock('react-native', () => ({
   TextInput: 'TextInput',
   View: 'View',
   StyleSheet: { create: (styles: unknown) => styles },
-  Keyboard: { dismiss: vi.fn(), isVisible: () => false },
+  Keyboard: {
+    dismiss: vi.fn(),
+    isVisible: () => false,
+    addListener: vi.fn(() => ({ remove: vi.fn() })),
+  },
   AccessibilityInfo: {
     isReduceMotionEnabled: async () => false,
     addEventListener: () => ({ remove: () => {} }),

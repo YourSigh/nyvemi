@@ -78,8 +78,8 @@ export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps -- initialize on entry, not palette updates
   return (
     <Page>
-      <View style={{ paddingTop: 24, gap: 20 }}>
-        <Avatar name="Nyvemi" size={70} />
+      <View style={{ gap: 14 }}>
+        <Avatar name="Nyvemi" size={44} />
         <Card>
           <Text
             accessibilityLiveRegion="polite"
