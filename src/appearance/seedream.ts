@@ -9,6 +9,7 @@ import {
   type ImageSettings,
   type VisualInput,
   validateRig,
+  usesVisualResearch,
 } from './model';
 import type { ImageAssets, ImageProvider } from './service';
 import { validateImageSettings } from './service';
@@ -78,6 +79,7 @@ export class SeedreamImageProvider implements ImageProvider {
   private config: ImageSettings;
   private legacyIdentities = new Set<string>();
   readonly supportsResearch: boolean;
+  readonly supportsPromptPlanning: boolean;
   constructor(
     config: ImageSettings,
     private key: () => Promise<string | null>,
@@ -89,6 +91,7 @@ export class SeedreamImageProvider implements ImageProvider {
     private director?: AppearanceDirector,
   ) {
     this.supportsResearch = Boolean(director);
+    this.supportsPromptPlanning = Boolean(director?.composePrompt);
     this.config = validateImageSettings(config);
     this.identity = `${this.config.baseUrl}:${config.imageModel}:${config.layerModel}:v1`;
     this.legacyIdentities.add(this.identity);
@@ -113,6 +116,10 @@ export class SeedreamImageProvider implements ImageProvider {
   }
   async prepare(input: VisualInput) {
     return this.planner?.(input.description);
+  }
+  async composePrompt(input: VisualInput) {
+    if (!this.director?.composePrompt) throw Error('提示词整理暂不可用；尚未生图');
+    return this.director.composePrompt(input);
   }
   async research(input: VisualInput) {
     return this.director?.research(input);
@@ -221,6 +228,8 @@ export class SeedreamImageProvider implements ImageProvider {
     }
   }
   async candidate(input: VisualInput, index: number): Promise<ImageAsset> {
+    if (input.promptVersion === 4 && !input.imagePrompt?.trim())
+      throw Error('缺少DS整理的绘图描述；尚未生图');
     const fingerprint = input.reference
       ? await this.assets.fingerprint(input.reference)
       : undefined;
@@ -231,33 +240,44 @@ export class SeedreamImageProvider implements ImageProvider {
     const referenceData = await Promise.all(references.map((a) => this.assets.dataUrl(a)));
     return this.cached(
       'candidate',
-      input.promptVersion === 3
+      input.promptVersion === 4
         ? [
             input.description,
             fingerprint,
             anchorFingerprint,
             index,
-            'reference-v3',
+            'ds-prompt-v4',
             input.brief ?? null,
+            input.imagePrompt,
             input.generationId ?? null,
           ]
-        : input.promptVersion === 2
+        : input.promptVersion === 3
           ? [
               input.description,
               fingerprint,
+              anchorFingerprint,
               index,
-              'identity-v2',
+              'reference-v3',
               input.brief ?? null,
               input.generationId ?? null,
             ]
-          : [input.description, fingerprint, index],
+          : input.promptVersion === 2
+            ? [
+                input.description,
+                fingerprint,
+                index,
+                'identity-v2',
+                input.brief ?? null,
+                input.generationId ?? null,
+              ]
+            : [input.description, fingerprint, index],
       {
         model: this.config.imageModel,
-        prompt:
-          input.promptVersion === 3
-            ? referenceGenerationPrompt(input, index)
-            : generationPrompt(input.description, input.brief) +
-              `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
+        prompt: usesVisualResearch(input.promptVersion)
+          ? (input.promptVersion === 4 ? `绘图方案：${input.imagePrompt}\n` : '') +
+            referenceGenerationPrompt(input, index)
+          : generationPrompt(input.description, input.brief) +
+            `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
         size: '2K',
         response_format: 'url',
         watermark: false,

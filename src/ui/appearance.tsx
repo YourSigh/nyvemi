@@ -3,6 +3,7 @@ import {
   imageRoutingLabel,
   qualityImageSettings,
 } from '../appearance/settings';
+import { usesVisualResearch } from '../appearance/model';
 import { ImageProviderError, type ImageRequestFailure } from '../appearance/errors';
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
@@ -187,7 +188,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               setBusy(
                 {
                   brief: '正在确认角色特征',
-                  reference: '正在找参考并核对角色',
+                  prompt: '正在整理绘图描述',
+                  reference: '正在理解角色要求',
                   generation: '正在生成形象',
                   review: '正在对照参考检查形象',
                 }[stage],
@@ -202,7 +204,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       } catch (error) {
         const latest = await runtime.store.get('visualDrafts', cid);
         setDraft(latest);
-        setEditing(latest?.promptVersion === 3 ? !latest.research : true);
+        setEditing(usesVisualResearch(latest?.promptVersion) ? !latest?.research : true);
         throw error;
       }
     });
@@ -345,7 +347,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           </Details>
           <Note>{imageRoutingLabel(config)}。确认参考后才付费生图。</Note>
           <Button
-            title={mode === 'animate' ? '使用这张参考图' : '先确认角色与参考'}
+            title={mode === 'animate' ? '使用这张参考图' : '先整理形象要求'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
             onPress={() => generate(false, { planOnly: mode !== 'animate' })}
           />
@@ -389,7 +391,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           <Note>
             {draft.research.note ??
               (draft.research.status === 'ready'
-                ? '已整理好你的原创角色要求。'
+                ? '原创形象要求已整理好，无需网上参考。'
                 : '先确认参考中的人物和造型，再开始画。')}
           </Note>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
@@ -485,7 +487,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               }
             />
             <TextButton
-              title="重新找参考"
+              title={draft.research.brief.namedCharacter ? '重新找参考' : '重新整理要求'}
               disabled={Boolean(busy)}
               onPress={() => generate(false, { planOnly: true, refreshResearch: true })}
             />
@@ -525,7 +527,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                     height={Math.min(220, candidateWidth * 1.6)}
                   />
                   <Text style={{ color: palette.accent, textAlign: 'center' }}>选择 {i + 1}</Text>
-                  {draft.promptVersion === 3 ? (
+                  {usesVisualResearch(draft.promptVersion) ? (
                     <Text
                       style={{
                         color:
@@ -554,7 +556,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               Boolean(busy) ||
               (mode !== 'animate' &&
                 (selectedIndex === undefined ||
-                  (draft.promptVersion === 3 &&
+                  (usesVisualResearch(draft.promptVersion) &&
                     draft.candidateReviews?.[selectedIndex]?.status !== 'match')))
             }
             onPress={() => select(mode === 'animate' ? undefined : selectedIndex)}
@@ -562,7 +564,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           {selectedIndex !== undefined && draft.candidateReviews?.[selectedIndex]?.issues.length ? (
             <Note>{draft.candidateReviews[selectedIndex]!.issues.slice(0, 2).join('；')}</Note>
           ) : null}
-          {draft.promptVersion === 3 ? (
+          {usesVisualResearch(draft.promptVersion) ? (
             <>
               <Note>DS核对仍可能出错，请以你看图确认为准。未通过的图片不会进入付费拆层。</Note>
               <TextButton

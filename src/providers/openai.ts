@@ -65,15 +65,17 @@ export class OpenAICompatibleProvider implements LLMProvider {
                 ? 200
                 : purpose === 'visual_reference_review' || purpose === 'visual_candidate_review'
                   ? 1200
-                  : purpose === 'visual_identity_planning'
-                    ? 600
-                    : purpose === 'theme_interpretation'
-                      ? 400
-                      : purpose === 'proactive_generation'
-                        ? 350
-                        : purpose === 'chat'
-                          ? 1536
-                          : 2500,
+                  : purpose === 'visual_prompt_composition'
+                    ? 1400
+                    : purpose === 'visual_identity_planning'
+                      ? 600
+                      : purpose === 'theme_interpretation'
+                        ? 400
+                        : purpose === 'proactive_generation'
+                          ? 350
+                          : purpose === 'chat'
+                            ? 1536
+                            : 2500,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
           ...((purpose === 'conversation_participation' ||
             purpose === 'conversation_delivery_review') &&

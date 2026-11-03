@@ -222,7 +222,7 @@ it('finds and confirms references before requiring a drawing key or starting pai
       navigation: {},
     } as never),
   );
-  await act(async () => button('先确认角色与参考').props.onPress());
+  await act(async () => button('先整理形象要求').props.onPress());
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
     'c',
     expect.any(Object),
@@ -320,8 +320,8 @@ it('shows safe provider error details only when requested, including during firs
       navigation: {},
     } as never),
   );
-  await act(async () => button('先确认角色与参考').props.onPress());
-  expect(JSON.stringify(renderer!.toJSON())).toContain('服务商内容审核未通过');
+  await act(async () => button('先整理形象要求').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('本次生成结果未通过服务商审核');
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('safe-request-123');
   await act(async () => button('错误详情').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('safe-request-123');

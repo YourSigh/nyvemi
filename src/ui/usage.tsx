@@ -230,6 +230,7 @@ function purposeLabel(purpose: string): string {
         agent_step: '角色思考与工具',
         image_understanding: '看图',
         visual_identity_planning: '角色外观理解',
+        visual_prompt_composition: '绘图描述整理',
         visual_reference_selection: '角色参考筛选',
         visual_reference_review: '角色参考核对',
         visual_candidate_review: '生成形象核对',

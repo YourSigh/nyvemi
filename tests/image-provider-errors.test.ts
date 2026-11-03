@@ -104,3 +104,12 @@ it('retains client rejection metadata, permits an explicit retry, and blocks rei
   await expect(provider.candidate(input, 0)).rejects.toThrow('结果不确定');
   expect(request).toHaveBeenCalledTimes(2);
 });
+
+it('distinguishes review of reference, prompt and generated output without blaming all input', () => {
+  const message = (code: string) =>
+    new ImageProviderError({ httpStatus: 400, code, category: 'content_review' }).message;
+  expect(message('InputImageSensitiveContentDetected')).toContain('参考图未通过');
+  expect(message('InputTextSensitiveContentDetected')).toContain('绘图文字未通过');
+  expect(message('OutputImageSensitiveContentDetected')).toContain('不等于你的描述或参考图违规');
+  expect(message('SensitiveContentDetected')).toContain('查看拒绝环节');
+});

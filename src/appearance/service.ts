@@ -10,6 +10,7 @@ import {
   type VisualInput,
   type VisualDraft,
   validateRig,
+  usesVisualResearch,
 } from './model';
 import { mockCandidate, mockRig } from './mock';
 export interface ImageAssets {
@@ -26,6 +27,8 @@ export interface ImageProvider {
   research?(input: VisualInput): Promise<VisualResearch | undefined>;
   review?(input: VisualInput, image: ImageAsset): Promise<VisualCheck | undefined>;
   prepare?(input: VisualInput): Promise<VisualBrief | undefined>;
+  composePrompt?(input: VisualInput): Promise<string>;
+  supportsPromptPlanning?: boolean;
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
   split(image: ImageAsset): Promise<CharacterRig>;
   repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
@@ -68,7 +71,7 @@ export class VisualCreationService {
       reviewAgain?: boolean;
       planOnly?: boolean;
       refreshResearch?: boolean;
-      onStage?(stage: 'brief' | 'reference' | 'generation' | 'review'): void;
+      onStage?(stage: 'brief' | 'reference' | 'prompt' | 'generation' | 'review'): void;
     } = {},
   ) {
     if (!input.description.trim() || input.description.length > 2000)
@@ -107,7 +110,12 @@ export class VisualCreationService {
             providerId: provider.identity,
             input,
             candidates: [] as ImageAsset[],
-            promptVersion: provider.supportsResearch && input.mode !== 'animate' ? 3 : 2,
+            promptVersion:
+              provider.supportsResearch && input.mode !== 'animate'
+                ? provider.supportsPromptPlanning
+                  ? 4
+                  : 3
+                : 2,
             ...(options.regenerate ? { generationId: id() } : {}),
           };
       if (
@@ -115,11 +123,12 @@ export class VisualCreationService {
         previous &&
         JSON.stringify(previous.input) === JSON.stringify(input) &&
         matches(provider, previous.providerId, 'generation') &&
-        previous.promptVersion === 3
+        usesVisualResearch(previous.promptVersion)
       ) {
         draft.research = previous.research;
         draft.brief = previous.brief;
         draft.confirmedReferenceId = previous.confirmedReferenceId;
+        draft.imagePrompt = previous.imagePrompt;
       }
       if (options.reviewAgain && draft.candidates.length !== 3)
         throw Error('请先继续完成本批，再重新核对全部图片');
@@ -127,9 +136,10 @@ export class VisualCreationService {
         if (draft.candidates.length) throw Error('这批已有图片，请先选择新一批再更换参考');
         draft.research = undefined;
         draft.confirmedReferenceId = undefined;
+        draft.imagePrompt = undefined;
       }
       await this.store.put('visualDrafts', draft);
-      if (draft.promptVersion === 3 && !draft.research) {
+      if (usesVisualResearch(draft.promptVersion) && !draft.research) {
         options.onStage?.('reference');
         const research = await provider.research?.(input);
         if (!research) throw Error('角色核对服务暂不可用；尚未生图');
@@ -144,15 +154,37 @@ export class VisualCreationService {
         if (reference.check.status === 'mismatch') throw Error('参考图与角色不符，请换一张参考图');
         if (draft.candidates.length && referenceId !== draft.confirmedReferenceId)
           throw Error('本批已开始生图，请用新一批更换参考，避免混用形象');
+        if (reference.id !== draft.confirmedReferenceId) draft.imagePrompt = undefined;
         draft.confirmedReferenceId = reference.id;
         await this.store.put('visualDrafts', draft);
       }
-      if (!same && draft.promptVersion !== 3 && input.mode !== 'animate' && provider.prepare) {
+      if (
+        !same &&
+        !usesVisualResearch(draft.promptVersion) &&
+        input.mode !== 'animate' &&
+        provider.prepare
+      ) {
         options.onStage?.('brief');
         draft.brief = await provider.prepare(input);
         await this.store.put('visualDrafts', draft);
       }
-      if (options.planOnly && draft.promptVersion === 3) return draft;
+      if (draft.promptVersion === 4 && !draft.imagePrompt) {
+        options.onStage?.('prompt');
+        if (!provider.composePrompt) throw Error('提示词整理暂不可用；尚未生图');
+        const reference = draft.research?.references.find(
+          (r) => r.id === draft.confirmedReferenceId,
+        );
+        draft.imagePrompt = await provider.composePrompt({
+          ...input,
+          reference: reference?.asset ?? input.reference,
+          brief: reference
+            ? { ...draft.brief!, recognizableFeatures: reference.check.features }
+            : draft.brief,
+        });
+        if (!draft.imagePrompt.trim()) throw Error('提示词为空；尚未生图');
+        await this.store.put('visualDrafts', draft);
+      }
+      if (options.planOnly && usesVisualResearch(draft.promptVersion)) return draft;
       if (input.mode === 'animate') {
         draft.selected = input.reference;
         await this.store.put('visualDrafts', draft);
@@ -167,9 +199,10 @@ export class VisualCreationService {
             ...input,
             reference: reference?.asset ?? input.reference,
             anchor:
-              draft.promptVersion === 3 && anchorIndex >= 0 && anchorIndex < i
+              usesVisualResearch(draft.promptVersion) && anchorIndex >= 0 && anchorIndex < i
                 ? draft.candidates[anchorIndex]
                 : undefined,
+            imagePrompt: draft.imagePrompt,
             brief: reference
               ? { ...draft.brief!, recognizableFeatures: reference.check.features }
               : draft.brief,
@@ -182,7 +215,10 @@ export class VisualCreationService {
             // Persist the paid result before any fallible vision call.
             await this.store.put('visualDrafts', draft);
           }
-          if (draft.promptVersion === 3 && (!draft.candidateReviews?.[i] || options.reviewAgain)) {
+          if (
+            usesVisualResearch(draft.promptVersion) &&
+            (!draft.candidateReviews?.[i] || options.reviewAgain)
+          ) {
             options.onStage?.('review');
             const review = await provider.review?.(planned, draft.candidates[i]);
             if (!review) throw Error('图片已保留，核对暂不可用；重试只核对，不重复生图');
@@ -214,7 +250,7 @@ export class VisualCreationService {
       adopt(provider, draft);
       const image = index === undefined ? draft.selected : draft.candidates[index];
       if (!image) throw new Error('请选择一张形象');
-      if (draft.promptVersion === 3) {
+      if (usesVisualResearch(draft.promptVersion)) {
         const check = index === undefined ? undefined : draft.candidateReviews?.[index];
         if (!check || check.status !== 'match')
           throw Error('这张图尚未通过特征核对，请重新核对或更换参考；尚未拆层');

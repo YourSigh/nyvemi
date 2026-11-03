@@ -47,7 +47,8 @@ export interface VisualInput {
   reference?: ImageAsset;
   anchor?: ImageAsset;
   brief?: VisualBrief;
-  promptVersion?: 2 | 3;
+  promptVersion?: 2 | 3 | 4;
+  imagePrompt?: string;
   generationId?: string;
 }
 export interface ImageSettings {
@@ -86,9 +87,12 @@ export interface VisualDraft {
   saved?: boolean;
   bodyRepairApplied?: boolean;
   brief?: VisualBrief;
-  promptVersion?: 2 | 3;
+  promptVersion?: 2 | 3 | 4;
+  imagePrompt?: string;
   generationId?: string;
 }
+
+export const usesVisualResearch = (version?: number) => version === 3 || version === 4;
 export interface ImageRequestCache {
   id: string;
   createdAt: number;

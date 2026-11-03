@@ -82,11 +82,18 @@ export async function readImageFailure(
 }
 export class ImageProviderError extends Error {
   constructor(readonly failure: ImageRequestFailure) {
+    const reviewHint = failure.code?.startsWith('InputImage')
+      ? '参考图未通过服务商审核，请更换参考图后重试'
+      : failure.code?.startsWith('OutputImage')
+        ? '本次生成结果未通过服务商审核，已暂停；这不等于你的描述或参考图违规'
+        : failure.code?.startsWith('InputText')
+          ? '绘图文字未通过服务商审核，请检查并调整描述'
+          : '服务商内容审核未通过，已暂停；请展开错误详情查看拒绝环节';
     const hint: Record<ImageRequestFailure['category'], string> = {
       configuration: '模型尚未开通，请先在火山方舟控制台开通此模型',
       credentials: '密钥校验失败，请检查豆包 API Key',
       quota: '服务额度不可用，请查看火山方舟账户状态',
-      content_review: '服务商内容审核未通过，请查看控制台记录或更换内容',
+      content_review: reviewHint,
       rate_limit: '请求过于频繁，请稍后手动重试',
       parameters: `请求参数不被接受${failure.parameter ? `（${failure.parameter}）` : ''}，请查看开发者模式中的错误码和请求编号`,
       service: '服务暂不可用，结果可能不确定，请先核对服务商记录',

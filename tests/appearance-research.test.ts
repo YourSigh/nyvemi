@@ -314,3 +314,175 @@ it('does not let several homepage logos suppress the dedicated character image s
   expect(web.imageSearch).toHaveBeenCalledWith(`${brief.subject} 立绘`, expect.any(AbortSignal));
   expect(result.references).toHaveLength(1);
 });
+
+it('routes a named original and an implicit design to creation without any public search, even when identity confidence is low', async () => {
+  const web = { search: vi.fn(), read: vi.fn(), imageSearch: vi.fn() };
+  const model: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (_m, schema) =>
+      schema.parse({
+        brief: { ...brief, subject: '', namedCharacter: false, confidence: 0.4 },
+        queries: ['不应执行的查询'],
+      }),
+  };
+  const director = new DSVisualDirector(async () => model, web, assets, hash);
+  for (const description of [
+    '原创角色云芽，短发机械师，蓝灰色工作服',
+    '画一个橙发、戴圆眼镜的爵士乐手',
+  ]) {
+    expect(await director.research({ description, mode: 'text' })).toMatchObject({
+      status: 'ready',
+      references: [],
+      brief: { namedCharacter: false },
+    });
+  }
+  expect(web.search).not.toHaveBeenCalled();
+  expect(web.read).not.toHaveBeenCalled();
+  expect(web.imageSearch).not.toHaveBeenCalled();
+});
+it('an uploaded original reference is reviewed directly without looking for an Internet counterpart', async () => {
+  const web = { search: vi.fn(), read: vi.fn(), imageSearch: vi.fn() };
+  const model: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (_m, schema) =>
+      schema.parse({ brief: { ...brief, namedCharacter: false }, queries: [] }),
+    structuredVision: async (_m, _a, schema) => schema.parse(match),
+  };
+  const director = new DSVisualDirector(async () => model, web, assets, hash);
+  const result = await director.research({
+    description: '我的OC角色',
+    mode: 'reference',
+    reference: asset('own'),
+  });
+  expect(result).toMatchObject({
+    status: 'awaiting_reference',
+    references: [{ asset: asset('own') }],
+  });
+  expect(web.search).not.toHaveBeenCalled();
+  expect(web.read).not.toHaveBeenCalled();
+  expect(web.imageSearch).not.toHaveBeenCalled();
+});
+it('DS composes a real drawing prompt from the original request and grounded reference observations', async () => {
+  const model: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (messages, schema, purpose) => {
+      expect(purpose).toBe('visual_prompt_composition');
+      expect(JSON.parse(messages[1].content)).toMatchObject({
+        description: '我的蓝发机械师',
+        brief: { recognizableFeatures: ['蓝发'] },
+      });
+      return schema.parse({ prompt: '单人蓝发机械师，灰色工作服，正面全身中立站姿，简单背景。' });
+    },
+  };
+  const director = new DSVisualDirector(
+    async () => model,
+    { search: vi.fn(), read: vi.fn() },
+    assets,
+    hash,
+  );
+  expect(
+    await director.composePrompt({
+      description: '我的蓝发机械师',
+      mode: 'text',
+      brief: { ...brief, namedCharacter: false, recognizableFeatures: ['蓝发'] },
+    }),
+  ).toContain('灰色工作服');
+});
+it('persists one compiled original design before paid calls and reuses it after restart and partial failure', async () => {
+  const { store, service, provider } = await fixture();
+  provider.supportsPromptPlanning = true;
+  provider.composePrompt = vi.fn(
+    async () => '蓝发原创画家，白色围裙，正面全身站姿，双手分开，简洁背景。',
+  );
+  vi.mocked(provider.research!).mockResolvedValue({
+    version: 1,
+    brief: { ...brief, namedCharacter: false },
+    references: [],
+    status: 'ready',
+  });
+  const input = { description: '原创蓝发画家', mode: 'text' as const };
+  const draft = await service.generate('c', input, { planOnly: true });
+  expect(draft).toMatchObject({
+    promptVersion: 4,
+    imagePrompt: expect.stringContaining('白色围裙'),
+  });
+  expect(provider.candidate).not.toHaveBeenCalled();
+  vi.mocked(provider.candidate).mockImplementationOnce(async (planned) => {
+    expect((await store.get('visualDrafts', 'c'))?.imagePrompt).toEqual(planned.imagePrompt);
+    throw Error('image offline');
+  });
+  await expect(service.generate('c', input)).rejects.toThrow('offline');
+  await new VisualCreationService(store, async () => provider, assets).generate('c', input);
+  expect(provider.composePrompt).toHaveBeenCalledOnce();
+  for (const [planned] of vi.mocked(provider.candidate).mock.calls)
+    expect(planned.imagePrompt).toBe(draft.imagePrompt);
+});
+it('a failed DS prompt never falls through to a paid raw-text generation', async () => {
+  const { provider, service } = await fixture();
+  provider.supportsPromptPlanning = true;
+  provider.composePrompt = vi.fn(async () => {
+    throw Error('DS unavailable');
+  });
+  vi.mocked(provider.research!).mockResolvedValue({
+    version: 1,
+    brief: { ...brief, namedCharacter: false },
+    references: [],
+    status: 'ready',
+  });
+  await expect(service.generate('c', { description: '原创画家', mode: 'text' })).rejects.toThrow(
+    'DS unavailable',
+  );
+  expect(provider.candidate).not.toHaveBeenCalled();
+});
+it('compiles named-character prompts only after reference confirmation and preserves old paid v3 batches', async () => {
+  const { provider, service } = await fixture();
+  const input = { description: 'q版测试作品测试角色', mode: 'text' as const };
+  await service.generate('c', input);
+  provider.supportsPromptPlanning = true;
+  provider.composePrompt = vi.fn(
+    async () => '同一角色正面全身简化立绘，遵照已确认参考图保持服装和颜色。',
+  );
+  const old = await service.generate('c', input, { referenceId: 'ref' });
+  expect(old.promptVersion).toBe(3);
+  expect(provider.composePrompt).not.toHaveBeenCalled();
+  await service.generate('c', input, { regenerate: true, planOnly: true });
+  expect(provider.composePrompt).toHaveBeenCalledWith(
+    expect.objectContaining({
+      reference: asset('reference'),
+      brief: expect.objectContaining({ recognizableFeatures: match.features }),
+    }),
+  );
+});
+it('Seedream uses the DS design in new requests and caches different designs independently', async () => {
+  const { store } = await fixture();
+  const http = vi.fn<typeof fetch>(async (_url, init) => {
+    expect(JSON.parse(String(init?.body)).prompt).toContain('绘图方案：原创机械师');
+    return new Response(
+      JSON.stringify({ data: [{ url: 'https://cdn.example.org/out', size: '1024x1536' }] }),
+    );
+  });
+  const p = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'test-key',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  const input = {
+    description: '原创机械师',
+    mode: 'text' as const,
+    promptVersion: 4 as const,
+    imagePrompt: '原创机械师，蓝发，灰色工作服，正面全身站姿，简单背景。',
+  };
+  await p.candidate(input, 0);
+  await p.candidate(input, 0);
+  expect(http).toHaveBeenCalledOnce();
+  await p.candidate({ ...input, imagePrompt: input.imagePrompt + '戴圆眼镜。' }, 0);
+  expect(http).toHaveBeenCalledTimes(2);
+  await expect(p.candidate({ ...input, imagePrompt: undefined }, 0)).rejects.toThrow('缺少DS');
+  expect(http).toHaveBeenCalledTimes(2);
+});
