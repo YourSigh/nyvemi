@@ -106,6 +106,8 @@ export class VisualCreationService {
         draft.brief = previous.brief;
         draft.confirmedReferenceId = previous.confirmedReferenceId;
       }
+      if (options.reviewAgain && draft.candidates.length !== 3)
+        throw Error('请先继续完成本批，再重新核对全部图片');
       if (options.refreshResearch) {
         if (draft.candidates.length) throw Error('这批已有图片，请先选择新一批再更换参考');
         draft.research = undefined;

@@ -15,6 +15,7 @@ export interface WebImage {
 export interface AgentWeb {
   search(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
   read(url: string, signal?: AbortSignal): Promise<WebDocument>;
+  imageSearch?(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
   bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
 }
 export function publicUrl(input: string): URL {
@@ -82,6 +83,38 @@ export function pageImages(html: string, page: string): WebImage[] {
     add(a['data-src'] ?? a.src, a.alt ?? '');
   }
   return images;
+}
+/** Bing's public image-result metadata, not guessed links or thumbnail URLs. */
+export function imageSearchDocuments(html: string): WebDocument[] {
+  const documents: WebDocument[] = [];
+  for (const tag of html.matchAll(/<a\b[^>]*>/gi)) {
+    const encoded = /\bm\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag[0]);
+    if (!encoded || documents.length >= 6) continue;
+    try {
+      const metadata: unknown = JSON.parse(plainText(encoded[1] ?? encoded[2]));
+      const data = z
+        .object({
+          purl: z.string(),
+          murl: z.string(),
+          t: z.string().optional(),
+          desc: z.string().optional(),
+        })
+        .parse(metadata);
+      const url = publicUrl(data.purl).href,
+        image = publicUrl(data.murl).href;
+      if (documents.some((d) => d.images?.[0]?.url === image)) continue;
+      documents.push({
+        url,
+        title: plainText(data.t ?? new URL(url).hostname).slice(0, 300),
+        text: plainText(data.desc ?? '').slice(0, 1500),
+        source: 'web-image-search',
+        images: [{ url: image, alt: plainText(data.t ?? '').slice(0, 160) }],
+      });
+    } catch {
+      /* Ignore malformed result data or private source locations. */
+    }
+  }
+  return documents;
 }
 export class PublicAgentWeb implements AgentWeb {
   constructor(
@@ -187,6 +220,13 @@ export class PublicAgentWeb implements AgentWeb {
       source: 'web-page',
       images: pageImages(response.text, response.url),
     };
+  }
+  async imageSearch(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
+    const response = await this.text(
+      `https://www.bing.com/images/search?q=${encodeURIComponent(query)}`,
+      signal,
+    );
+    return imageSearchDocuments(response.text);
   }
   async bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
     if (signal?.aborted) throw new Error('已取消');

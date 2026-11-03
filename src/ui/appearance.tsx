@@ -1,7 +1,7 @@
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, AppState, Linking, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRuntime } from './context';
 import {
@@ -51,6 +51,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number>();
+  const [referenceId, setReferenceId] = useState<string>();
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<VisualDraft>();
   const [rig, setRig] = useState<CharacterRig>();
@@ -79,12 +80,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         setHasKey(Boolean(secret));
         if (d) {
           setDraft(d);
+          setReferenceId(d.confirmedReferenceId);
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
           if (!d.saved && d.providerId !== 'mock-v1') {
             setEditing(
-              d.rig || d.meshAvatar
+              d.rig || d.meshAvatar || d.research
                 ? false
                 : d.input.mode !== 'animate'
                   ? d.candidates.length !== 3
@@ -130,14 +132,14 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       setBusy('');
     }
   };
-  const saveConfig = async () => {
+  const saveConfig = async (requireKey = true) => {
     const next = validateImageSettings(config);
     if (next.provider === 'seedream') {
       if (key.trim()) {
         await imageSecret.set(key.trim(), next.baseUrl);
         setKey('');
         setHasKey(true);
-      } else if (!(await imageSecret.get(next.baseUrl)))
+      } else if (requireKey && !(await imageSecret.get(next.baseUrl)))
         throw new Error('请填写当前服务的 API Key；更换接口地址需重新填写');
     }
     await runtime.store.put('imageSettings', next);
@@ -150,9 +152,17 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       setEditing(false);
       setDraft(await runtime.store.get('visualDrafts', cid));
     });
-  const generate = (regenerate = false) =>
-    void run(mode === 'animate' ? '正在保存参考图' : '正在生成形象', async () => {
-      await saveConfig();
+  const generate = (
+    regenerate = false,
+    options: {
+      planOnly?: boolean;
+      refreshResearch?: boolean;
+      reviewAgain?: boolean;
+      referenceId?: string;
+    } = {},
+  ) =>
+    void run(mode === 'animate' ? '正在保存参考图' : '正在确认角色', async () => {
+      await saveConfig(!options.planOnly && draft?.candidates.length !== 3);
       try {
         const next = await runtime.visuals.generate(
           cid,
@@ -163,16 +173,27 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           },
           {
             regenerate,
-            onStage: (stage) => setBusy(stage === 'brief' ? '正在确认角色特征' : '正在生成形象'),
+            ...options,
+            onStage: (stage) =>
+              setBusy(
+                {
+                  brief: '正在确认角色特征',
+                  reference: '正在找参考并核对角色',
+                  generation: '正在生成形象',
+                  review: '正在对照参考检查形象',
+                }[stage],
+              ),
           },
         );
         setDraft(next);
+        setReferenceId(next.confirmedReferenceId);
         setSelectedIndex(undefined);
         setRig(undefined);
         setEditing(false);
       } catch (error) {
-        setDraft(await runtime.store.get('visualDrafts', cid));
-        setEditing(true);
+        const latest = await runtime.store.get('visualDrafts', cid);
+        setDraft(latest);
+        setEditing(latest?.promptVersion === 3 ? !latest.research : true);
         throw error;
       }
     });
@@ -290,11 +311,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             />
             <TextButton title="恢复豆包默认配置" onPress={() => setConfig(defaultImageSettings)} />
           </Details>
-          <Note>生成与拆层会使用你的豆包额度，相同内容优先复用本机缓存。</Note>
+          <Note>先用聊天模型确认要求；确认参考后才使用豆包额度生图。</Note>
           <Button
-            title={mode === 'animate' ? '使用这张参考图' : '生成 3 张候选图'}
+            title={mode === 'animate' ? '使用这张参考图' : '先确认角色与参考'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
-            onPress={() => generate()}
+            onPress={() => generate(false, { planOnly: mode !== 'animate' })}
           />
           <Details title="导入已有形象">
             <TextButton
@@ -331,7 +352,119 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           </Details>
         </>
       ) : null}
-      {!editing && !rig && !meshAvatar && draft ? (
+      {!editing && !rig && !meshAvatar && draft?.research && !draft.candidates.length ? (
+        <>
+          <Note>
+            {draft.research.note ??
+              (draft.research.status === 'ready'
+                ? '已整理好你的原创角色要求。'
+                : '先确认参考中的人物和造型，再开始画。')}
+          </Note>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
+            {draft.research.references.map((ref, i) => (
+              <Pressable
+                key={ref.id}
+                accessibilityRole="button"
+                accessibilityLabel={`选择参考 ${i + 1}`}
+                accessibilityState={{ selected: referenceId === ref.id }}
+                disabled={Boolean(busy)}
+                onPress={() => setReferenceId(ref.id)}
+                style={{
+                  borderWidth: 2,
+                  borderColor: referenceId === ref.id ? palette.accent : palette.line,
+                  backgroundColor: palette.paper,
+                  borderRadius: 14,
+                  padding: 2,
+                  alignItems: 'center',
+                  flexShrink: 1,
+                }}
+              >
+                <CharacterImage
+                  asset={ref.asset}
+                  width={candidateWidth}
+                  height={Math.min(210, candidateWidth * 1.6)}
+                />
+                <Text style={{ color: palette.accent, fontSize: 13 }}>参考 {i + 1}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>
+                  {ref.check.status === 'match' ? 'DS初检相符' : '请仔细确认'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {draft.research.references.find((r) => r.id === referenceId) ? (
+            <Note>
+              {draft.research.references
+                .find((r) => r.id === referenceId)!
+                .check.features.slice(0, 3)
+                .join(' · ')}
+            </Note>
+          ) : null}
+          {draft.research.references.length ? (
+            <Details title="参考来源">
+              {draft.research.references.map((ref, i) =>
+                ref.sourceUrl ? (
+                  <TextButton
+                    key={ref.id}
+                    title={`${i + 1}. ${ref.title.slice(0, 38)}`}
+                    onPress={() =>
+                      void Linking.openURL(ref.sourceUrl!).catch(() => setError('无法打开来源网页'))
+                    }
+                  />
+                ) : (
+                  <Note key={ref.id}>你上传的参考图</Note>
+                ),
+              )}
+              <Note>DS初检可能有误，请确认不是其他角色或改装图。</Note>
+            </Details>
+          ) : null}
+          {draft.research.status !== 'needs_reference' ? (
+            <>
+              {!hasKey ? (
+                <Field
+                  label="豆包 API Key"
+                  value={key}
+                  onChangeText={setKey}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  placeholder="粘贴火山方舟 API Key"
+                />
+              ) : null}
+              <Button
+                title="确认，生成3张候选图"
+                disabled={Boolean(busy) || (draft.research.status !== 'ready' && !referenceId)}
+                onPress={() => generate(false, { referenceId })}
+              />
+              <Note>这一步使用豆包额度，生成后由DS逐张检查，不自动付费重画。</Note>
+            </>
+          ) : null}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <TextButton
+              title="上传自己的参考图"
+              disabled={Boolean(busy)}
+              onPress={() =>
+                void run('读取参考图', async () => {
+                  const selected = await pickReference();
+                  if (selected) {
+                    setReference(selected);
+                    setMode('reference');
+                    setEditing(true);
+                  }
+                })
+              }
+            />
+            <TextButton
+              title="重新找参考"
+              disabled={Boolean(busy)}
+              onPress={() => generate(false, { planOnly: true, refreshResearch: true })}
+            />
+          </View>
+        </>
+      ) : null}
+      {!editing &&
+      !rig &&
+      !meshAvatar &&
+      draft &&
+      (!draft.research || draft.candidates.length > 0) ? (
         <>
           <Note>{mode === 'animate' ? '参考图已就绪' : '选一张你喜欢的，再让她动起来。'}</Note>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
@@ -360,16 +493,54 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                     height={Math.min(220, candidateWidth * 1.6)}
                   />
                   <Text style={{ color: palette.accent, textAlign: 'center' }}>选择 {i + 1}</Text>
+                  {draft.promptVersion === 3 ? (
+                    <Text
+                      style={{
+                        color:
+                          draft.candidateReviews?.[i]?.status === 'mismatch'
+                            ? palette.error
+                            : palette.muted,
+                        fontSize: 12,
+                      }}
+                    >
+                      {!draft.candidateReviews?.[i]
+                        ? '待核对'
+                        : draft.candidateReviews[i]?.status === 'match'
+                          ? '特征相符'
+                          : draft.candidateReviews[i]?.status === 'mismatch'
+                            ? '特征不符'
+                            : '不确定'}
+                    </Text>
+                  ) : null}
                 </Pressable>
               ),
             )}
           </View>
           <Button
             title="就选这张，整理图层"
-            disabled={Boolean(busy) || (mode !== 'animate' && selectedIndex === undefined)}
+            disabled={
+              Boolean(busy) ||
+              (mode !== 'animate' &&
+                (selectedIndex === undefined ||
+                  (draft.promptVersion === 3 &&
+                    draft.candidateReviews?.[selectedIndex]?.status !== 'match')))
+            }
             onPress={() => select(mode === 'animate' ? undefined : selectedIndex)}
           />
-          <Note>这一步会请求付费拆层，最多可能按 17 张输出图计费。</Note>
+          {selectedIndex !== undefined && draft.candidateReviews?.[selectedIndex]?.issues.length ? (
+            <Note>{draft.candidateReviews[selectedIndex]!.issues.slice(0, 2).join('；')}</Note>
+          ) : null}
+          {draft.promptVersion === 3 ? (
+            <>
+              <Note>DS核对仍可能出错，请以你看图确认为准。未通过的图片不会进入付费拆层。</Note>
+              <TextButton
+                title={draft.candidates.length < 3 ? '继续完成本批' : '重新核对（不重新生图）'}
+                disabled={Boolean(busy)}
+                onPress={() => generate(false, { reviewAgain: draft.candidates.length === 3 })}
+              />
+            </>
+          ) : null}
+          <Note>整理图层会使用豆包额度，最多可能按17张输出图计费。</Note>
           {mode !== 'animate' ? (
             <TextButton
               title={config.provider === 'seedream' ? '换一批候选图（重新付费）' : '换一批候选图'}
@@ -378,13 +549,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 if (config.provider === 'seedream')
                   Alert.alert(
                     '重新生成3张候选图',
-                    '会使用你自己的生图额度。当前聊天和已保存形象会保留。',
+                    '先确认参考，再生成新一批。生成时会使用豆包额度，当前聊天和已保存形象保留。',
                     [
                       { text: '取消', style: 'cancel' },
-                      { text: '重新生成', onPress: () => generate(true) },
+                      { text: '继续', onPress: () => generate(true, { planOnly: true }) },
                     ],
                   );
-                else generate(true);
+                else generate(true, { planOnly: true });
               }}
             />
           ) : null}

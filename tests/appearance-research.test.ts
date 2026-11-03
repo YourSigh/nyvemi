@@ -266,3 +266,51 @@ it('can plan an original character without an image key or an image request', as
   await service.generate('c', input);
   expect(provider.candidate).toHaveBeenCalledTimes(3);
 });
+it('does not let several homepage logos suppress the dedicated character image search', async () => {
+  const web = {
+    search: vi.fn(async () =>
+      [0, 1, 2, 3].map((i) => ({
+        url: `https://example.org/home-${i}`,
+        title: '作品官网',
+        text: '',
+        source: 'search',
+      })),
+    ),
+    read: vi.fn(async (url: string) => ({
+      url,
+      title: '官网首页',
+      text: '',
+      source: 'web-page',
+      images: [0, 1, 2, 3].map((i) => ({
+        url: `https://cdn.example.org/logo-${i}.png`,
+        alt: 'Logo',
+      })),
+    })),
+    imageSearch: vi.fn(async () => [
+      {
+        url: 'https://example.org/character',
+        title: '测试角色立绘',
+        text: '角色形象',
+        source: 'web-image-search',
+        images: [{ url: 'https://cdn.example.org/character.png', alt: '角色' }],
+      },
+    ]),
+  };
+  const model: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (messages, schema, purpose) => {
+      if (purpose === 'visual_identity_planning')
+        return schema.parse({ brief, queries: ['作品官方网站'] });
+      const input = JSON.parse(messages[1].content) as { candidates: { image: string }[] };
+      const index = input.candidates.findIndex((r) => r.image.endsWith('/character.png'));
+      expect(index).toBeGreaterThanOrEqual(0);
+      return schema.parse({ indices: [index] });
+    },
+    structuredVision: async (_p, _a, schema) => schema.parse({ checks: [match] }),
+  };
+  const director = new DSVisualDirector(async () => model, web, assets, hash);
+  const result = await director.research({ description: 'q版测试作品测试角色', mode: 'text' });
+  expect(web.imageSearch).toHaveBeenCalledWith(`${brief.subject} 立绘`, expect.any(AbortSignal));
+  expect(result.references).toHaveLength(1);
+});

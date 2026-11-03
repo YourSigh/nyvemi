@@ -1,5 +1,6 @@
 import { MediaService } from '../media/service';
 import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
+import { DSVisualDirector } from '../appearance/research';
 import { planVisualBrief } from '../appearance/brief';
 import { PluginManager } from '../extensions/manager';
 import * as Crypto from 'expo-crypto';
@@ -200,6 +201,7 @@ async function createRuntime() {
               imageHash,
               nativeFetch as unknown as typeof fetch,
               (description) => planVisualBrief(description, provider),
+              new DSVisualDirector(provider, agentWeb, imageAssets, imageHash),
             );
       },
       imageAssets,

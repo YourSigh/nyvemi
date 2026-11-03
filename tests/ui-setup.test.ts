@@ -179,3 +179,118 @@ it('candidate cards only select; decomposition starts after explicit confirmatio
   await act(async () => button('就选这张，整理图层').props.onPress());
   expect(runtime.visuals.select).toHaveBeenCalledWith('c', 1);
 });
+it('finds and confirms references before requiring a drawing key or starting paid generation', async () => {
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  const check = { status: 'match' as const, features: ['参考中实际可见的发型'], issues: [] };
+  const prepared = {
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: 'seedream:test',
+    input: { mode: 'text' as const, description: '角色' },
+    promptVersion: 3 as const,
+    candidates: [],
+    research: {
+      version: 1 as const,
+      status: 'awaiting_reference' as const,
+      brief: {
+        subject: '角色',
+        namedCharacter: true,
+        recognizableFeatures: [],
+        style: '',
+        confidence: 0.95,
+      },
+      references: [
+        { id: 'ref', title: '来源', asset: { uri: 'file://ref', width: 512, height: 1024 }, check },
+      ],
+    },
+  };
+  runtime.visuals.generate = vi.fn(async () => prepared);
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c' } },
+      navigation: {},
+    } as never),
+  );
+  await act(async () => button('先确认角色与参考').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenCalledWith(
+    'c',
+    expect.any(Object),
+    expect.objectContaining({ planOnly: true }),
+  );
+  expect(images.set).not.toHaveBeenCalled();
+  expect(button('确认，生成3张候选图').props.disabled).toBe(true);
+  await act(async () => button('选择参考 1').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenCalledOnce();
+  await act(async () => button('豆包 API Key').props.onChangeText('test-drawing-key'));
+  await act(async () => button('确认，生成3张候选图').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenLastCalledWith(
+    'c',
+    expect.any(Object),
+    expect.objectContaining({ referenceId: 'ref' }),
+  );
+  expect(images.set).toHaveBeenCalledWith('test-drawing-key', defaultImageSettings.baseUrl);
+});
+it('blocks decomposition for a mismatch and can recheck completed images without requiring a drawing key', async () => {
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  const draft = {
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: 'seedream:test',
+    input: { mode: 'text' as const, description: '角色' },
+    promptVersion: 3 as const,
+    candidates: [1, 2, 3].map((i) => ({ uri: `file://candidate-${i}`, width: 100, height: 200 })),
+    candidateReviews: [
+      { status: 'mismatch' as const, features: [], issues: ['发型不符'] },
+      null,
+      null,
+    ],
+    research: {
+      version: 1 as const,
+      status: 'ready' as const,
+      brief: {
+        subject: '角色',
+        namedCharacter: false,
+        recognizableFeatures: [],
+        style: '',
+        confidence: 0.95,
+      },
+      references: [],
+    },
+  };
+  await store.put('visualDrafts', draft);
+  runtime.visuals.generate = vi.fn(async () => draft);
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c' } },
+      navigation: {},
+    } as never),
+  );
+  await act(async () => button('选择形象 1').props.onPress());
+  expect(button('就选这张，整理图层').props.disabled).toBe(true);
+  expect(runtime.visuals.select).not.toHaveBeenCalled();
+  await act(async () => button('重新核对（不重新生图）').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenCalledWith(
+    'c',
+    expect.any(Object),
+    expect.objectContaining({ reviewAgain: true }),
+  );
+  expect(images.set).not.toHaveBeenCalled();
+});

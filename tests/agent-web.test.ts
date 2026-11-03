@@ -26,3 +26,24 @@ it('reads real-shaped search RSS and pages with bounded public HTTPS redirects',
   );
   await expect(redirect.read('https://example.com/a')).rejects.toThrow();
 });
+it('extracts actual image-search metadata and rejects invented/private/malformed locations', async () => {
+  const { imageSearchDocuments } = await import('../src/agent/web');
+  const data = JSON.stringify({
+    purl: 'https://example.org/role',
+    murl: 'https://cdn.example.org/full.png',
+    t: '角色立绘',
+  }).replaceAll('"', '&quot;');
+  const privateData = JSON.stringify({
+    purl: 'https://127.0.0.1/a',
+    murl: 'https://cdn.example.org/a',
+  }).replaceAll('"', '&quot;');
+  const result = imageSearchDocuments(
+    `<a class="iusc" m="${data}"></a><a m="${privateData}"></a><a m="not-json"></a>`,
+  );
+  expect(result).toHaveLength(1);
+  expect(result[0]).toMatchObject({
+    url: 'https://example.org/role',
+    images: [{ url: 'https://cdn.example.org/full.png' }],
+    source: 'web-image-search',
+  });
+});
