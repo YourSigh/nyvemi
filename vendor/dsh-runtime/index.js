@@ -2236,6 +2236,26 @@ var init_compat = __esm({
           return this.slice().reverse();
         }
       });
+    if (!("reason" in new AbortController().signal)) {
+      const reasons = /* @__PURE__ */ new WeakMap();
+      const abort = AbortController.prototype.abort;
+      Object.defineProperty(AbortSignal.prototype, "reason", {
+        configurable: true,
+        get() {
+          return this.aborted ? reasons.get(this) : void 0;
+        }
+      });
+      AbortController.prototype.abort = function(reason) {
+        if (!this.signal.aborted) {
+          if (reason === void 0) {
+            reason = new Error("Aborted");
+            reason.name = "AbortError";
+          }
+          reasons.set(this.signal, reason);
+        }
+        return abort.call(this);
+      };
+    }
     if (!AbortSignal.prototype.throwIfAborted)
       AbortSignal.prototype.throwIfAborted = function() {
         var _a4;
@@ -32002,9 +32022,9 @@ var runtimeStats = () => {
   return { ambientStores: (_b2 = (_a3 = __snapshotAll()) == null ? void 0 : _a3.length) != null ? _b2 : 0 };
 };
 async function run(input, ports) {
-  var _a3, _b2, _c2;
+  var _a3, _b2, _c2, _d2;
   const ctx = new Context();
-  let calls = 0, agent;
+  let calls = 0, agent, hostFailure;
   const abort = () => agent == null ? void 0 : agent.cancel({ kind: "user" });
   (_a3 = ports.signal) == null ? void 0 : _a3.addEventListener("abort", abort);
   let idleTimer;
@@ -32014,14 +32034,21 @@ async function run(input, ports) {
     }
     stream(options) {
       return __asyncGenerator(this, null, function* () {
-        var _a4, _b3, _c3, _d2;
+        var _a4, _b3, _c3, _d3;
         if (++calls > input.maxSteps) throw Error("DSH step budget exceeded");
         __als.resume(yield new __await(__als.pause(ports.checkpoint(agent.session.snapshotEvents()))));
         if ((_a4 = ports.signal) == null ? void 0 : _a4.aborted) throw Error("DSH canceled");
-        const result = __als.resume(yield new __await(__als.pause(ports.generate(
-          options,
-          AbortSignal.any([options.signal, ports.signal].filter(Boolean))
-        ))));
+        let result;
+        try {
+          result = __als.resume(yield new __await(__als.pause(ports.generate(
+            options,
+            AbortSignal.any([options.signal, ports.signal].filter(Boolean))
+          ))));
+          hostFailure = void 0;
+        } catch (error) {
+          hostFailure = error;
+          throw error;
+        }
         if (result.reasoning) {
           __als.afterYield(__als.snapshot(), yield { type: "block-start", index: 0, blockType: "reasoning" });
           __als.afterYield(__als.snapshot(), yield { type: "block-end", index: 0, block: { type: "reasoning", text: result.reasoning } });
@@ -32045,7 +32072,7 @@ async function run(input, ports) {
         __als.afterYield(__als.snapshot(), yield {
           type: "finish",
           reason: {
-            kind: result.truncated ? "max-tokens" : ((_d2 = result.toolCalls) == null ? void 0 : _d2.length) ? "tool-calls" : "stop"
+            kind: result.truncated ? "max-tokens" : ((_d3 = result.toolCalls) == null ? void 0 : _d3.length) ? "tool-calls" : "stop"
           }
         });
       });
@@ -32107,11 +32134,17 @@ async function run(input, ports) {
     const events = agent.session.snapshotEvents();
     __als.resume(await __als.pause(ports.checkpoint(events)));
     const end = events.findLast((e) => e.type === "turn/end");
-    if ((end == null ? void 0 : end.data.reason.kind) !== "completed") throw Error("DSH turn did not complete");
+    if ((end == null ? void 0 : end.data.reason.kind) !== "completed") {
+      const error = new Error("DSH turn did not complete");
+      error.name = "AgentRunError";
+      error.reason = (_c2 = end == null ? void 0 : end.data.reason) != null ? _c2 : { kind: "missing_end" };
+      error.cause = hostFailure;
+      throw error;
+    }
     return { events, calls };
   } finally {
     clearTimeout(idleTimer);
-    (_c2 = ports.signal) == null ? void 0 : _c2.removeEventListener("abort", abort);
+    (_d2 = ports.signal) == null ? void 0 : _d2.removeEventListener("abort", abort);
     __als.resume(await __als.pause(ctx.fiber.dispose()));
     if (agent) __als.resume(await __als.pause(ports.checkpoint(agent.session.snapshotEvents())));
   }

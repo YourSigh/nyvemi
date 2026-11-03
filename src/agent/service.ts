@@ -1,4 +1,5 @@
 import type { MediaService } from '../media/service';
+import { agentFailure } from './errors';
 import type { PluginManager } from '../extensions/manager';
 import { pluginToolName } from '../extensions/manager';
 import { MemoryRepository } from '../memory/repository';
@@ -640,13 +641,21 @@ export class CompanionAgent {
           updatedAt: Date.now(),
         });
       await this.flushOutbox(cid).catch(() => undefined);
-      await this.diagnostics.error(cid, 'agent_run');
+      const failure = agentFailure(error);
+      await this.diagnostics
+        .record('error', cid, {
+          operation: 'agent_run',
+          code: failure.code,
+          kind: failure.kind,
+          detail: await this.host.redact(failure.detail).catch(() => 'error_detail_unavailable'),
+        })
+        .catch(() => undefined);
       if (saved.length) {
         if (input.task) await this.store.put('intentions', { ...input.task, status: 'completed' });
         input.activity?.({ phase: 'complete', hasMessages: true, emotion: saved.at(-1)?.emotion });
         return saved;
       }
-      throw error;
+      throw new Error(failure.message);
     } finally {
       try {
         await this.store.release('agent-runtime');

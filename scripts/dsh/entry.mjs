@@ -13,7 +13,8 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop';
 export async function run(input, ports) {
   const ctx = new Context();
   let calls = 0,
-    agent;
+    agent,
+    hostFailure;
   const abort = () => agent?.cancel({ kind: 'user' });
   ports.signal?.addEventListener('abort', abort);
   let idleTimer;
@@ -25,10 +26,17 @@ export async function run(input, ports) {
       if (++calls > input.maxSteps) throw Error('DSH step budget exceeded');
       await ports.checkpoint(agent.session.snapshotEvents());
       if (ports.signal?.aborted) throw Error('DSH canceled');
-      const result = await ports.generate(
-        options,
-        AbortSignal.any([options.signal, ports.signal].filter(Boolean)),
-      );
+      let result;
+      try {
+        result = await ports.generate(
+          options,
+          AbortSignal.any([options.signal, ports.signal].filter(Boolean)),
+        );
+        hostFailure = undefined;
+      } catch (error) {
+        hostFailure = error;
+        throw error;
+      }
       if (result.reasoning) {
         yield { type: 'block-start', index: 0, blockType: 'reasoning' };
         yield { type: 'block-end', index: 0, block: { type: 'reasoning', text: result.reasoning } };
@@ -118,7 +126,13 @@ export async function run(input, ports) {
     const events = agent.session.snapshotEvents();
     await ports.checkpoint(events);
     const end = events.findLast((e) => e.type === 'turn/end');
-    if (end?.data.reason.kind !== 'completed') throw Error('DSH turn did not complete');
+    if (end?.data.reason.kind !== 'completed') {
+      const error = new Error('DSH turn did not complete');
+      error.name = 'AgentRunError';
+      error.reason = end?.data.reason ?? { kind: 'missing_end' };
+      error.cause = hostFailure;
+      throw error;
+    }
     return { events, calls };
   } finally {
     clearTimeout(idleTimer);

@@ -33,6 +33,28 @@ if (!Array.prototype.toReversed)
       return this.slice().reverse();
     },
   });
+// RN's abort-controller polyfill ignores abort(reason). DSH's turn closer reads
+// reason.kind, so losing it turns normal interruption into an internal error.
+if (!('reason' in new AbortController().signal)) {
+  const reasons = new WeakMap();
+  const abort = AbortController.prototype.abort;
+  Object.defineProperty(AbortSignal.prototype, 'reason', {
+    configurable: true,
+    get() {
+      return this.aborted ? reasons.get(this) : undefined;
+    },
+  });
+  AbortController.prototype.abort = function (reason) {
+    if (!this.signal.aborted) {
+      if (reason === undefined) {
+        reason = new Error('Aborted');
+        reason.name = 'AbortError';
+      }
+      reasons.set(this.signal, reason);
+    }
+    return abort.call(this);
+  };
+}
 if (!AbortSignal.prototype.throwIfAborted)
   AbortSignal.prototype.throwIfAborted = function () {
     if (this.aborted) throw this.reason ?? new Error('Aborted');

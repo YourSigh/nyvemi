@@ -405,3 +405,33 @@ it('a promised delivery that only waits remains retryable rather than being mark
   expect((await f.store.get('intentions', 'promise'))?.status).toBe('pending');
   expect((await f.store.get('intentions', 'promise'))?.attempts).toBe(1);
 });
+
+it('reports the actual provider failure, keeps private details redacted and retries the same user message', async () => {
+  let fail = true;
+  const f = await setup(async (_request, n) => {
+    if (fail) throw Error('模型请求失败（HTTP 401） test-secret');
+    if (n === 2) return tool('send_message', { messages: ['现在连上了'] });
+    return tool('wait', { reason: '等对方' });
+  });
+  const { redactKnownSecret } = await import('../src/domain/privacy');
+  f.host.redact = async (value) => redactKnownSecret(value, 'test-secret');
+  await expect(f.chat.send('c', '你好', () => {})).rejects.toThrow('鉴权');
+  const user = (await f.chat.history('c')).find((m) => m.role === 'user')!;
+  expect(user.status).toBe('error');
+  const errors = await f.store.list('diagnostics', 'c');
+  expect(errors.some((row) => row.data.code === 'provider_auth')).toBe(true);
+  expect(JSON.stringify(errors)).not.toContain('test-secret');
+  fail = false;
+  await f.chat.send(
+    'c',
+    user.content,
+    () => {},
+    () => {},
+    undefined,
+    user.id,
+  );
+  const history = await f.chat.history('c');
+  expect(history.filter((m) => m.role === 'user')).toHaveLength(1);
+  expect(history.find((m) => m.id === user.id)?.status).toBe('complete');
+  expect(history.some((m) => m.content === '现在连上了')).toBe(true);
+});

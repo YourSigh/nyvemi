@@ -6,6 +6,6 @@
     "license": "MIT",
     "selection": "AgentLoop, Cordis, Session, Llm, Tools, NativeExecutor, browser compatibility sources; no CLI, shell, subprocess, telemetry or package installation."
   },
-  "sha256": "d037ce24b92a40ddad48790bbb8ceb4516129cc3b25a4fc60bf26bd5f7259d48",
-  "bytes": 1355067
+  "sha256": "63a3e2fabdfc18586eb733cf2388ad3b0499b0e9f56c9921c8a666e20f38d52b",
+  "bytes": 1356141
 }
