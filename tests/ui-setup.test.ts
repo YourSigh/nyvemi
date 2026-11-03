@@ -351,3 +351,43 @@ it('image routing presets save without calling models and preserve custom settin
   expect(provider).not.toHaveBeenCalled();
   expect(runtime.visuals.select).not.toHaveBeenCalled();
 });
+
+it('shows the failing visual stage with folded safe schema details and persists diagnostics', async () => {
+  const { StructuredOutputError } = await import('../src/providers/structured-error');
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  runtime.visuals.generate = vi.fn(async () => {
+    throw new StructuredOutputError('visual_reference_review', 'schema', [
+      {
+        code: 'invalid_type',
+        path: ['features', 0],
+        expected: 'string',
+        received: 'number',
+        message: 'private-schema-message',
+      },
+    ]);
+  });
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c', onboarding: true } },
+      navigation: {},
+    } as never),
+  );
+  await act(async () => button('先整理形象要求').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('参考图核对返回格式有误');
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('invalid_type');
+  await act(async () => button('错误详情').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('features.0');
+  expect((await store.list('diagnostics'))[0]).toMatchObject({
+    kind: 'error',
+    characterId: 'c',
+    data: { event: 'visual_schema', purpose: 'visual_reference_review' },
+  });
+});

@@ -5,13 +5,37 @@ import type { LLMProvider } from '../providers/provider';
 import type { ImageAsset, VisualInput } from './model';
 import type { ImageAssets } from './service';
 import { groundedVisualBrief, VisualBriefSchema, type VisualBrief } from './brief';
-export const VisualCheckSchema = z
-  .object({
-    status: z.enum(['match', 'uncertain', 'mismatch']),
-    features: z.array(z.string().max(120)).max(6),
-    issues: z.array(z.string().max(160)).max(6),
-  })
-  .strict();
+// Observation lists are display data, not the identity decision. Bound and trim them
+// locally instead of rejecting a valid decision for one extra observation/comment.
+const observations = (count: number, length: number) =>
+  z
+    .array(z.string().max(2000))
+    .max(64)
+    .transform((items) =>
+      items
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, count)
+        .map((s) => s.slice(0, length)),
+    );
+const CheckObject = z.object({
+  status: z.enum(['match', 'uncertain', 'mismatch']),
+  features: observations(6, 120),
+  issues: observations(6, 160),
+});
+export const VisualCheckSchema = z.preprocess((value) => {
+  // A single-image review sometimes uses the same envelope as the batch review.
+  if (
+    value &&
+    typeof value === 'object' &&
+    !('status' in value) &&
+    'checks' in value &&
+    Array.isArray(value.checks) &&
+    value.checks.length === 1
+  )
+    return value.checks[0];
+  return value;
+}, CheckObject);
 export type VisualCheck = z.infer<typeof VisualCheckSchema>;
 export interface VisualReference {
   id: string;
@@ -36,11 +60,26 @@ export interface AppearanceDirector {
 const PlanSchema = z
   .object({
     // Original designs need not have a name. A missing display name is not a search failure.
-    brief: VisualBriefSchema.extend({ subject: z.string().max(160) }),
-    queries: z.array(z.string().trim().min(1).max(160)).max(2),
+    brief: VisualBriefSchema.extend({
+      subject: z
+        .string()
+        .max(160)
+        .nullish()
+        .transform((v) => v ?? ''),
+      recognizableFeatures: observations(8, 180),
+    }).strip(),
+    queries: z
+      .array(z.string().trim().min(1).max(400))
+      .max(8)
+      .default([])
+      .transform((items) => items.slice(0, 2).map((s) => s.slice(0, 160))),
   })
-  .strict();
-const ReferenceChecks = z.object({ checks: z.array(VisualCheckSchema).min(1).max(3) }).strict();
+  .strip();
+const ReferenceChecks = z.preprocess(
+  (value) =>
+    value && typeof value === 'object' && 'status' in value ? { checks: [value] } : value,
+  z.object({ checks: z.array(VisualCheckSchema).min(1).max(3) }),
+);
 /** DS plans and inspects. Image locations come exclusively from actual fetched pages. */
 export class DSVisualDirector implements AppearanceDirector {
   constructor(
@@ -138,7 +177,7 @@ export class DSVisualDirector implements AppearanceDirector {
             }),
           },
         ],
-        z.object({ prompt: z.string().trim().min(20).max(2600) }).strict(),
+        z.object({ prompt: z.string().trim().min(20).max(2600) }),
         'visual_prompt_composition',
         signal,
       ),
@@ -151,7 +190,7 @@ export class DSVisualDirector implements AppearanceDirector {
     if (input.reference) {
       // The user's own picture is authoritative, including an intentional alternate outfit.
       const check = await this.vision(
-        `提取用户参考图中实际可见的发型、眼睛、服装、饰物，禁止凭角色名补全看不见的细节。用户会确认这张参考，不需要用你记忆中的原作服装否定用户自己的图。画面不清晰或多人无法确定主体则uncertain；无人或无可用角色则mismatch。严格输出JSON对象，例如{"status":"match","features":["图片实际特征"],"issues":[]}，status只能是match/uncertain/mismatch。用户要求：${JSON.stringify(input.description)}`,
+        `提取用户参考图中实际可见的发型、眼睛、服装、饰物，禁止凭角色名补全看不见的细节。用户会确认这张参考，不需要用你记忆中的原作服装否定用户自己的图。画面不清晰或多人无法确定主体则uncertain；无人或无可用角色则mismatch。严格输出JSON对象，例如{"status":"match","features":["图片实际特征"],"issues":[]}，status只能是match/uncertain/mismatch，features与issues最多各6条，每条不超过120字。用户要求：${JSON.stringify(input.description)}`,
         [input.reference],
         VisualCheckSchema,
         'visual_reference_review',
@@ -324,7 +363,7 @@ export class DSVisualDirector implements AppearanceDirector {
   }
   async review(input: VisualInput, image: ImageAsset): Promise<VisualCheck> {
     return this.vision(
-      `核对最后一张生成图。前面的图依次是用户确认参考（若有）和本批通过核对的形象（若有）。保留同一身份与造型，Q版允许比例/线条简化；用户明确改色/改服装优先。比较发型轮廓、发色、眼睛、服装和标志饰物是否有重大变化；检查是否单人、脸和全身清晰、四肢是否明显残缺。无参考时仅检查原始要求，不能捏造经典设定。重大不符返回mismatch，无法看清返回uncertain，符合可见关键特征才match。严格输出JSON对象，例如{"status":"mismatch","features":[],"issues":["发型改变"]}。status只能为match/uncertain/mismatch，features和issues为字符串数组，不能因为接口生成成功就判定合格。要求：${JSON.stringify({ description: input.description, brief: input.brief })}`,
+      `核对最后一张生成图。前面的图依次是用户确认参考（若有）和本批通过核对的形象（若有）。保留同一身份与造型，Q版允许比例/线条简化；用户明确改色/改服装优先。比较发型轮廓、发色、眼睛、服装和标志饰物是否有重大变化；检查是否单人、脸和全身清晰、四肢是否明显残缺。无参考时仅检查原始要求，不能捏造经典设定。重大不符返回mismatch，无法看清返回uncertain，符合可见关键特征才match。严格输出JSON对象，例如{"status":"mismatch","features":[],"issues":["发型改变"]}。status只能为match/uncertain/mismatch，features和issues为字符串数组，features与issues最多各6条，每条不超过120字。不能因为接口生成成功就判定合格。要求：${JSON.stringify({ description: input.description, brief: input.brief })}`,
       [input.reference, input.anchor, image].filter((a): a is ImageAsset => Boolean(a)),
       VisualCheckSchema,
       'visual_candidate_review',

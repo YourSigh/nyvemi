@@ -1,3 +1,4 @@
+import { StructuredOutputError } from './structured-error';
 import { requestAgentChat } from './agent-openai';
 import type { AgentModelRequest, AgentModelResult } from '../agent/core';
 import type { z } from 'zod';
@@ -14,7 +15,11 @@ import {
   type SecretStore,
 } from './provider';
 interface ResponseBody {
-  choices?: { message?: { content?: string }; delta?: { content?: string } }[];
+  choices?: {
+    message?: { content?: string };
+    delta?: { content?: string };
+    finish_reason?: string;
+  }[];
   usage?: unknown;
 }
 export class OpenAICompatibleProvider implements LLMProvider {
@@ -36,6 +41,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
     stream: boolean,
     onDelta?: (delta: string) => void,
     signal?: AbortSignal,
+    jsonOutput = false,
+    validate?: (content: string) => void,
   ): Promise<LLMResult> {
     const start = Date.now();
     const requestId = id();
@@ -77,7 +84,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
                             ? 1536
                             : 2500,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
-          ...((purpose === 'conversation_participation' ||
+          ...(((jsonOutput && purpose.startsWith('visual_')) ||
+            purpose === 'conversation_participation' ||
             purpose === 'conversation_delivery_review') &&
           new URL(this.config.baseUrl).hostname === 'api.deepseek.com'
             ? { response_format: { type: 'json_object' } }
@@ -122,14 +130,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
           content: body.choices?.[0]?.message?.content ?? '',
           usage: normalizeUsage(body.usage),
         };
+        if (jsonOutput && body.choices?.[0]?.finish_reason === 'length')
+          throw new StructuredOutputError(purpose, 'truncated');
         if (stream && !result.content)
           throw new Error('Provider 未提供可读取的流，请使用支持流式响应的 Development Build');
         if (stream) onDelta?.(result.content);
       }
-      if (!result.content.trim()) throw new Error('模型返回了空回复');
+      if (!result.content.trim()) {
+        if (jsonOutput) throw new StructuredOutputError(purpose, 'empty');
+        throw new Error('模型返回了空回复');
+      }
+      validate?.(result.content);
       success = true;
       return result;
     } catch (error) {
+      if (error instanceof StructuredOutputError) {
+        safeError = error.message;
+        throw error;
+      }
       const safe =
         error instanceof Error && /^模型请求失败|^模型返回|^Provider/.test(error.message)
           ? error.message
@@ -180,7 +198,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       )
     )
       throw Error('当前模型不支持图片，请选择 deepseek-flash 或自定义视觉模型');
-    const result = await this.call(
+    return this.readStructured(
       [
         {
           role: 'system',
@@ -195,22 +213,24 @@ export class OpenAICompatibleProvider implements LLMProvider {
           ],
         },
       ],
+      schema,
       purpose,
-      false,
-      undefined,
       signal,
     );
-    return this.parseStructured(result.content, schema);
   }
-  private parseStructured<T>(content: string, schema: z.ZodType<T, z.ZodTypeDef, unknown>): T {
+  private parseStructured<T>(
+    content: string,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+    purpose: string,
+  ): T {
     let parsed: unknown;
     try {
-      parsed = JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+      parsed = JSON.parse(content.trim().replace(/^```(?:json)?\s*|\s*```$/g, ''));
     } catch {
-      throw new Error('模型未返回合法 JSON，请重试');
+      throw new StructuredOutputError(purpose, 'json');
     }
     const checked = schema.safeParse(parsed);
-    if (!checked.success) throw new Error('模型结构化输出不符合格式，请重试');
+    if (!checked.success) throw new StructuredOutputError(purpose, 'schema', checked.error.issues);
     return checked.data;
   }
   async structuredOutput<T>(
@@ -219,11 +239,23 @@ export class OpenAICompatibleProvider implements LLMProvider {
     purpose: string,
     signal?: AbortSignal,
   ): Promise<T> {
-    const result = await this.chat(
+    return this.readStructured(
       [...messages, { role: 'system', content: '只返回严格 JSON，不要 Markdown 代码围栏。' }],
+      schema,
       purpose,
       signal,
     );
-    return this.parseStructured(result.content, schema);
+  }
+  private async readStructured<T>(
+    messages: (ChatTurn | VisionTurn)[],
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+    purpose: string,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    let value!: T;
+    await this.call(messages, purpose, false, undefined, signal, true, (content) => {
+      value = this.parseStructured(content, schema, purpose);
+    });
+    return value;
   }
 }

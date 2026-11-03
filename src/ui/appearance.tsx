@@ -3,6 +3,8 @@ import {
   imageRoutingLabel,
   qualityImageSettings,
 } from '../appearance/settings';
+import { StructuredOutputError } from '../providers/structured-error';
+import { id } from '../domain/models';
 import { usesVisualResearch } from '../appearance/model';
 import { ImageProviderError, type ImageRequestFailure } from '../appearance/errors';
 import { pickMeshAvatar } from '../avatar/native';
@@ -68,6 +70,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [failure, setFailure] = useState<ImageRequestFailure>();
+  const [schemaFailure, setSchemaFailure] = useState<StructuredOutputError['details']>();
   const [elapsed, setElapsed] = useState(0);
   const [previewState, setPreviewState] = useState<CharacterInteractionState>('idle');
   const working = useRef(false);
@@ -132,10 +135,23 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     setBusy(label);
     setError('');
     setFailure(undefined);
+    setSchemaFailure(undefined);
     try {
       await action();
     } catch (e) {
       if (e instanceof ImageProviderError) setFailure(e.failure);
+      if (e instanceof StructuredOutputError) {
+        setSchemaFailure(e.details);
+        await runtime.store
+          .put('diagnostics', {
+            id: id(),
+            characterId: cid,
+            createdAt: Date.now(),
+            kind: 'error',
+            data: { event: 'visual_schema', ...e.details },
+          })
+          .catch(() => undefined);
+      }
       setError(e instanceof Error ? e.message : '操作失败，请重试');
     } finally {
       working.current = false;
@@ -229,11 +245,26 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             : '描述你想见到的人，也可以上传一张参考图。'}
       </Note>
       <ErrorText text={error} />
-      {failure ? (
+      {failure || schemaFailure ? (
         <Details title="错误详情">
-          <Note>错误码：{failure.code ?? '服务商未提供'}</Note>
-          {failure.parameter ? <Note>参数：{failure.parameter}</Note> : null}
-          <Note>请求编号：{failure.requestId ?? '服务商未提供'}</Note>
+          {failure ? (
+            <>
+              <Note>错误码：{failure.code ?? '服务商未提供'}</Note>
+              {failure.parameter ? <Note>参数：{failure.parameter}</Note> : null}
+              <Note>请求编号：{failure.requestId ?? '服务商未提供'}</Note>
+            </>
+          ) : null}
+          {schemaFailure ? (
+            <>
+              <Note>阶段：{schemaFailure.stage}</Note>
+              <Note>原因：{schemaFailure.reason}</Note>
+              {schemaFailure.issues.map((issue, i) => (
+                <Note key={i}>
+                  字段：{issue.path.join('.') || '$'}（{issue.code}）
+                </Note>
+              ))}
+            </>
+          ) : null}
         </Details>
       ) : null}
       {!loaded ? <Busy label="读取形象…" /> : null}

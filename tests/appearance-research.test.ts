@@ -486,3 +486,64 @@ it('Seedream uses the DS design in new requests and caches different designs ind
   await expect(p.candidate({ ...input, imagePrompt: undefined }, 0)).rejects.toThrow('缺少DS');
   expect(http).toHaveBeenCalledTimes(2);
 });
+
+it('normalizes display observations and harmless extra metadata while keeping the identity decision strict', async () => {
+  const { VisualCheckSchema } = await import('../src/appearance/research');
+  const result = VisualCheckSchema.parse({
+    checks: [
+      {
+        status: 'uncertain',
+        features: Array(9).fill('a'.repeat(200)),
+        issues: ['看不清'],
+        explanation: 'extra display note',
+      },
+    ],
+    reasoning: 'not used',
+  });
+  expect(result.status).toBe('uncertain');
+  expect(result.features).toHaveLength(6);
+  expect(result.features[0]).toHaveLength(120);
+  expect(result.issues).toEqual(['看不清']);
+  expect(result).not.toHaveProperty('explanation');
+  for (const bad of [
+    { status: 'approved', features: [], issues: [] },
+    { status: 'match', features: [1], issues: [] },
+    { checks: [match, match] },
+    { status: 'match', issues: [] },
+  ])
+    expect(VisualCheckSchema.safeParse(bad).success).toBe(false);
+});
+it('ignores planning comments and extra observations but does not coerce the identity gate or invent a missing prompt', async () => {
+  const web = { search: vi.fn(), read: vi.fn() };
+  const model: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (_m, schema, purpose) =>
+      schema.parse(
+        purpose === 'visual_identity_planning'
+          ? {
+              brief: {
+                ...brief,
+                subject: null,
+                namedCharacter: false,
+                recognizableFeatures: Array(9).fill('蓝发'),
+                comment: 'extra',
+              },
+              reasoning: 'extra',
+            }
+          : { comment: 'no prompt supplied' },
+      ),
+  };
+  const director = new DSVisualDirector(async () => model, web, assets, hash);
+  expect(await director.research({ description: '原创蓝发角色', mode: 'text' })).toMatchObject({
+    status: 'ready',
+    brief: { subject: '原创角色', recognizableFeatures: Array(8).fill('蓝发') },
+  });
+  expect(web.search).not.toHaveBeenCalled();
+  await expect(
+    director.composePrompt({ description: '原创蓝发角色', mode: 'text' }),
+  ).rejects.toThrow();
+  model.structuredOutput = async (_m, schema) =>
+    schema.parse({ brief: { ...brief, namedCharacter: 'false' }, queries: [] });
+  await expect(director.classify({ description: '原创蓝发角色', mode: 'text' })).rejects.toThrow();
+});
