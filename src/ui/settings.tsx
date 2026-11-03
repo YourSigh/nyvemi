@@ -194,7 +194,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
           <Card>
             <Row title="聊天模型" onPress={() => navigation.navigate('Provider')} />
             <Row
-              title="豆包画图与识图"
+              title="画图与识图"
               onPress={() => navigation.navigate('MediaSettings', { characterId: cid })}
             />
             <Row

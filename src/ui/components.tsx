@@ -173,7 +173,11 @@ export function TextButton({
   );
 }
 /** Advanced forms are absent until requested, including their keyboard focus targets. */
-export function Details({ title, children }: PropsWithChildren<{ title: string }>) {
+export function Details({
+  title,
+  children,
+  onOpenChange,
+}: PropsWithChildren<{ title: string; onOpenChange?(open: boolean): void }>) {
   const [open, setOpen] = useState(false);
   const { palette, transitioning } = useTheme();
   return (
@@ -183,7 +187,11 @@ export function Details({ title, children }: PropsWithChildren<{ title: string }
         accessibilityLabel={title}
         accessibilityState={{ expanded: open, disabled: transitioning }}
         disabled={transitioning}
-        onPress={() => setOpen((v) => !v)}
+        onPress={() => {
+          const next = !open;
+          setOpen(next);
+          onOpenChange?.(next);
+        }}
         style={{
           minHeight: 44,
           flexDirection: 'row',

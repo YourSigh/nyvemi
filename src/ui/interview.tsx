@@ -78,6 +78,7 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
           ref={scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={s.thread}
           onContentSizeChange={() => {
             if (!finished) scroll.current?.scrollToEnd({ animated: true });
@@ -118,7 +119,12 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                   {[draft.answers.relationship, draft.answers.tone].filter(Boolean).join(' · ')}
                 </Note>
               </Card>
-              <Details title="查看或修改全部回答">
+              <Details
+                title="查看或修改全部回答"
+                onOpenChange={(open) => {
+                  if (!open) setEditing(undefined);
+                }}
+              >
                 {interviewQuestions.map((q) => (
                   <Card key={q.key}>
                     <Text style={{ color: palette.ink, fontWeight: '600' }}>{q.question}</Text>

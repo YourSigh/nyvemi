@@ -177,7 +177,7 @@ function Application() {
                     <Stack.Screen
                       name="MediaSettings"
                       component={MediaSettingsScreen}
-                      options={{ title: '图片与识图' }}
+                      options={{ title: '画图与识图' }}
                     />
                     <Stack.Screen
                       name="Plugins"
@@ -198,7 +198,7 @@ function Application() {
                       name="Provider"
                       component={ProviderScreen}
                       initialParams={resumeProvider ? { onboarding: true, skipTheme } : undefined}
-                      options={{ title: '模型连接' }}
+                      options={{ title: '聊天模型' }}
                     />
                     <Stack.Screen
                       name="Theme"
@@ -232,7 +232,7 @@ function Application() {
                     <Stack.Screen
                       name="Transfer"
                       component={TransferScreen}
-                      options={{ title: '角色迁移' }}
+                      options={{ title: '角色备份与恢复' }}
                     />
                     <Stack.Screen
                       name="Developer"

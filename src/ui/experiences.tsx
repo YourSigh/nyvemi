@@ -29,7 +29,7 @@ export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
   return (
     <Page>
       <Heading>她遇到的事</Heading>
-      <Note>有些只留在她自己这里，有些会让她想起你。经历不等于新闻推荐，也不代表意识。</Note>
+      <Note>有些留在她自己这里，有些会让她想起你。</Note>
       <ErrorText text={error} />
       {items.length ? (
         items.map((e) => (

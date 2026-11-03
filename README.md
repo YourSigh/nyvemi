@@ -12,6 +12,8 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
+**0.15.0 simplifies setup and everyday screens.** New users enter a DeepSeek Key for chat/vision and an optional Doubao Key for drawing. Addresses/models and custom vision stay folded under explicit advanced controls; existing custom configurations are preserved. Settings prioritizes five everyday actions. Forms use compact spacing and only enable scrolling when content actually overflows or the keyboard is visible. Character candidates fit in one row and decomposition requires a separate confirmation. No preset character or its artwork is shipped. See [UI changes and verification limits](docs/UI_SIMPLIFICATION.md).
+
 **0.14.5 preserves requested character identity in image prompts and repairs chat failure handling.** Candidate prompts retain the named character and Q-style request rather than asking for an original redesign. An optional cached text brief only retains appearance constraints quoted from the user, and references take priority. “换一批” explicitly starts a new paid batch; ordinary retries preserve receipts and legacy download keys. DSH now retains RN cancellation reasons and reports actionable, redacted failure categories. See [evidence and remaining limits](docs/CHARACTER_IDENTITY_AND_CHAT_FIX.md).
 
 **0.14.4 applies the first color choice immediately.** “就这个感觉” now interprets, animates and persists the chosen palette before opening provider setup. Common colors work locally without a Key; ambiguous descriptions can explicitly continue through model setup for semantic interpretation. Saving the provider and restarting preserve the chosen colors. See [flow repair and acceptance evidence](docs/OPENING_COLOR_FIX.md).
@@ -26,7 +28,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 **0.13.0 embeds the official DeepSeek Harness core in the Android app.** DSH owns the model → tools → observations loop and durable sessions. Only `send_message` creates a visible bubble; ordinary model text stays internal, and `wait` ends a turn without sending anything. Tools connect the existing memory, experiences, interests, web search/fetch, guest Bilibili metadata, theme changes and durable wakeups. User-requested delivery and optional autonomous thoughts are distinct. See [integration, real-API evidence and limits](docs/DSH_EMBEDDING.md).
 
-The existing PSD2Live WASM/WebGL character, one-third stage, keyboard behavior and pink-white theme remain. Rig compilation still runs on the development computer; the phone loads bundled/imported rigs. No physical-device test was performed. Subjective character quality and Android background delivery remain user acceptance items.
+The existing PSD2Live WASM/WebGL character, one-third stage, keyboard behavior and pink-white theme remain. Rig compilation still runs on the development computer; the phone loads user-imported rigs. No physical-device test was performed. Subjective character quality and Android background delivery remain user acceptance items.
 
 ## Local-first and BYOK
 
@@ -38,25 +40,25 @@ API keys use Expo SecureStore backed by Android Keystore. They do not belong in 
 
 ## Provider setup
 
-On first launch: Welcome → Provider → character questions → persona generation → appearance creation → wake preview → Chat.
+On first launch: choose colors → enter a DeepSeek Key → character questions → persona → optional appearance/wake preview → Chat. Appearance can be configured later.
 
-- Provider: OpenAI-compatible.
-- Base URL: the API root, often `https://provider.example/v1`; do not append `/chat/completions`.
-- API Key: stored securely; blank preserves the saved key only for the same origin. Switching provider origins requires entering the new service's key.
-- Model: the service's model identifier.
-- Use **Test connection** to make one small request; model usage is billable by your provider.
+- Chat and vision default to DeepSeek `deepseek-flash`; only the Key is required.
+- Drawing defaults to Doubao/Seedream; enter your own Ark Key in appearance setup or Settings → 画图与识图. Entering a new drawing Key enables chat drawing; autonomous paid drawing remains a separate opt-in.
+- “自定义模型” exposes Base URL and model identifiers. Existing custom endpoints remain selected; folding the editor never resets them.
+- Keys are stored securely. Blank preserves a saved key for the same origin; a new service origin requires its own key.
+- “测试连接（一次请求）” sends one small billable model request. Ordinary Save does not invoke a model.
 
 The adapter exposes `chat`, `streamChat`, schema-validated `structuredOutput<T>` and native `toolChat` for DSH. The selected model must support OpenAI-compatible tool calls. Native streaming uses `expo/fetch`. Provider requests have timeouts, bounded output, sanitized errors and usage metrics. Gemini remains future work; appearance creation has interchangeable Mock and Seedream `ImageProvider` implementations. OpenRouter or a compatible local service can use the existing adapter.
 
 ### DeepSeek
 
-Choose the DeepSeek preset: Base URL `https://api.deepseek.com`, model `deepseek-flash`, and your DeepSeek key. Ordinary companion chat sends `thinking: { type: "disabled" }` to the DeepSeek host. Model identifiers remain editable. See [DeepSeek API documentation](https://api-docs.deepseek.com/guides/thinking_mode/).
+DeepSeek is preselected: Base URL `https://api.deepseek.com`, model `deepseek-flash`, and your DeepSeek key. Ordinary companion chat sends `thinking: { type: "disabled" }` to the DeepSeek host. Model identifiers remain editable. See [DeepSeek API documentation](https://api-docs.deepseek.com/guides/thinking_mode/).
 
 For Ollama or a LAN endpoint, use its OpenAI-compatible `/v1` API. Local/private IPv4 HTTP URLs are allowed; public endpoints require HTTPS. An emulator can reach the host at `http://10.0.2.2:PORT/v1`. For a server without auth, use `local` as the key placeholder.
 
 ## Persona and natural chat
 
-Creation is a 12-round conversational interview: one question at a time, a short model acknowledgement, then the next question. Progress is explicit; all but the name can be skipped. A local draft survives interruption, and a review/edit step precedes final persona generation. Appearance, relationship, tone, independent interests, boundaries and a venting scenario are covered. Offline acknowledgements are explicitly labeled as local guidance. It uses natural questions rather than personality percentages. The model generates a validated Persona. A **桶砸** development persona is also available; it skips persona generation, but does not invent model responses or bypass BYOK for chat.
+Creation is a 12-round conversational interview: one question at a time, a short model acknowledgement, then the next question. Progress is explicit; all but the name can be skipped. A local draft survives interruption, and a review/edit step precedes final persona generation. Appearance, relationship, tone, independent interests, boundaries and a venting scenario are covered. Offline acknowledgements are explicitly labeled as local guidance. It uses natural questions rather than personality percentages. The model generates a validated Persona. New roles are generated from their own interview answers; the app includes no authored demo persona.
 
 Chat retains avatars, timestamps, local history and incoming-bubble animation. DSH chooses whether to send zero or several independent messages. Only completed `send_message` arguments appear as bubbles; model generation shows a typing status. Composition time scales with message length, up to 12 seconds per bubble. `wait` does not create a placeholder; `pause_contact` persists an explicit request for space. Recent chat, up to eight relevant memories and a bounded DSH session provide context; all history is not resent indefinitely.
 
@@ -166,11 +168,12 @@ Normal tests use Node's SQLite and deterministic providers/HTTP fixtures. They d
 ## Build
 
 ```bash
-npx expo prebuild --platform android --no-install
-cd android
-./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a
-NODE_ENV=production ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+EXPO_NO_DOTENV=1 npx expo prebuild --platform android --no-install
+npm run android:build -- -PreactNativeArchitectures=arm64-v8a
+npm run android:release -- -PreactNativeArchitectures=arm64-v8a --console=plain
 ```
+
+The release command cleans App outputs to remove obsolete React assets and checks the APK for developer-only character assets and local credentials.
 
 The generated Expo project's release build currently uses the development signing key for sideload testing. It is not a Play Store signing setup. Configure your own release signing before distribution. The standalone release APK embeds JavaScript and does not need Metro. Do not commit APKs, AARs, build caches, keys or credentials. First builds may download large React Native/Gradle artifacts.
 
@@ -238,11 +241,11 @@ Developer Mode includes a preview of all ten interaction states and individual a
 
 ## Character creation (0.7.0)
 
-First creation includes appearance setup before Chat. Choose text, text plus reference, or direct reference animation. Later use Settings → 角色形象 to change only the appearance. Mock art is a free pipeline demonstration, not a decomposition of the uploaded reference. Real Seedream calls are separate opt-in operations with secure keys and a persistent cache. Incomplete facial layers stop the process instead of silently saving an invalid rig. The existing state Runtime handles breathing, blinking, thinking, talking, happy and sleepy, including the wake preview. Bundle v3 transfers raster layers alongside the person. See [setup, cost, recovery and current limitations](docs/CHARACTER_CREATION.md).
+First creation offers appearance setup before Chat, with a “先聊天，稍后设置形象” option. Choose text, text plus reference, or direct reference animation. Later use Settings → 角色形象 to change only the appearance. Mock art is reserved for injected development/test providers and is not exposed as a user creation mode. Real Seedream calls are separate opt-in operations with secure keys and a persistent cache. Incomplete facial layers stop the process instead of silently saving an invalid rig. The existing state Runtime handles breathing, blinking, thinking, talking, happy and sleepy, including the wake preview. Bundle v3 transfers raster layers alongside the person. See [setup, cost, recovery and current limitations](docs/CHARACTER_CREATION.md).
 
 ## Parameter-driven mesh avatars (0.8.0)
 
-Settings → 角色形象 → 试试简化桶砸皮套 previews a bundled real mesh rig, then saves it without changing the person or chat history. `.p2lrt` import works for other characters. Head X/Y/Z, independent gaze/blink, mouth opening/form, body angle, breath and separate ponytail/outfit physics run inside PSD2Live's MIT runtime. Chat states set parameter targets and never rotate or scale the whole model View. Existing cutout rigs remain compatible but are not described as VTuber models.
+Settings → 角色形象 → 导入已有形象 loads `.p2lrt` models without changing the person or chat history. Developer reference artwork lives under `dev-assets/characters`, is blocked by Metro and is excluded from the APK. Head X/Y/Z, independent gaze/blink, mouth opening/form, body angle, breath and separate ponytail/outfit physics run inside PSD2Live's MIT runtime. Chat states set parameter targets and never rotate or scale the whole model View. Existing cutout rigs remain compatible but are not described as VTuber models.
 
 The automatic source-to-rig toolchain is local desktop tooling (`npm run avatar:setup`, `avatar:candidates`, `avatar:split`, `avatar:rig`), with an optional reference and cached paid image responses. The phone plays its outputs offline; it does not contain the desktop compiler. Character bundles with mesh avatars use v4. See [full implementation and validation](docs/VTUBER_PIPELINE.md).
 

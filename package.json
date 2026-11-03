@@ -2,7 +2,7 @@
   "name": "nyvemi",
   "description": "Android-first local-first AI companion",
   "license": "AGPL-3.0-only",
-  "version": "0.14.5",
+  "version": "0.15.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -12,7 +12,7 @@
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm test",
     "android:build": "cd android && NODE_ENV=development ./gradlew assembleDebug",
-    "android:release": "cd android && NODE_ENV=production ./gradlew assembleRelease",
+    "android:release": "bash scripts/build-release.sh",
     "format": "prettier --write App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
     "format:check": "prettier --check App.tsx index.ts 'src/**/*.{ts,tsx}' 'tests/**/*.ts' 'plugins/*.js' 'scripts/*.cjs' eslint.config.js vitest.config.mts '*.json' '*.md' 'docs/*.md' ",
     "verify": "bash scripts/verify.sh",
