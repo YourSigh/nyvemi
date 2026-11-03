@@ -1,5 +1,6 @@
 import { MediaService } from '../media/service';
 import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
+import { planVisualBrief } from '../appearance/brief';
 import { PluginManager } from '../extensions/manager';
 import * as Crypto from 'expo-crypto';
 import { CompanionAgent } from '../agent/service';
@@ -198,6 +199,7 @@ async function createRuntime() {
               imageAssets,
               imageHash,
               nativeFetch as unknown as typeof fetch,
+              (description) => planVisualBrief(description, provider),
             );
       },
       imageAssets,

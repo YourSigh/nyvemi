@@ -12,6 +12,8 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
+**0.14.5 preserves requested character identity in image prompts and repairs chat failure handling.** Candidate prompts retain the named character and Q-style request rather than asking for an original redesign. An optional cached text brief only retains appearance constraints quoted from the user, and references take priority. “换一批” explicitly starts a new paid batch; ordinary retries preserve receipts and legacy download keys. DSH now retains RN cancellation reasons and reports actionable, redacted failure categories. See [evidence and remaining limits](docs/CHARACTER_IDENTITY_AND_CHAT_FIX.md).
+
 **0.14.4 applies the first color choice immediately.** “就这个感觉” now interprets, animates and persists the chosen palette before opening provider setup. Common colors work locally without a Key; ambiguous descriptions can explicitly continue through model setup for semantic interpretation. Saving the provider and restarting preserve the chosen colors. See [flow repair and acceptance evidence](docs/OPENING_COLOR_FIX.md).
 
 **0.14.3 fixes generated-image downloads on Android.** The download adapter no longer calls `AbortSignal.timeout/any`, which are absent from React Native's AbortSignal polyfill. It uses a cancellable controller/timer instead. Regression tests use that actual polyfill and exercise downloads, three-candidate creation and cached retry without another generation POST. See [root cause and validation](docs/IMAGE_DOWNLOAD_FIX.md).

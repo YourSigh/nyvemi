@@ -1,4 +1,5 @@
 import type { MeshAvatar } from '../avatar/model';
+import type { VisualBrief } from './brief';
 import { z } from 'zod';
 export const ImageAssetSchema = z
   .object({
@@ -42,6 +43,9 @@ export interface VisualInput {
   description: string;
   mode: CreationMode;
   reference?: ImageAsset;
+  brief?: VisualBrief;
+  promptVersion?: 2;
+  generationId?: string;
 }
 export interface ImageSettings {
   id: 'images';
@@ -69,6 +73,9 @@ export interface VisualDraft {
   meshAvatar?: MeshAvatar;
   saved?: boolean;
   bodyRepairApplied?: boolean;
+  brief?: VisualBrief;
+  promptVersion?: 2;
+  generationId?: string;
 }
 export interface ImageRequestCache {
   id: string;

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { VisualBrief } from './brief';
 import type { Storage } from '../storage/store';
 import {
   type CharacterRig,
@@ -24,8 +25,10 @@ const Output = z.object({
     .optional(),
 });
 const ResponseSchema = z.object({ data: z.array(Output).min(1).max(17) });
-export const generationPrompt = (description: string) =>
-  `Create one original character reference illustration: ${description}. Front facing, full body including feet, neutral symmetrical relaxed pose, both eyes open, arms separated from torso, clear anatomy and silhouette, simple plain background. No text, no props covering face or body, no collage. Suitable for independent head, hair, limbs, eyes and mouth animation.`;
+export const generationPrompt = (description: string, brief?: VisualBrief) =>
+  `绘制用户指定角色的单人立绘。用户原始要求：${JSON.stringify(description)}。${brief ? `身份简报：${JSON.stringify(brief)}。` : ''}
+身份优先：若用户指定已有作品或角色，必须画该角色，不是相似的原创替代品。保留标志性发型、发色、瞳色、服装和饰物；参考图存在时以参考图及用户明确改动为准。用户要求Q版/Chibi时使用可爱的约2至3头身比例，不要画成常规比例的幼年新角色。
+动画友好：正面，头摆正，全身含脚，中立站姿，双手自然分开且不挡身体、双腿自然分开，双眼睁开，简单干净背景。保留角色原本的不对称发型和服装设计；只简化碎发与细小挂件，不为Rig重设计角色。不增加皇冠、武器或无关装饰。无文字、无拼贴。`;
 export const decompositionPrompt =
   'Decompose this character into animation-ready transparent PNG layers. Separate: body, head (face skin with eyes and mouth removed and cleanly filled), hair, arms, eyes (both open eyes), mouth. English names: body, head, hair, arm, eyes, mouth. Complete occluded anatomy, hair and face beneath removed parts. Background only in base layer; do not duplicate the character in base. Preserve original alignment and identity. Each layer contains only the named part. Do not leave eyes or mouth painted on the head layer.';
 export class SeedreamImageProvider implements ImageProvider {
@@ -38,9 +41,13 @@ export class SeedreamImageProvider implements ImageProvider {
     private assets: ImageAssets,
     private hash: (text: string) => Promise<string>,
     private http: typeof fetch = fetch,
+    private planner?: (description: string) => Promise<VisualBrief | undefined>,
   ) {
     this.config = validateImageSettings(config);
     this.identity = `${this.config.baseUrl}:${config.imageModel}:${config.layerModel}:v1`;
+  }
+  async prepare(input: VisualInput) {
+    return this.planner?.(input.description);
   }
   private async cached<T extends ImageAsset | CharacterRig>(
     operation: string,
@@ -123,10 +130,21 @@ export class SeedreamImageProvider implements ImageProvider {
       : undefined;
     return this.cached(
       'candidate',
-      [input.description, fingerprint, index],
+      input.promptVersion === 2
+        ? [
+            input.description,
+            fingerprint,
+            index,
+            'identity-v2',
+            input.brief ?? null,
+            input.generationId ?? null,
+          ]
+        : [input.description, fingerprint, index],
       {
         model: this.config.imageModel,
-        prompt: generationPrompt(input.description) + ` Design variation ${index + 1}.`,
+        prompt:
+          generationPrompt(input.description, input.brief) +
+          `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
         size: '2K',
         response_format: 'url',
         watermark: false,

@@ -1,10 +1,13 @@
 import { MeshAvatarSchema } from '../avatar/model';
+import { id } from '../domain/models';
+import type { VisualBrief } from './brief';
 import type { Storage } from '../storage/store';
 import {
   type CharacterRig,
   type ImageAsset,
   type ImageSettings,
   type VisualInput,
+  type VisualDraft,
   validateRig,
 } from './model';
 import { mockCandidate, mockRig } from './mock';
@@ -16,6 +19,7 @@ export interface ImageAssets {
 }
 export interface ImageProvider {
   identity: string;
+  prepare?(input: VisualInput): Promise<VisualBrief | undefined>;
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
   split(image: ImageAsset): Promise<CharacterRig>;
   repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
@@ -23,7 +27,7 @@ export interface ImageProvider {
 export class MockImageProvider implements ImageProvider {
   identity = 'mock-v1';
   async candidate(input: VisualInput, index: number) {
-    return mockCandidate(`${input.description}:${index}`);
+    return mockCandidate(`${input.description}:${input.generationId ?? ''}:${index}`);
   }
   async split(image: ImageAsset) {
     return mockRig(
@@ -37,7 +41,11 @@ export class VisualCreationService {
     private provider: () => Promise<ImageProvider>,
     private assets: ImageAssets,
   ) {}
-  async generate(characterId: string, input: VisualInput) {
+  async generate(
+    characterId: string,
+    input: VisualInput,
+    options: { regenerate?: boolean; onStage?(stage: 'brief' | 'generation'): void } = {},
+  ) {
     if (!input.description.trim() || input.description.length > 2000)
       throw new Error('请用 1～2000 字描述形象');
     if (input.mode !== 'text' && !input.reference) throw new Error('请先选择参考图');
@@ -52,11 +60,19 @@ export class VisualCreationService {
       if (!(await this.store.get('characters', characterId))) throw new Error('角色不存在');
       const provider = await this.provider();
       const previous = await this.store.get('visualDrafts', characterId);
+      if (
+        options.regenerate &&
+        previous &&
+        previous.input.mode !== 'animate' &&
+        previous.candidates.length < 3
+      )
+        throw new Error('上一批候选尚未完成，请先继续生成或核对服务商记录，避免重复付费');
       const same =
+        !options.regenerate &&
         previous &&
         previous.providerId === provider.identity &&
         JSON.stringify(previous.input) === JSON.stringify(input);
-      const draft = same
+      const draft: VisualDraft = same
         ? previous
         : {
             id: characterId,
@@ -65,14 +81,32 @@ export class VisualCreationService {
             providerId: provider.identity,
             input,
             candidates: [] as ImageAsset[],
+            promptVersion: 2,
+            ...(options.regenerate ? { generationId: id() } : {}),
           };
       await this.store.put('visualDrafts', draft);
+      if (!same && input.mode !== 'animate' && provider.prepare) {
+        options.onStage?.('brief');
+        draft.brief = await provider.prepare(input);
+        await this.store.put('visualDrafts', draft);
+      }
       if (input.mode === 'animate') {
         draft.selected = input.reference;
         await this.store.put('visualDrafts', draft);
       } else {
+        options.onStage?.('generation');
         for (let i = draft.candidates.length; i < 3; i++) {
-          draft.candidates.push(await provider.candidate(input, i));
+          draft.candidates.push(
+            await provider.candidate(
+              {
+                ...input,
+                brief: draft.brief,
+                promptVersion: draft.promptVersion,
+                generationId: draft.generationId,
+              },
+              i,
+            ),
+          );
           await this.store.put('visualDrafts', draft);
         }
       }

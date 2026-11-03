@@ -227,6 +227,7 @@ function purposeLabel(purpose: string): string {
         chat: '聊天',
         agent_step: '角色思考与工具',
         image_understanding: '看图',
+        visual_identity_planning: '角色外观理解',
         chat_image_generation: '聊天生图',
         persona_generation: '人格生成',
         persona_interview: '角色访谈',

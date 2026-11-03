@@ -65,20 +65,22 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         setDescription(c.persona.appearance || '正面全身，可爱的二次元角色，简单背景');
         if (settings) setConfig(settings);
         setHasKey(Boolean(secret));
-        if (d && !d.saved) {
+        if (d) {
           setDraft(d);
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
-          setEditing(
-            d.rig || d.meshAvatar
-              ? false
-              : d.input.mode !== 'animate'
-                ? d.candidates.length !== 3
-                : !d.selected,
-          );
-          setRig(d.rig);
-          setMeshAvatar(d.meshAvatar);
+          if (!d.saved) {
+            setEditing(
+              d.rig || d.meshAvatar
+                ? false
+                : d.input.mode !== 'animate'
+                  ? d.candidates.length !== 3
+                  : !d.selected,
+            );
+            setRig(d.rig);
+            setMeshAvatar(d.meshAvatar);
+          }
         }
         setLoaded(true);
       })
@@ -136,17 +138,30 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       setEditing(false);
       setDraft(await runtime.store.get('visualDrafts', cid));
     });
-  const generate = () =>
+  const generate = (regenerate = false) =>
     void run(mode === 'animate' ? '正在保存参考图' : '正在生成形象', async () => {
       await saveConfig();
-      const next = await runtime.visuals.generate(cid, {
-        description,
-        mode,
-        reference: mode === 'text' ? undefined : reference,
-      });
-      setDraft(next);
-      setRig(undefined);
-      setEditing(false);
+      try {
+        const next = await runtime.visuals.generate(
+          cid,
+          {
+            description,
+            mode,
+            reference: mode === 'text' ? undefined : reference,
+          },
+          {
+            regenerate,
+            onStage: (stage) => setBusy(stage === 'brief' ? '正在确认角色特征' : '正在生成形象'),
+          },
+        );
+        setDraft(next);
+        setRig(undefined);
+        setEditing(false);
+      } catch (error) {
+        setDraft(await runtime.store.get('visualDrafts', cid));
+        setEditing(true);
+        throw error;
+      }
     });
   const finish = () =>
     void run('正在保存形象', async () => {
@@ -337,7 +352,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           <Button
             title={mode === 'animate' ? '使用这张参考图' : '生成 3 张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
-            onPress={generate}
+            onPress={() => generate()}
           />
         </>
       ) : null}
@@ -366,6 +381,25 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               ),
             )}
           </View>
+          {mode !== 'animate' ? (
+            <Button
+              title={config.provider === 'seedream' ? '换一批候选图（重新付费）' : '换一批候选图'}
+              secondary
+              disabled={Boolean(busy)}
+              onPress={() => {
+                if (config.provider === 'seedream')
+                  Alert.alert(
+                    '重新生成3张候选图',
+                    '会使用你自己的生图额度。当前聊天和已保存形象会保留。',
+                    [
+                      { text: '取消', style: 'cancel' },
+                      { text: '重新生成', onPress: () => generate(true) },
+                    ],
+                  );
+                else generate(true);
+              }}
+            />
+          ) : null}
           {mode === 'animate' ? (
             <Button title="整理图层并生成动作" disabled={Boolean(busy)} onPress={() => select()} />
           ) : null}

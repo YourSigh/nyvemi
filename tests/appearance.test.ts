@@ -300,3 +300,154 @@ it('illustrates ordinary chat prompts without rig constraints and reuses paid re
   await expect(provider.illustrate('another', undefined, canceled.signal)).rejects.toThrow('取消');
   expect(http).toHaveBeenCalledTimes(1);
 });
+
+it('locks named-character identity and shares one cached brief across all candidates and retries', async () => {
+  const { store, assets } = await setup();
+  const brief = {
+    subject: '原神·纳西妲',
+    namedCharacter: true,
+    recognizableFeatures: [
+      '银白发带绿色发梢，保留原本侧马尾',
+      '绿色眼睛',
+      '白绿配色与叶片纹样服饰',
+    ],
+    style: 'Q版，约2至3头身',
+    confidence: 0.95,
+  };
+  const planner = vi.fn(async () => brief),
+    prompts: string[] = [];
+  const http = vi.fn<typeof fetch>(async (_url, init) => {
+    prompts.push(JSON.parse(String(init?.body)).prompt);
+    return new Response(
+      JSON.stringify({ data: [{ url: 'https://cdn.example/named', size: '1024x1024' }] }),
+    );
+  });
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'test-key',
+    store,
+    assets,
+    hash,
+    http,
+    planner,
+  );
+  const service = new VisualCreationService(store, async () => provider, assets);
+  const input = { description: 'Q版原神纳西妲', mode: 'text' as const };
+  const draft = await service.generate('c', input);
+  expect(draft.brief).toEqual(brief);
+  expect(draft.input.description).toBe(input.description);
+  expect(planner).toHaveBeenCalledOnce();
+  expect(prompts).toHaveLength(3);
+  for (const prompt of prompts) {
+    expect(prompt).toContain('原神·纳西妲');
+    expect(prompt).toContain('绿色眼睛');
+    expect(prompt).toContain('保留标志性发型');
+    expect(prompt).not.toContain('Create one original');
+    expect(prompt).not.toContain('Design variation');
+  }
+  await new VisualCreationService(store, async () => provider, assets).generate('c', input);
+  expect(planner).toHaveBeenCalledOnce();
+  expect(http).toHaveBeenCalledTimes(3);
+});
+it('makes an explicit new candidate batch without reusing old images, then resumes that batch normally', async () => {
+  const { store, assets } = await setup();
+  const http = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({ data: [{ url: 'https://cdn.example/new', size: '1024x1024' }] }),
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'test-key',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  const service = new VisualCreationService(store, async () => provider, assets);
+  const input = { description: 'generic original humanoid character', mode: 'text' as const };
+  const original = await service.generate('c', input);
+  const fresh = await service.generate('c', input, { regenerate: true });
+  expect(fresh.generationId).toBeTruthy();
+  expect(fresh.candidates.map((a) => a.uri)).not.toEqual(original.candidates.map((a) => a.uri));
+  expect(http).toHaveBeenCalledTimes(6);
+  expect((await service.generate('c', input)).candidates).toEqual(fresh.candidates);
+  expect(http).toHaveBeenCalledTimes(6);
+});
+it('does not bypass an unfinished paid batch with another regeneration request', async () => {
+  const { store, assets } = await setup();
+  const provider = new MockImageProvider();
+  vi.spyOn(provider, 'candidate').mockRejectedValueOnce(Error('unfinished'));
+  const service = new VisualCreationService(store, async () => provider, assets);
+  const input = { description: 'character', mode: 'text' as const };
+  await expect(service.generate('c', input)).rejects.toThrow('unfinished');
+  await expect(service.generate('c', input, { regenerate: true })).rejects.toThrow('尚未完成');
+  expect((await service.generate('c', input)).candidates).toHaveLength(3);
+});
+it('resumes legacy received image results with the old cache key and no model re-planning', async () => {
+  const { store, assets } = await setup();
+  const planner = vi.fn(async () => undefined);
+  const http = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({ data: [{ url: 'https://cdn.example/legacy', size: '1024x1024' }] }),
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'key',
+    store,
+    assets,
+    hash,
+    http,
+    planner,
+  );
+  const input = { description: 'legacy paid character', mode: 'text' as const };
+  const download = vi.spyOn(assets, 'download');
+  download.mockRejectedValueOnce(Error('CDN failed'));
+  await expect(provider.candidate(input, 0)).rejects.toThrow('CDN failed');
+  await store.put('visualDrafts', {
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: provider.identity,
+    input,
+    candidates: [],
+  });
+  const draft = await new VisualCreationService(store, async () => provider, assets).generate(
+    'c',
+    input,
+  );
+  expect(draft.candidates).toHaveLength(3);
+  expect(planner).not.toHaveBeenCalled();
+  expect(http).toHaveBeenCalledTimes(3);
+});
+it('falls back to the literal image request if chat planning is unavailable or uncertain', async () => {
+  const { planVisualBrief } = await import('../src/appearance/brief');
+  expect(
+    await planVisualBrief('自定义角色', async () => {
+      throw Error('no chat key');
+    }),
+  ).toBeUndefined();
+});
+it('does not let a confident text model invent canonical hair or accessories', async () => {
+  const { groundedVisualBrief } = await import('../src/appearance/brief');
+  const brief = groundedVisualBrief('Q版原神纳西妲，绿色眼睛，白绿服装', {
+    subject: '原神 纳西妲',
+    namedCharacter: true,
+    style: 'Q版',
+    confidence: 0.99,
+    recognizableFeatures: ['绿色眼睛', '浅绿双丸子头', '皇冠', '白绿服装'],
+  });
+  expect(brief?.recognizableFeatures).toEqual(['绿色眼睛', '白绿服装']);
+  expect(
+    groundedVisualBrief('自定义角色', {
+      subject: '桶砸',
+      namedCharacter: true,
+      style: '',
+      confidence: 0.99,
+      recognizableFeatures: [],
+    }),
+  ).toBeUndefined();
+});
