@@ -13,6 +13,7 @@ import { z } from 'zod';
 export interface MediaPorts {
   files: MediaFiles;
   generationIdentity?(): Promise<string>;
+  generationIdentityAliases?(): Promise<string[]>;
   hash(text: string): Promise<string>;
   secret(baseUrl: string, reuse: boolean): Promise<string | null>;
   chatVision?(): Promise<{ baseUrl: string; model: string; key: string | null } | null>;
@@ -194,7 +195,23 @@ export class MediaService {
     const lock = `media-draw:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 180000))) throw Error('正在画一张图，请稍候');
     try {
-      const existing = await this.store.get('mediaDrawRequests', requestId);
+      let existing = await this.store.get('mediaDrawRequests', requestId);
+      if (!existing) {
+        for (const identity of (await this.ports.generationIdentityAliases?.()) ?? []) {
+          const oldId = await this.ports.hash(
+            JSON.stringify([cid, text, reference?.fingerprint, identity]),
+          );
+          if (oldId === requestId) continue;
+          const old = await this.store.get('mediaDrawRequests', oldId);
+          if (!old) continue;
+          existing = { ...old, id: requestId };
+          await this.store.atomic(async (tx) => {
+            await tx.put('mediaDrawRequests', existing!);
+            await tx.remove('mediaDrawRequests', oldId);
+          });
+          break;
+        }
+      }
       if (existing?.status === 'done' && existing.assetId) return this.asset(cid, existing.assetId);
       const today = new Date().toDateString();
       if (

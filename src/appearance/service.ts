@@ -20,6 +20,8 @@ export interface ImageAssets {
 }
 export interface ImageProvider {
   identity: string;
+  matchesIdentity?(previous: string, scope: 'generation' | 'layers' | 'endpoint'): boolean;
+  adoptLegacyIdentity?(previous: string): void;
   supportsResearch?: boolean;
   research?(input: VisualInput): Promise<VisualResearch | undefined>;
   review?(input: VisualInput, image: ImageAsset): Promise<VisualCheck | undefined>;
@@ -27,6 +29,18 @@ export interface ImageProvider {
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
   split(image: ImageAsset): Promise<CharacterRig>;
   repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
+}
+function matches(
+  provider: ImageProvider,
+  previous: string,
+  scope: 'generation' | 'layers' | 'endpoint',
+) {
+  return provider.identity === previous || provider.matchesIdentity?.(previous, scope) === true;
+}
+function adopt(provider: ImageProvider, draft: VisualDraft | undefined) {
+  if (!draft) return;
+  provider.adoptLegacyIdentity?.(draft.providerId);
+  if (draft.layerProviderId) provider.adoptLegacyIdentity?.(draft.layerProviderId);
 }
 export class MockImageProvider implements ImageProvider {
   identity = 'mock-v1';
@@ -71,6 +85,7 @@ export class VisualCreationService {
       if (!(await this.store.get('characters', characterId))) throw new Error('角色不存在');
       const provider = await this.provider();
       const previous = await this.store.get('visualDrafts', characterId);
+      adopt(provider, previous);
       if (
         options.regenerate &&
         previous &&
@@ -81,7 +96,7 @@ export class VisualCreationService {
       const same =
         !options.regenerate &&
         previous &&
-        previous.providerId === provider.identity &&
+        matches(provider, previous.providerId, 'generation') &&
         JSON.stringify(previous.input) === JSON.stringify(input);
       const draft: VisualDraft = same
         ? previous
@@ -99,7 +114,7 @@ export class VisualCreationService {
         options.regenerate &&
         previous &&
         JSON.stringify(previous.input) === JSON.stringify(input) &&
-        previous.providerId === provider.identity &&
+        matches(provider, previous.providerId, 'generation') &&
         previous.promptVersion === 3
       ) {
         draft.research = previous.research;
@@ -194,8 +209,9 @@ export class VisualCreationService {
       const draft = await this.store.get('visualDrafts', characterId);
       if (!draft) throw new Error('请先生成形象');
       const provider = await this.provider();
-      if (draft.providerId !== provider.identity)
-        throw new Error('生图服务已改变，请重新生成候选图');
+      if (!matches(provider, draft.providerId, 'endpoint'))
+        throw new Error('生图服务地址已改变，请先确认当前服务与形象');
+      adopt(provider, draft);
       const image = index === undefined ? draft.selected : draft.candidates[index];
       if (!image) throw new Error('请选择一张形象');
       if (draft.promptVersion === 3) {
@@ -203,12 +219,18 @@ export class VisualCreationService {
         if (!check || check.status !== 'match')
           throw Error('这张图尚未通过特征核对，请重新核对或更换参考；尚未拆层');
       }
-      const reuse = draft.selected?.uri === image.uri && draft.rig;
+      const reuse =
+        draft.selected?.uri === image.uri &&
+        draft.rig &&
+        matches(provider, draft.layerProviderId ?? draft.providerId, 'layers')
+          ? draft.rig
+          : undefined;
       draft.bodyRepairApplied = reuse ? draft.bodyRepairApplied : false;
       draft.selected = image;
       draft.rig = undefined;
       await this.store.put('visualDrafts', draft);
       draft.rig = reuse || validateRig(await provider.split(image));
+      draft.layerProviderId = provider.identity;
       await this.store.put('visualDrafts', draft);
       return draft.rig;
     } finally {
@@ -231,15 +253,17 @@ export class VisualCreationService {
         !draft?.rig ||
         !draft.selected ||
         !provider.repairBody ||
-        draft.providerId !== provider.identity
+        !matches(provider, draft.layerProviderId ?? draft.providerId, 'layers')
       )
         throw new Error('请先使用豆包创建形象，导入形象不能直接重复付费修复');
+      adopt(provider, draft);
       const rig = await provider.repairBody(draft.selected, draft.rig);
       await this.store.put('visualDrafts', {
         ...draft,
         rig,
         saved: false,
         bodyRepairApplied: true,
+        layerProviderId: provider.identity,
       });
       return rig;
     } finally {
@@ -278,5 +302,5 @@ export function validateImageSettings(config: ImageSettings): ImageSettings {
     throw new Error('生图接口必须使用不含凭据的 HTTPS 地址');
   if (![config.imageModel, config.layerModel].every((v) => /^[\w.-]{1,150}$/.test(v)))
     throw new Error('请填写有效的模型名称或 Endpoint ID');
-  return { ...config, baseUrl: config.baseUrl.replace(/\/+$/, '') };
+  return { ...config, baseUrl: config.baseUrl.replace(/\/+$/, ''), routingVersion: 1 };
 }

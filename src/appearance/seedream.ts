@@ -43,6 +43,7 @@ export const decompositionPrompt =
 export class SeedreamImageProvider implements ImageProvider {
   identity: string;
   private config: ImageSettings;
+  private legacyIdentities = new Set<string>();
   readonly supportsResearch: boolean;
   constructor(
     config: ImageSettings,
@@ -57,6 +58,25 @@ export class SeedreamImageProvider implements ImageProvider {
     this.supportsResearch = Boolean(director);
     this.config = validateImageSettings(config);
     this.identity = `${this.config.baseUrl}:${config.imageModel}:${config.layerModel}:v1`;
+    this.legacyIdentities.add(this.identity);
+  }
+  private parseIdentity(previous: string) {
+    const match = /^(https:\/\/.+):([\w.-]{1,150}):([\w.-]{1,150}):v1$/.exec(previous);
+    return match ? { baseUrl: match[1], imageModel: match[2], layerModel: match[3] } : undefined;
+  }
+  matchesIdentity(previous: string, scope: 'generation' | 'layers' | 'endpoint') {
+    const old = this.parseIdentity(previous);
+    return Boolean(
+      old &&
+        old.baseUrl === this.config.baseUrl &&
+        (scope === 'endpoint' ||
+          (scope === 'generation'
+            ? old.imageModel === this.config.imageModel
+            : old.layerModel === this.config.layerModel)),
+    );
+  }
+  adoptLegacyIdentity(previous: string) {
+    if (this.matchesIdentity(previous, 'endpoint')) this.legacyIdentities.add(previous);
   }
   async prepare(input: VisualInput) {
     return this.planner?.(input.description);
@@ -75,12 +95,36 @@ export class SeedreamImageProvider implements ImageProvider {
     signal?: AbortSignal,
   ): Promise<T> {
     if (signal?.aborted) throw new Error('生图已取消');
-    const cacheId = await this.hash(JSON.stringify([this.identity, operation, input]));
+    const generation = operation === 'candidate' || operation === 'illustration';
+    const scope = generation ? 'generation' : 'layers';
+    const identity = [
+      this.config.baseUrl,
+      generation ? this.config.imageModel : this.config.layerModel,
+      'operation-cache-v2',
+    ];
+    const cacheId = await this.hash(JSON.stringify([identity, operation, input]));
     const lock = `image-request:${cacheId}`;
     if (!(await this.store.lease(lock, Date.now(), 45 * 60_000)))
       throw new Error('同一图片请求正在处理中');
     try {
       let record = await this.store.get('imageRequests', cacheId);
+      if (!record) {
+        for (const identity of this.legacyIdentities) {
+          if (!this.matchesIdentity(identity, scope)) continue;
+          const legacyId = await this.hash(JSON.stringify([identity, operation, input]));
+          const legacy = await this.store.get('imageRequests', legacyId);
+          if (!legacy) continue;
+          record = {
+            ...legacy,
+            id: cacheId,
+            assetCacheId: legacy.assetCacheId ?? legacyId,
+            migratedFrom: legacyId,
+          };
+          // Preserve both uncertain receipts and original download names. Never repay to migrate.
+          await this.store.put('imageRequests', record);
+          break;
+        }
+      }
       if (record?.status === 'done' && record.result) {
         const assets =
           'layers' in record.result ? record.result.layers.map((l) => l.asset) : [record.result];
@@ -136,7 +180,7 @@ export class SeedreamImageProvider implements ImageProvider {
         }
       }
       if (signal?.aborted) throw new Error('生图已取消，已收到的结果可稍后继续下载');
-      const result = await decode(record.response, cacheId);
+      const result = await decode(record.response, record.assetCacheId ?? cacheId);
       await this.store.put('imageRequests', { ...record, status: 'done', result });
       return result;
     } finally {

@@ -1,5 +1,6 @@
 import { MediaService } from '../media/service';
 import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
+import { upgradeImageSettings } from '../appearance/settings';
 import { DSVisualDirector } from '../appearance/research';
 import { planVisualBrief } from '../appearance/brief';
 import { PluginManager } from '../extensions/manager';
@@ -43,6 +44,10 @@ async function createRuntime() {
       value: { getRandomValues: Crypto.getRandomValues, randomUUID: Crypto.randomUUID },
     });
   const store = await openStore();
+  const savedImages = await store.get('imageSettings', 'images');
+  const upgradedImages = upgradeImageSettings(savedImages);
+  if (savedImages && upgradedImages !== savedImages)
+    await store.put('imageSettings', upgradedImages);
   await recoverVisualWork(store);
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
@@ -76,7 +81,23 @@ async function createRuntime() {
   const media = new MediaService(store, {
     files: mediaFiles,
     generationIdentity: async () =>
-      JSON.stringify((await store.get('imageSettings', 'images')) ?? defaultImageSettings),
+      JSON.stringify(
+        await store.get('imageSettings', 'images').then((s) => {
+          const c = s ?? defaultImageSettings;
+          return [c.baseUrl, c.imageModel];
+        }),
+      ),
+    generationIdentityAliases: async () => {
+      const current = (await store.get('imageSettings', 'images')) ?? defaultImageSettings;
+      return [
+        JSON.stringify(current),
+        ...(savedImages &&
+        savedImages.baseUrl.replace(/\/+$/, '') === current.baseUrl.replace(/\/+$/, '') &&
+        savedImages.imageModel === current.imageModel
+          ? [JSON.stringify(savedImages)]
+          : []),
+      ];
+    },
     hash: imageHash,
     secret: async (base, reuse) => (reuse ? imageSecret.get(base) : visionSecret.get(base)),
     chatVision: async () => {
@@ -108,6 +129,10 @@ async function createRuntime() {
             return response;
           }) as typeof fetch,
         );
+        if (savedImages)
+          provider.adoptLegacyIdentity(
+            `${savedImages.baseUrl.replace(/\/+$/, '')}:${savedImages.imageModel}:${savedImages.layerModel}:v1`,
+          );
         const result = await provider.illustrate(prompt, reference, signal);
         const asset = await saveChatImage(store, cid, result.uri, 'generated');
         success = true;

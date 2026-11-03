@@ -339,3 +339,15 @@ it('counts uncertain paid attempts toward the limit and reuses completed image r
     await expect(f.media.draw('c', `attempt${i}`, undefined, false)).rejects.toThrow('未知');
   await expect(f.media.draw('c', 'sixth', undefined, false)).rejects.toThrow('5次');
 });
+it('migrates legacy drawing jobs to generation-only identity without extra generation or daily-limit entries', async () => {
+  const f = await setup();
+  await f.store.put('mediaSettings', { ...defaultMediaSettings, drawingEnabled: true });
+  f.ports.generationIdentity = async () => 'legacy-full-image-and-layer-config';
+  const first = await f.media.draw('c', '画一朵花', undefined, false);
+  f.ports.generationIdentity = async () => 'generation-model-only';
+  f.ports.generationIdentityAliases = async () => ['legacy-full-image-and-layer-config'];
+  const reused = await f.media.draw('c', '画一朵花', undefined, false);
+  expect(reused).toEqual(first);
+  expect(f.draws()).toBe(1);
+  expect(await f.store.list('mediaDrawRequests', 'c')).toHaveLength(1);
+});

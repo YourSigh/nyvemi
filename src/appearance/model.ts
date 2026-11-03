@@ -56,13 +56,17 @@ export interface ImageSettings {
   baseUrl: string;
   imageModel: string;
   layerModel: string;
+  routingVersion?: 1;
 }
+export const SEEDREAM_PRO = 'doubao-seedream-5-0-pro-260628';
+export const SEEDREAM_FLASH = 'doubao-seedream-5-0-flash-260915';
 export const defaultImageSettings: ImageSettings = {
   id: 'images',
   provider: 'seedream',
   baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
-  imageModel: 'doubao-seedream-5-0-pro-260628',
-  layerModel: 'doubao-seedream-5-0-pro-260628',
+  imageModel: SEEDREAM_PRO,
+  layerModel: SEEDREAM_FLASH,
+  routingVersion: 1,
 };
 export interface VisualDraft {
   research?: VisualResearch;
@@ -72,6 +76,8 @@ export interface VisualDraft {
   characterId: string;
   createdAt: number;
   providerId: string;
+  // Generation and layer provenance are independent; changing one never invalidates the other.
+  layerProviderId?: string;
   input: VisualInput;
   candidates: ImageAsset[];
   selected?: ImageAsset;
@@ -88,6 +94,8 @@ export interface ImageRequestCache {
   createdAt: number;
   status: 'started' | 'received' | 'done' | 'rejected';
   error?: ImageRequestFailure;
+  assetCacheId?: string;
+  migratedFrom?: string;
   response?: unknown;
   result?: ImageAsset | CharacterRig;
 }
