@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { PersonaSchema, demoPersona, defaultSettings, id, type Character } from '../domain/models';
+import { PersonaSchema, defaultSettings, id, type Character } from '../domain/models';
+import { personaShape } from './persona-shape';
 import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
 export const AnswersSchema = z.object({
@@ -45,7 +46,13 @@ export class CharacterService {
     const existing = await this.store.get('characters', characterId);
     if (existing) return existing;
     const persona = useDemo
-      ? { ...demoPersona(characterId), name: answers.name }
+      ? {
+          ...personaShape(characterId, answers.name),
+          identity: answers.relationship,
+          corePersonality: [answers.tone],
+          speechStyle: [answers.talkativeness],
+          likes: answers.interests.split(/[、，,]/).filter(Boolean),
+        }
       : await (
           await this.provider()
         ).structuredOutput(
@@ -53,8 +60,8 @@ export class CharacterService {
             {
               role: 'system',
               content:
-                '根据自然问答创造可长期相处的成年角色。identity 写她是什么样的人和与用户的关系，不使用数字人、数字伙伴、AI 助手或模型作为身份。portrait 用 300～600 字写她具体对什么来劲、如何看待事情、一个小矛盾或不擅长的地方、关心时怎样开口、熟悉后会怎样变化。写具体性格与动机，少用空泛形容词和必须/禁止清单；不编造已经和用户共同经历的往事。dialogueExamples 写 3 个符合该人格的短对话样本（user 字符串、messages 字符串数组），涵盖吐槽、分享喜悦与用户想安静；允许接着补一句、轻微改口，不机械追问。尊重用户给定关系、称呼、独处和边界，不强迫亲密，不宣称真正意识。只输出 Persona JSON，字段类型与示例一致。示例仅说明结构，不能把桶砸的个性、兴趣或原话套给所有角色：' +
-                JSON.stringify(demoPersona(characterId)),
+                '根据自然问答创造可长期相处的成年角色。identity 写她是什么样的人和与用户的关系，不使用数字人、数字伙伴、AI 助手或模型作为身份。portrait 用 300～600 字写她具体对什么来劲、如何看待事情、一个小矛盾或不擅长的地方、关心时怎样开口、熟悉后会怎样变化。写具体性格与动机，少用空泛形容词和必须/禁止清单；不编造已经和用户共同经历的往事。dialogueExamples 写 3 个符合该人格的短对话样本（user 字符串、messages 字符串数组），涵盖吐槽、分享喜悦与用户想安静；允许接着补一句、轻微改口，不机械追问。尊重用户给定关系、称呼、独处和边界，不强迫亲密，不宣称真正意识。下面只是空的JSON结构，所有人格内容必须根据这次用户回答生成，不能返回空的性格或样本：' +
+                JSON.stringify(personaShape(characterId, answers.name)),
             },
             { role: 'user', content: JSON.stringify(answers) },
           ],

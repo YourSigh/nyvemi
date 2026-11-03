@@ -3,7 +3,7 @@ import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 const runtime = new URL('../vendor/psd2live-runtime/runtime.wasm', import.meta.url),
-  model = new URL('../assets/avatar/tongza.p2lrt', import.meta.url);
+  model = new URL('../dev-assets/characters/tongza.p2lrt', import.meta.url);
 type Native = Record<string, (...args: number[]) => number> & { memory: WebAssembly.Memory };
 async function load() {
   const module = await WebAssembly.compile(new Uint8Array(readFileSync(runtime)).buffer);
@@ -110,7 +110,7 @@ it('gaze moves irises independently and head motion excites the runtime hair pen
 });
 it('keeps the actual reconstructed scalp, neck and hair-root seams opaque throughout the gentle envelope', async () => {
   const metadata = JSON.parse(
-    readFileSync(new URL('../assets/avatar/tongza-material.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../dev-assets/characters/tongza-material.json', import.meta.url), 'utf8'),
   ) as {
     seamProbes: { joint: string; x: number; y: number }[];
     modelSha256: string;

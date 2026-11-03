@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { CompanionAgent } from '../src/agent/service';
@@ -8,7 +9,7 @@ import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { Diagnostics } from '../src/storage/diagnostics';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 it.skipIf(process.env.NYVEMI_RUN_LIVE_EXTENSIONS !== '1')(
   'real DeepSeek composes and persists a reusable plugin without scripted tool selection',
   async () => {

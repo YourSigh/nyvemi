@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it, vi } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { CompanionAgent, type AgentHost } from '../src/agent/service';
@@ -8,7 +9,7 @@ import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { serializeDatabase } from '../src/storage/serialized';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { localTimeContext } from '../src/chat/prompt';
 import { PublicAgentWeb } from '../src/agent/web';
 import { BilibiliContentProvider } from '../src/exploration/content';

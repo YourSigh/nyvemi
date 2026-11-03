@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { OpenAICompatibleProvider } from '../src/providers/openai';
@@ -7,7 +8,7 @@ import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { serializeDatabase } from '../src/storage/serialized';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { HeartbeatEngine } from '../src/proactive/heartbeat/engine';
 it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1')(
   'checks real conversational silence through the actual service',

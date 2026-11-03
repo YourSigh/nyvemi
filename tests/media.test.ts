@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { MediaService, type MediaPorts } from '../src/media/service';
 import { defaultMediaSettings, MediaSettingsSchema, type MediaAsset } from '../src/media/model';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { CompanionAgent } from '../src/agent/service';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { ChatService } from '../src/chat/service';

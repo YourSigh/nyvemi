@@ -1,8 +1,9 @@
+import { demoPersona } from './persona-fixture';
 import { createHash } from 'node:crypto';
 import { it, expect, vi } from 'vitest';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import {
   MockImageProvider,
   VisualCreationService,
@@ -443,7 +444,7 @@ it('does not let a confident text model invent canonical hair or accessories', a
   expect(brief?.recognizableFeatures).toEqual(['绿色眼睛', '白绿服装']);
   expect(
     groundedVisualBrief('自定义角色', {
-      subject: '桶砸',
+      subject: '小舟',
       namedCharacter: true,
       style: '',
       confidence: 0.99,

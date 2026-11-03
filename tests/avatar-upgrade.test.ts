@@ -1,7 +1,8 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { TestDatabase } from './database';
 import { SQLiteStore, migrate } from '../src/storage/store';
-import { demoPersona } from '../src/domain/models';
+
 import { upgradeKnownModels } from '../src/avatar/upgrade';
 it('upgrades only known sample bytes and preserves custom models, persona and messages', async () => {
   const db = new TestDatabase();

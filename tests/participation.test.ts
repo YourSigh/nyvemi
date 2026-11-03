@@ -1,8 +1,9 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect, vi } from 'vitest';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { Diagnostics } from '../src/storage/diagnostics';
 import type { LLMProvider } from '../src/providers/provider';
 async function setup(decision: unknown) {

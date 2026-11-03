@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { PluginManager, pluginToolName, type PluginLoader } from '../src/extensions/manager';
 import { PluginManifestSchema, defaultPluginPolicy } from '../src/extensions/model';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona } from '../src/domain/models';
+
 const manifest = {
   format: 'nyvemi-plugin/v1',
   id: 'reading-notes',

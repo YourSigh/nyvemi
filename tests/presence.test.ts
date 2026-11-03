@@ -1,7 +1,8 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { idleActivity } from '../src/presence/loop';
 import { ActivityMonitor } from '../src/presence/activity';
-import { defaultSettings, demoPersona, type Character, type Intention } from '../src/domain/models';
+import { defaultSettings, type Character, type Intention } from '../src/domain/models';
 const now = new Date(2026, 9, 22, 20).getTime();
 const c: Character = {
   id: 'c',

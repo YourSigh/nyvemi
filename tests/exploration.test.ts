@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { serializeDatabase } from '../src/storage/serialized';
 import { it, expect, vi } from 'vitest';
 import {
@@ -8,7 +9,7 @@ import {
 import { ExplorationEngine, contentInterest } from '../src/exploration/engine';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings, type Character } from '../src/domain/models';
+import { defaultSettings, type Character } from '../src/domain/models';
 import { HeartbeatEngine } from '../src/proactive/heartbeat/engine';
 import { Diagnostics } from '../src/storage/diagnostics';
 const now = new Date(2026, 9, 28, 14).getTime();

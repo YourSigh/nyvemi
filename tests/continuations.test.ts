@@ -37,7 +37,7 @@ async function setup(reply = outcome) {
     },
   };
   const c = await new CharacterService(store, async () => provider).create(
-    { ...defaultAnswers, name: '桶砸' },
+    { ...defaultAnswers, name: '小舟' },
     true,
   );
   const settings = (await store.get('settings', c.id))!;

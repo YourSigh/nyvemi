@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { isThemeChangeRequest } from '../src/theme/chat-request';
 import { ChatService } from '../src/chat/service';
 import { parseChatOutcome } from '../src/chat/outcome';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
-import { demoPersona } from '../src/domain/models';
+
 import { Diagnostics } from '../src/storage/diagnostics';
 import type { LLMProvider } from '../src/providers/provider';
 import { migrate, SQLiteStore } from '../src/storage/store';
@@ -59,7 +60,7 @@ async function fixture() {
     },
   };
   const character = await new CharacterService(store, async () => provider).create(
-    { ...defaultAnswers, name: '桶砸' },
+    { ...defaultAnswers, name: '小舟' },
     true,
     'c',
   );

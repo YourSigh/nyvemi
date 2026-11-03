@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -6,7 +7,7 @@ import { MediaService } from '../src/media/service';
 import { defaultMediaSettings } from '../src/media/model';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona } from '../src/domain/models';
+
 it.skipIf(process.env.NYVEMI_RUN_LIVE_VISION !== '1')(
   'runs at most one explicitly enabled real vision request and verifies cached reuse',
   async () => {

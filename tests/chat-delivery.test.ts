@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect, vi } from 'vitest';
 import { messageChunks, typingDelay } from '../src/chat/delivery';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona } from '../src/domain/models';
+
 import { Diagnostics } from '../src/storage/diagnostics';
 import type { LLMProvider } from '../src/providers/provider';
 it('splits prose paragraphs and preserves code/list formatting', () => {

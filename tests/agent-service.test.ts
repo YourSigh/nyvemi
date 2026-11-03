@@ -33,7 +33,7 @@ async function setup(script: (request: AgentModelRequest, n: number) => Promise<
     toolChat: (request) => script(request, ++n),
   };
   const character = await new CharacterService(store, async () => provider).create(
-    { ...defaultAnswers, name: '桶砸' },
+    { ...defaultAnswers, name: '小舟' },
     true,
     'c',
   );

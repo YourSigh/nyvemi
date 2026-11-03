@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { HeartbeatEngine, type NotificationGateway } from '../src/proactive/heartbeat/engine';
 import { scoreIntention } from '../src/proactive/scoring';
@@ -6,7 +7,6 @@ import { policyBlock } from '../src/proactive/policies';
 import { expireIntentions } from '../src/proactive/intentions';
 import {
   defaultSettings,
-  demoPersona,
   type Character,
   type Intention,
   type NotificationRecord,

@@ -1,8 +1,9 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { parseRss, LocalTimeExperienceSource } from '../src/experience/sources';
 import { appraiseExperience, updateInterests } from '../src/experience/appraisal';
 import { ExperienceEngine } from '../src/experience/engine';
-import { demoPersona, type Character, type Experience } from '../src/domain/models';
+import { type Character, type Experience } from '../src/domain/models';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { MemoryRepository } from '../src/memory/repository';

@@ -21,7 +21,7 @@ async function setup() {
   const service = new CharacterService(store, async () => {
     throw new Error('unused');
   });
-  const c = await service.create({ ...defaultAnswers, name: '桶砸' }, true);
+  const c = await service.create({ ...defaultAnswers, name: '小舟' }, true);
   return { db, store, service, c };
 }
 it('requires the exact current name, clears owned entities and blocks stale resurrection while retaining billing/provider', async () => {
@@ -47,9 +47,9 @@ it('requires the exact current name, clears owned entities and blocks stale resu
     status: 'complete' as const,
   };
   await store.put('messages', m);
-  await expect(resetCharacter(store, c.id, ' 桶砸', cleanup)).rejects.toThrow('完整名字');
+  await expect(resetCharacter(store, c.id, ' 小舟', cleanup)).rejects.toThrow('完整名字');
   expect(await store.get('messages', 'm')).toBeDefined();
-  await resetCharacter(store, c.id, '桶砸', cleanup);
+  await resetCharacter(store, c.id, '小舟', cleanup);
   expect(await store.list('characters')).toHaveLength(0);
   expect(await store.list('settings')).toHaveLength(0);
   expect(await store.list('messages')).toHaveLength(0);

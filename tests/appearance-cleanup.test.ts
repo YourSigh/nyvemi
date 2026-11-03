@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { TestDatabase } from './database';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { pruneVisualAssets } from '../src/appearance/cleanup';
 import { mockRig } from '../src/appearance/mock';
-import { demoPersona } from '../src/domain/models';
+
 it('clears unused images and caches while retaining another character and uncertain receipts', async () => {
   const db = new TestDatabase();
   await migrate(db);

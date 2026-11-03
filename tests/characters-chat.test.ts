@@ -1,8 +1,9 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
 import { ChatService, parseReply, streamingPreview } from '../src/chat/service';
 import { buildChatPrompt, characterVoice } from '../src/chat/prompt';
-import { demoPersona } from '../src/domain/models';
+
 import { Diagnostics } from '../src/storage/diagnostics';
 import { migrate, SQLiteStore } from '../src/storage/store';
 import type { LLMProvider } from '../src/providers/provider';
@@ -26,17 +27,17 @@ it('generates and persists a persona under a device-owned id', async () => {
   const store = await setup();
   const character = await new CharacterService(store, async () => fake).create({
     ...defaultAnswers,
-    name: '小桶',
+    name: '小舟',
   });
   expect(character.id).not.toBe('model-id');
   expect(character.persona.id).toBe(character.id);
-  expect((await store.get('characters', character.id))?.persona.name).toBe('小桶');
+  expect((await store.get('characters', character.id))?.persona.name).toBe('小舟');
   expect((await store.get('settings', character.id))?.proactiveEnabled).toBe(true);
 });
 it('streams, persists multiple messages and schedules post-round work', async () => {
   const store = await setup();
   const c = await new CharacterService(store, async () => fake).create(
-    { ...defaultAnswers, name: '桶砸' },
+    { ...defaultAnswers, name: '小舟' },
     true,
   );
   let rounds = 0;
@@ -313,7 +314,7 @@ it('keeps partial and incomplete multi-part responses out of visible history', a
 it('accepts intentional silence, keeps it complete after restart, and still extracts user preferences', async () => {
   const store = await setup();
   const c = await new CharacterService(store, async () => fake).create(
-    { ...defaultAnswers, name: '桶砸' },
+    { ...defaultAnswers, name: '小舟' },
     true,
   );
   let calls = 0;
@@ -364,6 +365,6 @@ it('keeps an existing character voice without forcing a technical self-introduct
   const voice = characterVoice(old);
   expect(voice).not.toContain('数字伙伴');
   expect(voice).toContain('小众游戏');
-  expect(voice).toContain('语气样本');
+  expect(voice).not.toContain('语气样本');
   expect(JSON.stringify(old)).toBe(before);
 });

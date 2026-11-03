@@ -174,7 +174,7 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE !== '1' || process.env.NYVEMI_LIVE_FOCUS !
       },
     );
     const c = await new CharacterService(store, async () => provider).create(
-      { ...defaultAnswers, name: '测试桶砸' },
+      { ...defaultAnswers, name: '测试小舟' },
       true,
     );
     const user = {

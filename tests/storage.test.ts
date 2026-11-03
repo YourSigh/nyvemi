@@ -1,7 +1,8 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { TestDatabase } from './database';
 import { migrate, SQLiteStore } from '../src/storage/store';
-import { demoPersona } from '../src/domain/models';
+
 it('rolls back partial writes and prevents overlapping background jobs', async () => {
   const db = new TestDatabase();
   await migrate(db);

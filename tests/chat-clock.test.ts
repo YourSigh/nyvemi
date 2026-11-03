@@ -1,6 +1,7 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { localTimeContext, buildChatPrompt } from '../src/chat/prompt';
-import { demoPersona, type Character } from '../src/domain/models';
+import { type Character } from '../src/domain/models';
 it('uses an unambiguous fresh local date, 24-hour clock and time-of-day instead of mixing UTC timestamps', () => {
   const morning = new Date(2026, 9, 27, 11, 40, 5).getTime(),
     evening = new Date(2026, 9, 27, 20, 7, 2).getTime();

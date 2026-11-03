@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -9,7 +10,7 @@ import { defaultImageSettings } from '../src/appearance/model';
 import { VisualCreationService } from '../src/appearance/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona } from '../src/domain/models';
+
 const { AbortController: MobileController, AbortSignal: MobileSignal } = createRequire(
   import.meta.url,
 )('abort-controller/dist/abort-controller');

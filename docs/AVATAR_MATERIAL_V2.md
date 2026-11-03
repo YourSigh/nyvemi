@@ -49,7 +49,7 @@ The compile fingerprint includes occlusion code as well as source pixels, prepar
 - Default pose bounds and smooth blink trajectories are tested. Legacy manual actions are still tested explicitly in the interactive profile.
 - Actual WASM renderer tests cover nine yaw/roll combinations with breath/body/mouth changes. At five reconstructed joints, 3×3 probe windows remain opaque (405 alpha probes). These are regression samples, not proof that every pixel in every imported model is artifact-free. Model digest binds the probes to the actual bundled asset.
 - Actual non-affine face deformation, independent gaze, physical response and bundle migration tests still pass.
-- Eight-second real-runtime scene preview: `artifacts/avatar-v2-final/gentle-motion.mp4`; sampled idle/thinking/talking/happy/shy/sleepy frames are in the same folder. `assets/avatar/tongza-material.json` records the model digest, overlap report and regression probes.
+- Eight-second real-runtime scene preview: `artifacts/avatar-v2-final/gentle-motion.mp4`; sampled idle/thinking/talking/happy/shy/sleepy frames are in the same folder. `dev-assets/characters/tongza-material.json` records the model digest, overlap report and regression probes.
 - No physical-device or emulator self-test, per user preference. Subjective visual quality on the user's Android device remains installation acceptance.
 
 Current limitations: automatic hidden-art reconstruction is partly generative and partly conservative local underpainting; hair/eye separation remains tailored to frontal colored-eye anime styles. Large turns, articulated fingers and independent outfit layers still need more careful authoring. This is a small-motion auto-rig rather than a professionally authored full-motion Cubism model.

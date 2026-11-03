@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { CompanionAgent } from '../src/agent/service';
@@ -6,7 +7,7 @@ import { deepSeekPreset, type ApiMetric } from '../src/providers/provider';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { localTimeContext } from '../src/chat/prompt';
 import { PublicAgentWeb } from '../src/agent/web';
 import { BilibiliContentProvider } from '../src/exploration/content';

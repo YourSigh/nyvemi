@@ -1,4 +1,4 @@
-import { pickMeshAvatar, stageDemoMeshAvatar } from '../avatar/native';
+import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Pressable, Text, View } from 'react-native';
@@ -241,20 +241,6 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             </>
           ) : null}
           <Button
-            title="试试简化桶砸皮套"
-            disabled={Boolean(busy)}
-            onPress={() =>
-              void run('唤醒网格角色', async () => {
-                const model = await stageDemoMeshAvatar(runtime.store, cid);
-                setMeshAvatar(model);
-                setRig(undefined);
-                setEditing(false);
-                setPreviewState('idle');
-                setElapsed(0);
-              })
-            }
-          />
-          <Button
             title="导入网格角色 (.p2lrt)"
             disabled={Boolean(busy)}
             onPress={() =>
@@ -418,7 +404,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           />
           <Note>
             {!meshAvatar && (!rig || rig.source === 'mock')
-              ? '可以先试试桶砸皮套，或导入你喜欢的角色'
+              ? '可以导入你喜欢的角色形象'
               : !awake.complete
                 ? elapsed < 1400
                   ? '正在让她睁开眼睛'

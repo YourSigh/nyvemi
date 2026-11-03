@@ -1,5 +1,6 @@
+import { demoPersona } from './persona-fixture';
 import { describe, it, expect } from 'vitest';
-import { demoPersona, PersonaSchema } from '../src/domain/models';
+import { PersonaSchema } from '../src/domain/models';
 import { migrate, SQLiteStore } from '../src/storage/store';
 import { deepSeekPreset, validateProviderConfig } from '../src/providers/provider';
 import { OpenAICompatibleProvider } from '../src/providers/openai';

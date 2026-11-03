@@ -38,7 +38,7 @@ All four produced finite visible frames and actual vertex changes for head, gaze
 node tests/fixtures/avatar-materials.cjs artifacts/generic-fixtures
 npm run avatar:rig -- artifacts/generic-fixtures/long-brown/layers.json artifacts/my-generic-check avatar
 node scripts/vtuber/verify-runtime.cjs artifacts/my-generic-check/web-physics/avatar.p2lrt artifacts/my-generic-check/runtime-report-recheck.json
-node scripts/vtuber/preview.cjs assets/avatar/tongza.p2lrt artifacts/small-actions.mp4 actions
+node scripts/vtuber/preview.cjs dev-assets/characters/tongza.p2lrt artifacts/small-actions.mp4 actions
 ```
 
 Normal validation: 172 passing tests, 3 paid tests skipped; lint/typecheck and Android Debug build pass. Real bundled Tongza action preview: `artifacts/actions-0.10.1/small-actions.mp4`, with sampled nod/shake/wink/smile frames. No phone/emulator self-test.

@@ -1,4 +1,3 @@
-import demoModel from '../../assets/avatar/tongza.p2lrt';
 import playerAsset from '../../vendor/psd2live-runtime/player.txt';
 import driverAsset from '../../assets/avatar/driver.txt';
 import wasmAsset from '../../vendor/psd2live-runtime/runtime.wasm';
@@ -91,46 +90,4 @@ export async function meshAvatarHTML(model: MeshAvatar) {
   validateP2lrt(await source.bytes());
   const { player, driver, wasm } = await resources;
   return avatarHTML(player, driver, wasm, await source.base64());
-}
-
-export async function stageDemoMeshAvatar(store: Storage, cid: string) {
-  const f = await assetFile(demoModel);
-  return stageMeshAvatar(store, cid, await f.bytes());
-}
-
-export async function upgradeBuiltinMeshModels(store: Storage) {
-  const { upgradeKnownModels } = await import('./upgrade');
-  const { digest, CryptoDigestAlgorithm } = await import('expo-crypto');
-  await upgradeKnownModels(
-    store,
-    {
-      read: (uri) => new File(uri).bytes(),
-      digest: async (bytes) =>
-        Array.from(
-          new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, Uint8Array.from(bytes).buffer)),
-        )
-          .map((v) => v.toString(16).padStart(2, '0'))
-          .join(''),
-      write: writeMeshAvatar,
-      remove: async (uri) => {
-        const f = new File(uri);
-        if (f.exists) f.delete();
-      },
-    },
-    [
-      {
-        length: 6161428,
-        digest: '7923e164488f39b306421c14ea90a68e2bfd2164124b4c29c32d78011e448fca',
-      },
-      {
-        length: 11432228,
-        digest: '329324ea9e4a458f143e38fbfe06886f6f0f2c36d5a94bdfb6b0360cd6b6b188',
-      },
-      {
-        length: 13194132,
-        digest: 'bb83f68ce9f77e4567cde0dd5cf780a95546c4c64ba8293097a946ae65aa6345',
-      },
-    ],
-    async () => (await assetFile(demoModel)).bytes(),
-  );
 }

@@ -1,9 +1,10 @@
+import { demoPersona } from './persona-fixture';
 import { it, expect } from 'vitest';
 import { PersonaInterview, interviewQuestions } from '../src/characters/interview';
 import { CharacterService } from '../src/characters/service';
 import { migrate, SQLiteStore } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona } from '../src/domain/models';
+
 import type { LLMProvider } from '../src/providers/provider';
 async function setup() {
   const db = new TestDatabase();

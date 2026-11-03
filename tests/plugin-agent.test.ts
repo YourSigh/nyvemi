@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import { CompanionAgent } from '../src/agent/service';
 import { PluginManager, pluginToolName } from '../src/extensions/manager';
@@ -5,7 +6,7 @@ import { ChatService } from '../src/chat/service';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import type { LLMProvider } from '../src/providers/provider';
 it('DSH develops a plugin, immediately invokes it, and remembers a skill on the next turn', async () => {
   const db = new TestDatabase();

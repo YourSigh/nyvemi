@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { it, expect } from 'vitest';
@@ -12,7 +13,7 @@ import { HeartbeatEngine } from '../src/proactive/heartbeat/engine';
 import { ExperienceEngine } from '../src/experience/engine';
 import { parseRss } from '../src/experience/sources';
 import { CharacterBundleService } from '../src/transfer/bundle';
-import { demoPersona, type NotificationRecord } from '../src/domain/models';
+import { type NotificationRecord } from '../src/domain/models';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
@@ -99,7 +100,7 @@ it('runs persona → streamed chat → extracted memory/loop → follow-up → R
     );
     const c = await new CharacterService(store, async () => provider).create({
       ...defaultAnswers,
-      name: '桶砸',
+      name: '小舟',
     });
     const repo = new MemoryRepository(store);
     const extraction = new MemoryExtractionService(store, async () => provider, diagnostics);

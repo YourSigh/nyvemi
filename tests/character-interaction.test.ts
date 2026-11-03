@@ -1,3 +1,4 @@
+import { demoPersona } from './persona-fixture';
 import { expect, it } from 'vitest';
 import {
   CharacterStateMapper,
@@ -6,7 +7,7 @@ import {
 } from '../src/character/interaction';
 import { ChatService } from '../src/chat/service';
 import { parseChatOutcome } from '../src/chat/outcome';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import type { LLMProvider } from '../src/providers/provider';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { SQLiteStore, migrate } from '../src/storage/store';

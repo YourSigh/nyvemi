@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { interviewQuestions, type InterviewDraft } from '../characters/interview';
-import { defaultAnswers, type CharacterAnswers } from '../characters/service';
+import { type CharacterAnswers } from '../characters/service';
 import { useRuntime } from './context';
 import { Avatar, Button, Card, ErrorText, Field, Note, Busy } from './components';
 import type { ScreenProps } from './navigation';
@@ -152,18 +152,6 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                 </Card>
               ))}
             </View>
-          ) : null}
-          {draft?.step === 0 ? (
-            <Button
-              title="开发测试：直接使用桶砸"
-              secondary
-              onPress={() =>
-                navigation.navigate('Generate', {
-                  answers: { ...defaultAnswers, name: '桶砸' },
-                  demo: true,
-                })
-              }
-            />
           ) : null}
         </ScrollView>
         {draft ? (

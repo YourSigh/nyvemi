@@ -1,10 +1,11 @@
+import { demoPersona } from './persona-fixture';
 import { URL } from 'node:url';
 import { recoverReconnects } from '../src/proactive/reconnect';
 import { defaultPreference } from '../src/theme/model';
 import { it, expect } from 'vitest';
 import { zipSync, strToU8, unzipSync, strFromU8 } from 'fflate';
 import { CharacterBundleService, readBundle, type BundleAssets } from '../src/transfer/bundle';
-import { demoPersona, defaultSettings } from '../src/domain/models';
+import { defaultSettings } from '../src/domain/models';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { MemoryRepository } from '../src/memory/repository';
@@ -92,7 +93,7 @@ it('round-trips the person, memories, conversation, avatar and links into a fres
   expect(json).not.toContain('file://old');
   const imported = await b.service.importCharacter(bytes);
   expect(imported.id).not.toBe('c');
-  expect(imported.persona.name).toBe('桶砸');
+  expect(imported.persona.name).toBe('小舟');
   expect(imported.state.relationshipCloseness).toBe(0.4);
   expect(b.assets.get(imported.avatar!)).toEqual(avatar);
   const memory = (await b.store.list('memories', imported.id))[0];
@@ -400,7 +401,7 @@ it('round-trips a real embedded mesh model without local paths or provider confi
   const a = await setup(),
     b = await setup();
   const model = new Uint8Array(
-    readFileSync(new URL('../assets/avatar/tongza.p2lrt', import.meta.url)),
+    readFileSync(new URL('../dev-assets/characters/tongza.p2lrt', import.meta.url)),
   );
   a.assets.set('file://private/avatar.p2lrt', model);
   await a.store.put('characters', {
