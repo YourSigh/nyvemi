@@ -211,7 +211,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
       <Note>
-        {meshAvatar || rig ? '看看她现在的样子。' : '描述你想见到的人，也可以上传一张参考图。'}
+        {meshAvatar || rig
+          ? '看看她现在的样子。'
+          : !editing && draft?.research
+            ? `这次画：${draft.research.brief.subject}`
+            : '描述你想见到的人，也可以上传一张参考图。'}
       </Note>
       <ErrorText text={error} />
       {!loaded ? <Busy label="读取形象…" /> : null}
