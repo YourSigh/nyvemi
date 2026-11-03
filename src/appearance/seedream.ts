@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { VisualBrief } from './brief';
+import type { AppearanceDirector } from './research';
 import type { Storage } from '../storage/store';
 import {
   type CharacterRig,
@@ -29,11 +30,15 @@ export const generationPrompt = (description: string, brief?: VisualBrief) =>
   `绘制用户指定角色的单人立绘。用户原始要求：${JSON.stringify(description)}。${brief ? `身份简报：${JSON.stringify(brief)}。` : ''}
 身份优先：若用户指定已有作品或角色，必须画该角色，不是相似的原创替代品。保留标志性发型、发色、瞳色、服装和饰物；参考图存在时以参考图及用户明确改动为准。用户要求Q版/Chibi时使用可爱的约2至3头身比例，不要画成常规比例的幼年新角色。
 动画友好：正面，头摆正，全身含脚，中立站姿，双手自然分开且不挡身体、双腿自然分开，双眼睁开，简单干净背景。保留角色原本的不对称发型和服装设计；只简化碎发与细小挂件，不为Rig重设计角色。不增加皇冠、武器或无关装饰。无文字、无拼贴。`;
+export function referenceGenerationPrompt(input: VisualInput, index: number) {
+  return `角色立绘，用户要求：${input.description}。${input.reference ? '图1是用户确认的身份参考，保留其发型轮廓、发色、瞳色、服装与标志饰物，只按用户要求改动。' : '按用户要求设计同一个原创角色。'}${input.anchor ? '最后一张参考是本批已核对形象，保持其角色设计一致。' : ''}正面、头摆正、单人全身含脚、中立站姿、双手自然分开不挡身体、双眼睁开，简单背景。Q版仅简化比例与线条，不改角色身份和装束。第${index + 1}个候选，只微调表情与明暗，无文字拼贴。`;
+}
 export const decompositionPrompt =
   'Decompose this character into animation-ready transparent PNG layers. Separate: body, head (face skin with eyes and mouth removed and cleanly filled), hair, arms, eyes (both open eyes), mouth. English names: body, head, hair, arm, eyes, mouth. Complete occluded anatomy, hair and face beneath removed parts. Background only in base layer; do not duplicate the character in base. Preserve original alignment and identity. Each layer contains only the named part. Do not leave eyes or mouth painted on the head layer.';
 export class SeedreamImageProvider implements ImageProvider {
   identity: string;
   private config: ImageSettings;
+  readonly supportsResearch: boolean;
   constructor(
     config: ImageSettings,
     private key: () => Promise<string | null>,
@@ -42,12 +47,20 @@ export class SeedreamImageProvider implements ImageProvider {
     private hash: (text: string) => Promise<string>,
     private http: typeof fetch = fetch,
     private planner?: (description: string) => Promise<VisualBrief | undefined>,
+    private director?: AppearanceDirector,
   ) {
+    this.supportsResearch = Boolean(director);
     this.config = validateImageSettings(config);
     this.identity = `${this.config.baseUrl}:${config.imageModel}:${config.layerModel}:v1`;
   }
   async prepare(input: VisualInput) {
     return this.planner?.(input.description);
+  }
+  async research(input: VisualInput) {
+    return this.director?.research(input);
+  }
+  async review(input: VisualInput, image: ImageAsset) {
+    return this.director?.review(input, image);
   }
   private async cached<T extends ImageAsset | CharacterRig>(
     operation: string,
@@ -128,27 +141,46 @@ export class SeedreamImageProvider implements ImageProvider {
     const fingerprint = input.reference
       ? await this.assets.fingerprint(input.reference)
       : undefined;
+    const anchorFingerprint = input.anchor
+      ? await this.assets.fingerprint(input.anchor)
+      : undefined;
+    const references = [input.reference, input.anchor].filter((a): a is ImageAsset => Boolean(a));
+    const referenceData = await Promise.all(references.map((a) => this.assets.dataUrl(a)));
     return this.cached(
       'candidate',
-      input.promptVersion === 2
+      input.promptVersion === 3
         ? [
             input.description,
             fingerprint,
+            anchorFingerprint,
             index,
-            'identity-v2',
+            'reference-v3',
             input.brief ?? null,
             input.generationId ?? null,
           ]
-        : [input.description, fingerprint, index],
+        : input.promptVersion === 2
+          ? [
+              input.description,
+              fingerprint,
+              index,
+              'identity-v2',
+              input.brief ?? null,
+              input.generationId ?? null,
+            ]
+          : [input.description, fingerprint, index],
       {
         model: this.config.imageModel,
         prompt:
-          generationPrompt(input.description, input.brief) +
-          `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
+          input.promptVersion === 3
+            ? referenceGenerationPrompt(input, index)
+            : generationPrompt(input.description, input.brief) +
+              `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
         size: '2K',
         response_format: 'url',
         watermark: false,
-        ...(input.reference ? { image: await this.assets.dataUrl(input.reference) } : {}),
+        ...(referenceData.length
+          ? { image: referenceData.length === 1 ? referenceData[0] : referenceData }
+          : {}),
       },
       async (value, cacheId) => {
         const response = ResponseSchema.parse(value);

@@ -196,3 +196,23 @@ it('cancels an active download and removes its parent listener and timeout', asy
   expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
   expect(vi.getTimerCount()).toBe(0);
 });
+it('rejects private reference locations and redirects without forwarding credentials', async () => {
+  await expect(imageAssets.download('https://127.0.0.1/a.png', 'private')).rejects.toThrow(
+    '不安全',
+  );
+  expect(nativeFetch).not.toHaveBeenCalled();
+  vi.mocked(nativeFetch).mockResolvedValue(
+    new Response('', {
+      status: 302,
+      headers: { location: 'https://localhost/secret.png' },
+    }) as never,
+  );
+  await expect(imageAssets.download('https://cdn.example/ref.png', 'redirect')).rejects.toThrow(
+    '不安全',
+  );
+  expect(nativeFetch).toHaveBeenCalledOnce();
+  const options = vi.mocked(nativeFetch).mock.calls[0][1]!;
+  expect(options.credentials).toBe('omit');
+  expect(options.redirect).toBe('manual');
+  expect(options.headers).toBeUndefined();
+});

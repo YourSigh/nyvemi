@@ -16,6 +16,7 @@ export async function pruneVisualAssets(
   for (const d of await store.list('visualDrafts', undefined, 100000)) {
     if (d.meshAvatar) pinned.add(d.meshAvatar.uri);
     pin(d.input.reference);
+    for (const reference of d.research?.references ?? []) pin(reference.asset);
     pin(d.selected);
     d.candidates.forEach(pin);
     for (const l of d.rig?.layers ?? []) pin(l.asset);

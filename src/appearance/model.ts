@@ -1,4 +1,5 @@
 import type { MeshAvatar } from '../avatar/model';
+import type { VisualResearch, VisualCheck } from './research';
 import type { VisualBrief } from './brief';
 import { z } from 'zod';
 export const ImageAssetSchema = z
@@ -43,8 +44,9 @@ export interface VisualInput {
   description: string;
   mode: CreationMode;
   reference?: ImageAsset;
+  anchor?: ImageAsset;
   brief?: VisualBrief;
-  promptVersion?: 2;
+  promptVersion?: 2 | 3;
   generationId?: string;
 }
 export interface ImageSettings {
@@ -62,6 +64,9 @@ export const defaultImageSettings: ImageSettings = {
   layerModel: 'doubao-seedream-5-0-pro-260628',
 };
 export interface VisualDraft {
+  research?: VisualResearch;
+  confirmedReferenceId?: string;
+  candidateReviews?: (VisualCheck | null)[];
   id: string;
   characterId: string;
   createdAt: number;
@@ -74,7 +79,7 @@ export interface VisualDraft {
   saved?: boolean;
   bodyRepairApplied?: boolean;
   brief?: VisualBrief;
-  promptVersion?: 2;
+  promptVersion?: 2 | 3;
   generationId?: string;
 }
 export interface ImageRequestCache {

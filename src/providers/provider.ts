@@ -13,7 +13,18 @@ export interface LLMResult {
   content: string;
   usage: Usage;
 }
+export interface VisionTurn {
+  role: 'user';
+  content: ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
+}
 export interface LLMProvider {
+  structuredVision?<T>(
+    prompt: string,
+    images: string[],
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+    purpose: string,
+    signal?: AbortSignal,
+  ): Promise<T>;
   toolChat?(
     request: import('../agent/core').AgentModelRequest,
     signal?: AbortSignal,

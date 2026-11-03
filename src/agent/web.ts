@@ -6,6 +6,11 @@ export interface WebDocument {
   title: string;
   text: string;
   source: string;
+  images?: WebImage[];
+}
+export interface WebImage {
+  url: string;
+  alt: string;
 }
 export interface AgentWeb {
   search(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
@@ -46,6 +51,37 @@ export function plainText(html: string): string {
     })
     .replace(/\s+/g, ' ')
     .trim();
+}
+/** Only URLs actually present in the fetched page; no model-invented image URLs. */
+export function pageImages(html: string, page: string): WebImage[] {
+  const images: WebImage[] = [];
+  const add = (value: string | undefined, alt: string) => {
+    if (!value || images.length >= 12) return;
+    try {
+      const url = publicUrl(new URL(plainText(value), page).href).href;
+      if (/\.(?:svg|gif)(?:[?#]|$)/i.test(url) || images.some((image) => image.url === url)) return;
+      images.push({ url, alt: plainText(alt).slice(0, 160) });
+    } catch {
+      /* Ignore inline/private/invalid image locations. */
+    }
+  };
+  const attributes = (tag: string) =>
+    Object.fromEntries(
+      [...tag.matchAll(/([\w:-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)].map((m) => [
+        m[1].toLowerCase(),
+        m[2] ?? m[3],
+      ]),
+    );
+  for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const a = attributes(match[0]);
+    if (/^(?:og:image(?::url)?|twitter:image(?::src)?)$/i.test(a.property ?? a.name ?? ''))
+      add(a.content, a['og:image:alt'] ?? '页面预览图');
+  }
+  for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
+    const a = attributes(match[0]);
+    add(a['data-src'] ?? a.src, a.alt ?? '');
+  }
+  return images;
 }
 export class PublicAgentWeb implements AgentWeb {
   constructor(
@@ -149,6 +185,7 @@ export class PublicAgentWeb implements AgentWeb {
       title: plainText(title ?? new URL(url).hostname).slice(0, 300),
       text: plainText(response.text).slice(0, 10000),
       source: 'web-page',
+      images: pageImages(response.text, response.url),
     };
   }
   async bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]> {

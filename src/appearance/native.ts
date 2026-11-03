@@ -1,3 +1,4 @@
+import { publicUrl } from '../agent/web';
 import { id } from '../domain/models';
 import { imageSecrets } from './secrets';
 import { pruneVisualAssets } from './cleanup';
@@ -46,9 +47,12 @@ export const imageAssets: ImageAssets = {
   },
   download: async (url, key, signal) => {
     if (signal?.aborted) throw new Error('图片下载已取消，已生成结果会保留');
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:' || parsed.username || parsed.password)
+    let parsed: URL;
+    try {
+      parsed = publicUrl(url);
+    } catch {
       throw new Error('图片下载地址不安全');
+    }
     const target = new File(directory(), `${key}.png`);
     if (target.exists) {
       try {
@@ -70,11 +74,58 @@ export const imageAssets: ImageAssets = {
     }, 60_000);
     try {
       // No Authorization header is ever forwarded to image/CDN hosts.
-      const response = await nativeFetch(url, { signal: controller.signal });
+      let response: Response | undefined;
+      for (let redirects = 0; redirects < 4; redirects++) {
+        response = await nativeFetch(parsed.href, {
+          signal: controller.signal,
+          redirect: 'manual',
+          credentials: 'omit',
+        });
+        if ([301, 302, 303, 307, 308].includes(response.status)) {
+          const location = response.headers.get('location');
+          if (!location) throw Error('图片下载地址不安全');
+          try {
+            parsed = publicUrl(new URL(location, parsed).href);
+          } catch {
+            throw Error('图片下载地址不安全');
+          }
+          response = undefined;
+          continue;
+        }
+        if (response.redirected || (response.url && publicUrl(response.url).href !== parsed.href))
+          throw Error('图片下载地址不安全');
+        break;
+      }
+      if (!response) throw Error('图片下载地址不安全');
       if (!response.ok) throw new Error(`下载图片失败（${response.status}），重试不会重新生图`);
       if (Number(response.headers.get('content-length')) > 12 * 1024 * 1024)
         throw new Error('输出图片过大');
-      const bytes = new Uint8Array(await response.arrayBuffer());
+      let bytes: Uint8Array;
+      if (response.body?.getReader) {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let length = 0;
+        try {
+          for (;;) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            length += chunk.value.byteLength;
+            if (length > 12 * 1024 * 1024) {
+              await reader.cancel();
+              throw Error('输出图片过大');
+            }
+            chunks.push(chunk.value);
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        bytes = new Uint8Array(length);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+      } else bytes = new Uint8Array(await response.arrayBuffer());
       if (controller.signal.aborted) throw new Error('download_aborted');
       if (bytes.length > 12 * 1024 * 1024 || !isAvatar(bytes))
         throw new Error('输出图片格式或尺寸不支持');
@@ -90,7 +141,7 @@ export const imageAssets: ImageAssets = {
       if (timedOut) throw new Error('下载图片超时，重试不会重新生图');
       if (
         error instanceof Error &&
-        /^(下载图片失败|输出图片|请使用小于|仅支持|图片尺寸)/.test(error.message)
+        /^(下载图片失败|图片下载地址|输出图片|请使用小于|仅支持|图片尺寸)/.test(error.message)
       )
         throw error;
       throw new Error('下载或保存图片失败，重试会继续使用已生成结果');
