@@ -345,7 +345,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               autoCapitalize="none"
             />
           </Details>
-          <Note>{imageRoutingLabel(config)}。确认参考后才付费生图。</Note>
+          <Note>{imageRoutingLabel(config)}。确认后才付费生图。</Note>
           <Button
             title={mode === 'animate' ? '使用这张参考图' : '先整理形象要求'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
