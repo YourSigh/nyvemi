@@ -1,4 +1,6 @@
-# Character appearance creation (0.7.0)
+# Character appearance creation
+
+For the current Pro/Flash routing and real validation, see [image model routing](IMAGE_MODEL_ROUTING.md). The original cutout flow below dates from 0.7; subsequent desktop mesh compilation/playback is documented in [VTuber pipeline](VTUBER_PIPELINE.md).
 
 ## Entry points
 
@@ -16,21 +18,21 @@ The upload picker supports PNG/JPEG/WebP; Seedream's decomposition service curre
 
 ## Mock and real providers
 
-Mock is the default. It creates three deterministic original vector illustrations with independent body, hair, head, arm, eye and mouth layers. It exercises selection, rig building, awakening, persistence and transfer without a network request. It **does not decompose an uploaded photograph or illustration**: direct-reference mode clearly uses sample layered art to demonstrate motion.
+Mock is available only through injected development/test providers. It creates three deterministic original vector illustrations with independent body, hair, head, arm, eye and mouth layers. It exercises selection, rig building, awakening, persistence and transfer without a network request. It **does not decompose an uploaded photograph or illustration**: direct-reference mode clearly uses sample layered art to demonstrate motion.
 
-Choose 生图设置 → 使用豆包付费接口 to enable Seedream explicitly. The image API key is independent of the chat key and stored in SecureStore, bound to the provider origin. It is never an `EXPO_PUBLIC_*` value and never enters SQLite, the bundle, Git or the APK. A new provider origin requires a matching key.
+Normal user creation uses Seedream; paid generation/decomposition starts only after the corresponding confirmation. The image API key is independent of the chat key and stored in SecureStore, bound to the provider origin. It is never an `EXPO_PUBLIC_*` value and never enters SQLite, the bundle, Git or the APK. A new provider origin requires a matching key.
 
 Default official Ark configuration:
 
 ```
 Base URL: https://ark.cn-beijing.volces.com/api/v3
-Candidates: doubao-seedream-4-5-251128
-Decomposition: doubao-seedream-5-0-pro-260628
+Candidates: doubao-seedream-5-0-pro-260628
+Decomposition: doubao-seedream-5-0-flash-260915
 ```
 
 Account model activation is required, independently of creating an API key. An Endpoint ID may replace a model name. Never point an Ark key at an unknown proxy.
 
-Sources: [Ark image generation API](https://docs.volcengine.com/docs/ark/image-generation-api?lang=zh), [Seedream 5.0 Pro](https://docs.volcengine.com/docs/ark/seedream-5-0-pro?lang=zh). The documented layer response uses `data.name`, `data.description`, `data.z_index` and `data.bounding_box.normalized` with 0–1000 coordinates. Layers have alpha PNG output and positions relative to the output base canvas.
+Sources: [Ark image generation API](https://docs.volcengine.com/docs/ark/image-generation-api?lang=zh), [Seedream 5.0 Pro](https://docs.volcengine.com/docs/ark/seedream-5-0-pro?lang=zh). The documented layer response uses `data.name`, `data.description`, `data.z_index` and `data.bounding_box.absolute` in base-canvas pixels (preferred), with 0–1000 `normalized` coordinates as a legacy fallback. Layers have alpha PNG output and positions relative to the output base canvas.
 
 ## Rig and rendering
 
@@ -40,7 +42,7 @@ This is **2D cutout animation**, not Cubism `.moc3`, mesh deformation, 3D or a p
 
 ## Cache, interruption and cost
 
-Cache identity includes operation/prompt version, endpoint/models, description, reference content hash and candidate index. It never includes a key. Successful candidates are saved individually. Identical successful operations reuse cached local images. Returned responses are persisted before downloading signed image URLs. Download failures can retry without issuing another generation POST, provided the provider URL remains valid. An expired download URL with no local copy requires manual recovery; the app does not silently pay again.
+Cache identity is scoped per operation: drawing uses endpoint + image model, decomposition uses endpoint + layer model. Inputs retain description, reference content hash, prompt version where already present and candidate index. Existing split receipts remain reusable when prompt wording is refined; a prompt edit does not automatically create another billable request. It never includes a key. Successful candidates are saved individually. Identical successful operations reuse cached local images. Returned responses are persisted before downloading signed image URLs. Download failures can retry without issuing another generation POST, provided the provider URL remains valid. An expired download URL with no local copy requires manual recovery; the app does not silently pay again.
 
 A POST interrupted before its response is persisted remains `started`/uncertain. It will not automatically repeat, even after restart. Resolve it against the provider's records before retrying under a new explicit operation. Provider responses with definitive client rejection can be retried after correcting settings. Startup releases abandoned local operation leases while preserving payment receipts. All image work runs in the app's single JS runtime, not in a separate background image worker.
 
