@@ -1,3 +1,4 @@
+import type { ImageRequestFailure } from './errors';
 import type { MeshAvatar } from '../avatar/model';
 import type { VisualResearch, VisualCheck } from './research';
 import type { VisualBrief } from './brief';
@@ -85,7 +86,8 @@ export interface VisualDraft {
 export interface ImageRequestCache {
   id: string;
   createdAt: number;
-  status: 'started' | 'received' | 'done';
+  status: 'started' | 'received' | 'done' | 'rejected';
+  error?: ImageRequestFailure;
   response?: unknown;
   result?: ImageAsset | CharacterRig;
 }

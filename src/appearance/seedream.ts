@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageProviderError, readImageFailure } from './errors';
 import type { VisualBrief } from './brief';
 import type { AppearanceDirector } from './research';
 import type { Storage } from '../storage/store';
@@ -110,16 +111,17 @@ export class SeedreamImageProvider implements ImageProvider {
             signal: controller.signal,
           });
           if (!response.ok) {
-            // Only definitive client rejection can be retried automatically. Never log response bodies or keys.
-            if ([400, 401, 403, 404, 422, 429].includes(response.status))
-              await this.store.remove('imageRequests', cacheId);
-            const body: unknown = await response.json().catch(() => undefined);
-            const code = z.object({ error: z.object({ code: z.string() }) }).safeParse(body);
-            const hint =
-              code.success && code.data.error.code === 'ModelNotOpen'
-                ? '：模型尚未开通，请先在火山方舟控制台开通此模型'
-                : '';
-            throw new Error(`生图接口返回 HTTP ${response.status}${hint}`);
+            // Keep safe rejection evidence; never retain raw bodies or credentials.
+            // Ambiguous server failures stay started and cannot be automatically reissued.
+            const failure = await readImageFailure(response, secret);
+            await this.store.put('imageRequests', {
+              ...record,
+              status: [400, 401, 403, 404, 422, 429].includes(response.status)
+                ? 'rejected'
+                : 'started',
+              error: failure,
+            });
+            throw new ImageProviderError(failure);
           }
           const payload: unknown = await response.json();
           // Persist before validation/download: retries must not issue another paid POST.

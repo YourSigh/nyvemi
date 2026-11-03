@@ -1,6 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { ImageProviderError } from '../src/appearance/errors';
 import { ProviderScreen } from '../src/ui/onboarding';
 import { MediaSettingsScreen } from '../src/ui/media-settings';
 import { AppearanceScreen } from '../src/ui/appearance';
@@ -293,4 +294,35 @@ it('blocks decomposition for a mismatch and can recheck completed images without
     expect.objectContaining({ reviewAgain: true }),
   );
   expect(images.set).not.toHaveBeenCalled();
+});
+it('shows safe provider error details only when requested, including during first creation', async () => {
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  runtime.visuals.generate = vi.fn(async () => {
+    throw new ImageProviderError({
+      httpStatus: 400,
+      code: 'OutputImageSensitiveContentDetected',
+      category: 'content_review',
+      requestId: 'safe-request-123',
+    });
+  });
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c', onboarding: true } },
+      navigation: {},
+    } as never),
+  );
+  await act(async () => button('先确认角色与参考').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('服务商内容审核未通过');
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('safe-request-123');
+  await act(async () => button('错误详情').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('safe-request-123');
+  expect(JSON.stringify(renderer!.toJSON())).toContain('OutputImageSensitiveContentDetected');
 });

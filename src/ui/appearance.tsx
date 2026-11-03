@@ -1,3 +1,4 @@
+import { ImageProviderError, type ImageRequestFailure } from '../appearance/errors';
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -60,6 +61,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [editing, setEditing] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [failure, setFailure] = useState<ImageRequestFailure>();
   const [elapsed, setElapsed] = useState(0);
   const [previewState, setPreviewState] = useState<CharacterInteractionState>('idle');
   const working = useRef(false);
@@ -123,9 +125,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     working.current = true;
     setBusy(label);
     setError('');
+    setFailure(undefined);
     try {
       await action();
     } catch (e) {
+      if (e instanceof ImageProviderError) setFailure(e.failure);
       setError(e instanceof Error ? e.message : '操作失败，请重试');
     } finally {
       working.current = false;
@@ -218,6 +222,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             : '描述你想见到的人，也可以上传一张参考图。'}
       </Note>
       <ErrorText text={error} />
+      {failure ? (
+        <Details title="错误详情">
+          <Note>错误码：{failure.code ?? '服务商未提供'}</Note>
+          {failure.parameter ? <Note>参数：{failure.parameter}</Note> : null}
+          <Note>请求编号：{failure.requestId ?? '服务商未提供'}</Note>
+        </Details>
+      ) : null}
       {!loaded ? <Busy label="读取形象…" /> : null}
       {loaded && editing ? (
         <>
