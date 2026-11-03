@@ -13,49 +13,65 @@ export function localPreference(
   description: string,
   current?: ThemePreference,
 ): ThemePreference | undefined {
-  const text = description.toLowerCase().replace(/(?:不要|不喜欢|讨厌|不想要)[^，。；,.]*/g, '');
+  const text = description
+    .toLowerCase()
+    .replace(/粉红/g, '粉')
+    .replace(
+      /(?:不要|不喜欢|讨厌|不想要|别用|不是|不爱)[^，。；,.]*?(?=但|而是|不过|我喜欢|我要|我想要|喜欢|想要|换成|[，。；,.]|$)/g,
+      '',
+    );
   const colors: [ThemePreference['base'], RegExp][] = [
-    ['blue', /蓝|blue/],
-    ['pink', /粉|pink/],
-    ['purple', /紫|purple|violet/],
-    ['peach', /桃|橙|orange|peach/],
-    ['mint', /绿|薄荷|mint|green/],
-    ['red', /红|red/],
-    ['amber', /黄|奶油|yellow|cream/],
-    ['neutral', /白|黑|灰|white|black|grey|gray/],
+    ['blue', /蓝|\b(?:blue|navy)\b/],
+    ['pink', /粉|\bpink\b/],
+    ['purple', /紫|\b(?:purple|violet|lavender)\b/],
+    ['peach', /桃|橙|\b(?:orange|peach)\b/],
+    ['mint', /绿|薄荷|青|\b(?:mint|green|cyan|teal)\b/],
+    ['red', /红|\bred\b/],
+    ['amber', /黄|奶油|\b(?:yellow|cream)\b/],
+    ['neutral', /白|黑|灰|\b(?:white|black|grey|gray)\b/],
   ];
   const relative = /暗一点|亮一点|调暗|调亮|淡一点|柔和一点|饱和度/.test(text);
-  const base =
-    colors.find(([, pattern]) => pattern.test(text))?.[0] ?? (relative ? current?.base : undefined);
+  const matched = colors.filter(([, pattern]) => pattern.test(text)).map(([base]) => base);
+  // White/gray often qualify a color (pink-white, blue-gray). Two chromatic
+  // hues are genuinely ambiguous: ask the model rather than picking by regex order.
+  const chromatic = matched.filter((base) => base !== 'neutral');
+  if (chromatic.length > 1) return;
+  const base = chromatic[0] ?? matched[0] ?? (relative ? current?.base : undefined);
   if (!base) return;
   return {
     ...defaultPreference,
-    ...(relative ? current : undefined),
+    ...current,
     base,
     brightness:
       /深色|暗色|夜|黑|dark|black|暗一点|调暗/.test(text) && !/黑白灰/.test(text)
         ? 'dark'
         : /浅色|亮一点|调亮/.test(text)
           ? 'light'
-          : relative && current
+          : current
             ? current.brightness
             : 'light',
-    saturation:
-      /鲜艳|元气|明快|vivid/.test(text) && !/不要太艳|别太艳|不.*鲜艳/.test(description)
+    saturation: /淡|柔和|不要太艳|别太艳|不.*鲜艳/.test(description)
+      ? 'low'
+      : /鲜艳|元气|明快|vivid/.test(text)
         ? 'medium'
-        : 'low',
+        : (current?.saturation ?? 'low'),
     mood: /梦|神秘|dream/.test(text)
       ? 'dreamy'
       : /简|黑白灰|minimal/.test(text)
         ? 'minimal'
         : /安静|冷|calm/.test(text)
           ? 'calm'
-          : 'gentle',
+          : /活泼|元气|明快|playful/.test(text)
+            ? 'playful'
+            : /温柔|柔和|gentle/.test(text)
+              ? 'gentle'
+              : (current?.mood ?? 'gentle'),
     temperature: /温|暖|别太冷|warm/.test(description)
       ? 'warm'
       : /清爽|冷|cool/.test(text)
         ? 'cool'
-        : 'neutral',
+        : (current?.temperature ?? 'neutral'),
+    confidence: 1,
   };
 }
 export class ThemeService {
@@ -102,13 +118,25 @@ export class ThemeService {
     current?: ThemePreference,
     signal?: AbortSignal,
   ): Promise<ThemeRecord> {
+    if (signal?.aborted) throw new Error('换色已取消');
     const description = raw.trim();
     if (!description || description.length > 500)
       throw new Error('用 1～500 字说说你喜欢的颜色或感觉吧');
+    // The first color choice happens before BYOK setup. Clear color requests
+    // must work immediately/offline and cannot be vetoed by a model response.
+    const local = localPreference(description, current);
+    if (local)
+      return {
+        id: 'app',
+        version: 1,
+        preference: local,
+        description,
+        source: 'local',
+        createdAt: Date.now(),
+      };
     const existing = await this.load();
     if (existing?.source === 'model' && existing.description === description) return existing;
     let preference: ThemePreference;
-    let source: ThemeRecord['source'] = 'model';
     try {
       preference = await themeTask(
         async (requestSignal) =>
@@ -137,15 +165,18 @@ export class ThemeService {
       preference = ThemePreferenceSchema.parse(preference);
     } catch {
       if (signal?.aborted) throw new Error('换色已取消');
-      const fallback = localPreference(description, current);
-      if (!fallback)
-        throw new Error('暂时没听准这个感觉。试试“淡蓝色，安静一点”；也可以先保留现在的颜色。');
-      preference = fallback;
-      source = 'local';
+      throw new Error('暂时没听准这个感觉。试试“淡蓝色，安静一点”；也可以先保留现在的颜色。');
     }
     if (preference.confidence < 0.45)
       throw new Error('再给我一点颜色或氛围线索吧，比如“淡粉色，柔和、不太艳”。');
-    return { id: 'app', version: 1, preference, description, source, createdAt: Date.now() };
+    return {
+      id: 'app',
+      version: 1,
+      preference,
+      description,
+      source: 'model',
+      createdAt: Date.now(),
+    };
   }
   async save(record: ThemeRecord, signal?: AbortSignal): Promise<void> {
     await this.store.atomic(async (tx) => {

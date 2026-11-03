@@ -23,23 +23,26 @@ const result = spawnSync(
   [
     'node_modules/vitest/vitest.mjs',
     'run',
-    process.argv.includes('--vision')
-      ? 'tests/live-vision.test.ts'
-      : process.argv.includes('--extensions')
-        ? 'tests/live-extensions.test.ts'
-        : process.argv.includes('--agent-autonomy')
-          ? 'tests/live-agent-autonomy.test.ts'
-          : process.argv.includes('--agent')
-            ? 'tests/live-agent.test.ts'
-            : process.argv.includes('--conversation')
-              ? 'tests/live-conversation.test.ts'
-              : 'tests/live-provider.test.ts',
+    process.argv.includes('--theme')
+      ? 'tests/live-theme.test.ts'
+      : process.argv.includes('--vision')
+        ? 'tests/live-vision.test.ts'
+        : process.argv.includes('--extensions')
+          ? 'tests/live-extensions.test.ts'
+          : process.argv.includes('--agent-autonomy')
+            ? 'tests/live-agent-autonomy.test.ts'
+            : process.argv.includes('--agent')
+              ? 'tests/live-agent.test.ts'
+              : process.argv.includes('--conversation')
+                ? 'tests/live-conversation.test.ts'
+                : 'tests/live-provider.test.ts',
   ],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_RUN_LIVE_THEME: process.argv.includes('--theme') ? '1' : '0',
       NYVEMI_RUN_LIVE_VISION: process.argv.includes('--vision') ? '1' : '0',
       NYVEMI_LIVE_VISION_SOURCE: 'chat',
       NYVEMI_VISION_API_KEY: key,

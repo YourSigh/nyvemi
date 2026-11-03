@@ -79,7 +79,7 @@ it('interprets semantic output once, persists only on apply and survives a servi
     base: 'blue',
     mood: 'calm',
   });
-  const record = await service.interpret('蓝灰色，安静一点');
+  const record = await service.interpret('像某个未命名星球的感觉');
   expect(record.source).toBe('model');
   expect(await service.load()).toBeUndefined();
   await service.save(record);
@@ -88,11 +88,11 @@ it('interprets semantic output once, persists only on apply and survives a servi
       throw new Error('offline');
     }).load(),
   ).toEqual(record);
-  expect(await service.interpret('蓝灰色，安静一点')).toEqual(record);
+  expect(await service.interpret('像某个未命名星球的感觉')).toEqual(record);
   expect(calls).toEqual(['theme_interpretation']);
   expect(ThemeRecordSchema.parse(JSON.parse(JSON.stringify(record)))).toEqual(record);
 });
-it('rejects arbitrary model color payloads and clearly marks the local fallback', async () => {
+it('handles explicit colors locally and rejects arbitrary model payloads for abstract descriptions', async () => {
   const { service } = await fixture({ primary: '#ffffff', apiKey: 'not-accepted' });
   expect(await service.interpret('柔和薄荷绿')).toMatchObject({
     source: 'local',
@@ -165,7 +165,7 @@ it('keeps the current base color for relative chat adjustments when the provider
   });
 });
 
-it('bounds slow color interpretation and aborts the request before a local fallback', async () => {
+it('bounds slow abstract color interpretation without silently saving the pink default', async () => {
   vi.useFakeTimers();
   const { store } = await fixture(defaultPreference);
   let requestSignal: AbortSignal | undefined;
@@ -179,9 +179,9 @@ it('bounds slow color interpretation and aborts the request before a local fallb
         },
       }) as LLMProvider,
   );
-  const pending = service.interpret('淡蓝色，安静一点');
+  const pending = service.interpret('像某个未命名星球的感觉').catch((e: Error) => e.message);
   await vi.advanceTimersByTimeAsync(8001);
-  expect(await pending).toMatchObject({ source: 'local', preference: { base: 'blue' } });
+  expect(await pending).toContain('没听准');
   expect(requestSignal?.aborted).toBe(true);
   expect(await service.load()).toBeUndefined();
 });
@@ -194,4 +194,48 @@ it('does not save or fall back after the user cancels a color change', async () 
   await expect(service.save(next, controller.signal)).rejects.toThrow('取消');
   await expect(service.completeOpening(next, controller.signal)).rejects.toThrow('取消');
   expect(await service.load()).toBeUndefined();
+});
+it('resolves common colors before requesting a model, even if that model would return pink', async () => {
+  const { service, calls } = await fixture(defaultPreference);
+  expect(await service.interpret('我喜欢蓝灰色，安静一点')).toMatchObject({
+    source: 'local',
+    preference: { base: 'blue' },
+  });
+  expect(await service.interpret('不是粉色，我喜欢绿色')).toMatchObject({
+    source: 'local',
+    preference: { base: 'mint' },
+  });
+  expect(await service.interpret('我不喜欢粉色我喜欢蓝色')).toMatchObject({
+    source: 'local',
+    preference: { base: 'blue' },
+  });
+  expect(await service.interpret('粉红色，不要太艳')).toMatchObject({
+    source: 'local',
+    preference: { base: 'pink', saturation: 'low' },
+  });
+  expect(await service.interpret('I preferred blue')).toMatchObject({
+    source: 'local',
+    preference: { base: 'blue' },
+  });
+  expect(calls).toHaveLength(0);
+});
+it('preserves dark mode and unchanged qualities when changing only the hue', () => {
+  expect(
+    localPreference('蓝色', {
+      ...defaultPreference,
+      base: 'purple',
+      brightness: 'dark',
+      mood: 'dreamy',
+      saturation: 'medium',
+    }),
+  ).toMatchObject({ base: 'blue', brightness: 'dark', mood: 'dreamy', saturation: 'medium' });
+});
+it('uses semantic model output for mixed chromatic requests instead of regex-order priority', async () => {
+  const { service, calls } = await fixture({ ...defaultPreference, base: 'purple' });
+  expect(localPreference('蓝色和粉色混合')).toBeUndefined();
+  expect(await service.interpret('蓝色和粉色混合')).toMatchObject({
+    source: 'model',
+    preference: { base: 'purple' },
+  });
+  expect(calls).toEqual(['theme_interpretation']);
 });

@@ -1,4 +1,5 @@
-import { usePalette } from '../theme/context';
+import { useTheme } from '../theme/context';
+import { closeKeyboard } from './keyboard';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useRuntime } from './context';
@@ -7,33 +8,70 @@ import { deepSeekPreset } from '../providers/provider';
 import type { ScreenProps } from './navigation';
 import { secretStore } from '../storage/native';
 export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
-  const palette = usePalette();
+  const { palette, record, apply, transitioning } = useTheme();
   const runtime = useRuntime();
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [modelOption, setModelOption] = useState(false);
   const submitting = useRef(false);
+  const mounted = useRef(true);
+  const request = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
+    mounted.current = true;
+    let live = true;
     void runtime.themes
       .opening()
       .then((text) => {
-        if (text) setDescription(text);
+        if (live && text) setDescription(text);
       })
-      .catch(() => setError('读取开场偏好失败'));
+      .catch(() => {
+        if (live) setError('读取开场偏好失败');
+      });
+    return () => {
+      live = false;
+      mounted.current = false;
+      request.current?.abort();
+    };
   }, [runtime]);
-  const continueOpening = async (skip = false) => {
+  const continueOpening = async (skip = false, deferToModel = false) => {
     if (submitting.current) return;
     submitting.current = true;
+    const controller = new AbortController();
+    request.current = controller;
     setBusy(true);
+    setError('');
+    setModelOption(false);
+    let interpreted = skip || deferToModel;
     try {
-      if (skip) await runtime.themes.completeOpening();
-      else await runtime.themes.rememberOpening(description);
-      navigation.navigate('Provider', { onboarding: true, skipTheme: skip });
-    } catch {
-      setError('没能保存这点小偏好，请再试一次');
+      await closeKeyboard();
+      if (deferToModel) await runtime.themes.rememberOpening(description);
+      else if (skip) await runtime.themes.completeOpening(undefined, controller.signal);
+      else {
+        const next = await runtime.themes.interpret(
+          description,
+          record?.preference,
+          controller.signal,
+        );
+        interpreted = true;
+        if (!mounted.current || controller.signal.aborted) return;
+        await apply(
+          next,
+          (signal) => runtime.themes.completeOpening(next, signal),
+          controller.signal,
+        );
+      }
+      if (mounted.current && !controller.signal.aborted)
+        navigation.navigate('Provider', { onboarding: true, skipTheme: !deferToModel });
+    } catch (error) {
+      if (mounted.current && !controller.signal.aborted) {
+        setError(error instanceof Error ? error.message : '没能保存这点小偏好，请再试一次');
+        setModelOption(!interpreted);
+      }
     } finally {
       submitting.current = false;
-      setBusy(false);
+      request.current = undefined;
+      if (mounted.current) setBusy(false);
     }
   };
   return (
@@ -57,6 +95,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
           multiline
           maxLength={500}
           placeholder="淡淡的粉色，柔和一点，别太艳"
+          editable={!busy}
         />
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {['淡粉色，柔和、不太艳', '蓝灰色，安静一点', '黑白灰，但是别太冷', '紫色，梦幻一点'].map(
@@ -64,6 +103,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
               <Pressable
                 key={text}
                 accessibilityRole="button"
+                disabled={busy}
                 onPress={() => setDescription(text)}
                 style={{
                   padding: 10,
@@ -85,12 +125,23 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
 
         <ErrorText text={error} />
         <Button
-          title="就这个感觉"
+          title={busy ? (transitioning ? '颜色正在慢慢铺开…' : '正在准备…') : '就这个感觉'}
           disabled={busy || !description.trim()}
           onPress={() => void continueOpening()}
         />
+        {modelOption ? (
+          <Button
+            title="连接模型帮我理解"
+            secondary
+            disabled={busy}
+            onPress={() => void continueOpening(false, true)}
+          />
+        ) : null}
+        {busy && !transitioning ? (
+          <Button title="取消" secondary onPress={() => request.current?.abort()} />
+        ) : null}
         <Button
-          title="先用现在的粉白色"
+          title="先用现在的颜色"
           secondary
           disabled={busy}
           onPress={() => void continueOpening(true)}
@@ -98,6 +149,7 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
         <Button
           title="从 Bundle 接她过来"
           secondary
+          disabled={busy}
           onPress={() => navigation.navigate('Transfer')}
         />
       </View>

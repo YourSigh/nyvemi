@@ -124,7 +124,7 @@ it('lets the user cancel a pending settings color request and continue editing',
     );
   });
   await act(async () =>
-    renderer!.root.findByType('TextInput' as never).props.onChangeText('淡蓝色'),
+    renderer!.root.findByType('TextInput' as never).props.onChangeText('像某个未命名星球的感觉'),
   );
   await act(async () =>
     renderer!.root.findByProps({ accessibilityLabel: '换成这个颜色' }).props.onPress(),
