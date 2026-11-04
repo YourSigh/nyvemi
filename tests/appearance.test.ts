@@ -609,3 +609,32 @@ it('does not charge twice when repairing the same selected arms', async () => {
   await service.repairArms('c');
   expect(repairArms).toHaveBeenCalledTimes(2);
 });
+it('corrects mislabeled backgrounds when selecting an old cached split in the same session', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const receipt = 'c'.repeat(64);
+  await store.put('imageRequests', {
+    id: receipt,
+    createdAt: 1,
+    status: 'done',
+    response: { data: [{ name: 'base background' }] },
+  });
+  const provider = {
+    identity: mock.identity,
+    candidate: mock.candidate.bind(mock),
+    split: async () => {
+      const rig = mockRig('x');
+      rig.source = 'seedream';
+      rig.layers.push({
+        ...rig.layers[0],
+        role: 'detail',
+        asset: { uri: `file:///images/${receipt}-0.png`, width: 100, height: 100 },
+      });
+      return rig;
+    },
+  };
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  const rig = await service.select('c', 0);
+  expect(rig.layers.at(-1)?.role).toBe('background');
+});

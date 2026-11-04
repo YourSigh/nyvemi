@@ -1,3 +1,4 @@
+import { restoreRigMetadata } from './rig-metadata';
 import { MeshAvatarSchema } from '../avatar/model';
 import { id } from '../domain/models';
 import type { VisualBrief } from './brief';
@@ -270,7 +271,10 @@ export class VisualCreationService {
       draft.selected = image;
       draft.rig = undefined;
       await this.store.put('visualDrafts', draft);
-      draft.rig = reuse || validateRig(await provider.split(image));
+      draft.rig = await restoreRigMetadata(
+        this.store,
+        reuse || validateRig(await provider.split(image)),
+      );
       draft.layerProviderId = provider.identity;
       await this.store.put('visualDrafts', draft);
       return draft.rig;

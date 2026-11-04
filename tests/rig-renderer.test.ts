@@ -76,3 +76,40 @@ it('renders independent shoulder pivots and never passes an undefined transformO
   expect(fallback.props.style[1]).toBeUndefined();
   await act(async () => view.unmount());
 });
+it('omits provider background layers while preserving actual accessories', async () => {
+  let view!: ReactTestRenderer;
+  const accessory = {
+    role: 'detail' as const,
+    z: 1,
+    bounds: [0, 0, 1, 1] as [number, number, number, number],
+    asset: { uri: 'file://accessory', width: 100, height: 100 },
+  };
+  await act(async () => {
+    view = create(
+      createElement(RigCharacter, {
+        rig: {
+          ...rig,
+          layers: [
+            {
+              ...accessory,
+              role: 'background',
+              asset: { ...accessory.asset, uri: 'file://background' },
+            },
+            accessory,
+          ],
+        },
+        width: 100,
+        height: 100,
+        eyesClosed: false,
+        mouthOpen: false,
+        state: 'idle',
+        headStyle: {},
+        armStyle: {},
+      }),
+    );
+  });
+  expect(view.root.findAllByType('Image' as never).map((n) => n.props.source.uri)).toEqual([
+    'file://accessory',
+  ]);
+  await act(async () => view.unmount());
+});
