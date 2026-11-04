@@ -12,7 +12,7 @@ export interface RenderLayer {
 }
 const full: [number, number, number, number] = [0, 0, 1, 1];
 /** Resolve in canvas coordinates. A combined/opaque or ambiguous arm stays still. */
-export function armLayout(layer: RigLayer, regions: ArmRegion[]): RenderLayer[] {
+export function armLayout(layer: RigLayer, regions: ArmRegion[], centerX = 0.5): RenderLayer[] {
   const valid = regions.filter(
     ({ crop, pivot }) =>
       crop.length === 4 &&
@@ -31,11 +31,11 @@ export function armLayout(layer: RigLayer, regions: ArmRegion[]): RenderLayer[] 
   if (!valid.length || valid.length !== regions.length || valid.length > 2)
     return [{ layer, crop: full }];
   const sides = valid.map((r) =>
-    x + r.pivot[0] * w < 0.5 ? ('left' as const) : ('right' as const),
+    x + r.pivot[0] * w < centerX ? ('left' as const) : ('right' as const),
   );
   if (
     (valid.length === 2 && sides[0] === sides[1]) ||
-    (valid.length === 1 && x < 0.5 && x + w > 0.5 && w > 0.4)
+    (valid.length === 1 && x < centerX && x + w > centerX)
   )
     return [{ layer, crop: full }];
   return valid.map((region, i) => {

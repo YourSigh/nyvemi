@@ -26,3 +26,20 @@ it('uses a single arm shoulder as its pivot and holds ambiguous combined artwork
   expect(armLayout(layer, [{ crop: [0, 0, 1, 1], pivot: [0.2, 0.1] }])[0].side).toBeUndefined();
   expect(armLayout(layer, [{ crop: [0, 0, 0.5, 1], pivot: [1.2, 0.1] }])[0].side).toBeUndefined();
 });
+it('uses the torso axis for off-center characters and holds a narrow connected pair still', () => {
+  const offCenter = { ...layer, bounds: [0.5, 0.4, 0.4, 0.3] as [number, number, number, number] };
+  expect(
+    armLayout(
+      offCenter,
+      [
+        { crop: [0, 0, 0.5, 1], pivot: [0.1, 0.1] },
+        { crop: [0.5, 0, 0.5, 1], pivot: [0.9, 0.1] },
+      ],
+      0.7,
+    ).map((p) => p.side),
+  ).toEqual(['left', 'right']);
+  const narrow = { ...layer, bounds: [0.65, 0.4, 0.1, 0.1] as [number, number, number, number] };
+  expect(
+    armLayout(narrow, [{ crop: [0, 0, 1, 1], pivot: [0.1, 0.1] }], 0.7)[0].side,
+  ).toBeUndefined();
+});

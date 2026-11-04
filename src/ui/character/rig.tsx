@@ -52,12 +52,14 @@ export function RigCharacter({
   const [resolved, setResolved] = useState<{ rig: CharacterRig; layers: RenderLayer[] }>();
   useEffect(() => {
     let live = true;
+    const body = rig.layers.find((layer) => layer.role === 'body');
+    const centerX = body ? body.bounds[0] + body.bounds[2] / 2 : 0.5;
     void Promise.all(
       rig.layers.map(async (layer) => {
         if (layer.role !== 'arm' || layer.asset.svg)
           return [{ layer, crop: [0, 0, 1, 1] } as RenderLayer];
         try {
-          return armLayout(layer, await bridge().analyzeCharacterImage(layer.asset.uri));
+          return armLayout(layer, await bridge().analyzeCharacterImage(layer.asset.uri), centerX);
         } catch {
           return [{ layer, crop: [0, 0, 1, 1] } as RenderLayer];
         }
