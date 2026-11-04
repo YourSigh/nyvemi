@@ -547,3 +547,107 @@ it('ignores planning comments and extra observations but does not coerce the ide
     schema.parse({ brief: { ...brief, namedCharacter: 'false' }, queries: [] });
   await expect(director.classify({ description: '原创蓝发角色', mode: 'text' })).rejects.toThrow();
 });
+
+it('resumes uploaded-reference creation through format failures and a failed download without repeating drawing requests', async () => {
+  const { store } = await fixture();
+  const reference = asset('uploaded-reference');
+  const input = {
+    description: '原创短发运动员，蓝衣服，黄鞋',
+    mode: 'reference' as const,
+    reference,
+  };
+  const extraObservations = {
+    checks: [{ ...match, features: Array(7).fill('蓝衣服'), comment: '额外说明' }],
+  };
+  const imagePrompt = '绘制短发的原创运动员，穿蓝色运动服和黄色运动鞋，正面全身站姿。';
+  const modelResponse = (content: unknown) =>
+    new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }));
+  const plan = { brief: { ...brief, subject: '', namedCharacter: false }, queries: [] };
+  const ds = vi
+    .fn<typeof fetch>()
+    .mockImplementationOnce(async () => modelResponse(plan))
+    .mockImplementationOnce(async () => modelResponse({ ...match, status: 'invalid' }))
+    .mockImplementationOnce(async () => modelResponse(plan))
+    .mockImplementationOnce(async () => modelResponse(extraObservations))
+    .mockImplementationOnce(async () => modelResponse({ prompt: imagePrompt }))
+    .mockImplementationOnce(async () => modelResponse({ ...match, status: 'invalid' }))
+    .mockImplementation(async () => modelResponse(extraObservations));
+  let drawings = 0;
+  const ark = vi.fn<typeof fetch>(async (_url, init) => {
+    const body = JSON.parse(String(init?.body));
+    expect(body.prompt).toContain(imagePrompt);
+    if (drawings === 0) expect(body.image).toBe('data:image/png;base64,file://uploaded-reference');
+    drawings++;
+    return new Response(
+      JSON.stringify({
+        data: [{ url: `https://cdn.example.org/out-${drawings}`, size: '1024x1536' }],
+      }),
+    );
+  });
+  const files = {
+    ...assets,
+    download: vi
+      .fn(async (_url: string, name: string) => asset(name))
+      .mockRejectedValueOnce(Error('下载中断')),
+  };
+  const web = { search: vi.fn(), read: vi.fn() };
+  // Construct new service/provider instances on every attempt, as the screen does on resume.
+  const service = () =>
+    new VisualCreationService(
+      store,
+      async () => {
+        const model = new OpenAICompatibleProvider(
+          deepSeekPreset,
+          { get: async () => 'test-key', set: vi.fn(), remove: vi.fn() },
+          async () => {},
+          ds,
+        );
+        const director = new DSVisualDirector(async () => model, web, files, hash);
+        return new SeedreamImageProvider(
+          defaultImageSettings,
+          async () => 'test-key',
+          store,
+          files,
+          hash,
+          ark,
+          undefined,
+          director,
+        );
+      },
+      files,
+    );
+
+  await expect(service().generate('c', input, { planOnly: true })).rejects.toMatchObject({
+    details: { purpose: 'visual_reference_review', reason: 'schema' },
+  });
+  expect((await store.get('visualDrafts', 'c'))?.input.reference).toEqual(reference);
+  const prepared = await service().generate('c', input, { planOnly: true });
+  expect(prepared.research?.references[0].check.features).toHaveLength(6);
+  expect(prepared.research?.status).toBe('awaiting_reference');
+  expect(ark).not.toHaveBeenCalled();
+  expect(web.search).not.toHaveBeenCalled();
+
+  const referenceId = prepared.research!.references[0].id;
+  await expect(service().generate('c', input, { referenceId })).rejects.toThrow('下载中断');
+  expect((await store.list('imageRequests'))[0].status).toBe('received');
+  await expect(service().generate('c', input)).rejects.toMatchObject({
+    details: { purpose: 'visual_candidate_review', reason: 'schema' },
+  });
+  const interrupted = await store.get('visualDrafts', 'c');
+  expect(interrupted?.candidates).toHaveLength(1);
+  expect(ark).toHaveBeenCalledOnce();
+
+  const done = await service().generate('c', input);
+  expect(done.candidates).toHaveLength(3);
+  expect(done.candidates[0]).toEqual(interrupted?.candidates[0]);
+  expect(done.candidateReviews?.map((review) => review?.status)).toEqual([
+    'match',
+    'match',
+    'match',
+  ]);
+  expect(ark).toHaveBeenCalledTimes(3);
+  const modelCalls = ds.mock.calls.length;
+  await service().generate('c', input);
+  expect(ark).toHaveBeenCalledTimes(3);
+  expect(ds).toHaveBeenCalledTimes(modelCalls);
+});
