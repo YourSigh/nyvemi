@@ -452,3 +452,56 @@ it('does not let a confident text model invent canonical hair or accessories', a
     }),
   ).toBeUndefined();
 });
+
+it('uses decoded normalized dimensions and PNG bytes for decomposition and stops invalid input before billing', async () => {
+  const { store, assets } = await setup();
+  const prepared = vi.fn(async () => ({
+    dataUrl: 'data:image/png;base64,AAAA',
+    width: 1024,
+    height: 1024,
+  }));
+  const request = vi.fn<typeof fetch>(async (_url, init) => {
+    expect(JSON.parse(String(init?.body)).image).toBe('data:image/png;base64,AAAA');
+    return new Response(JSON.stringify({ error: { code: 'InvalidParameter', param: 'image' } }), {
+      status: 400,
+    });
+  });
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'test-key',
+    store,
+    { ...assets, prepareDecomposition: prepared },
+    hash,
+    request,
+  );
+  // Stale asset metadata cannot override the decoded image dimensions.
+  await expect(provider.split({ uri: 'file://jpeg', width: 1, height: 1 })).rejects.toThrow(
+    'HTTP 400',
+  );
+  expect(request).toHaveBeenCalledOnce();
+  prepared.mockResolvedValueOnce({
+    dataUrl: 'data:image/png;base64,AAAA',
+    width: 100,
+    height: 100,
+  });
+  await expect(provider.split({ uri: 'file://small', width: 2048, height: 2048 })).rejects.toThrow(
+    '至少26万',
+  );
+  prepared.mockResolvedValueOnce({
+    dataUrl: 'data:image/png;base64,AAAA',
+    width: 17000,
+    height: 512,
+  });
+  await expect(provider.split({ uri: 'file://wide', width: 2048, height: 2048 })).rejects.toThrow(
+    '宽高比',
+  );
+  prepared.mockResolvedValueOnce({
+    dataUrl: 'data:image/png;base64,not valid',
+    width: 1024,
+    height: 1024,
+  });
+  await expect(
+    provider.split({ uri: 'file://invalid', width: 2048, height: 2048 }),
+  ).rejects.toThrow('编码无效');
+  expect(request).toHaveBeenCalledOnce();
+});

@@ -16,6 +16,9 @@ import { mockCandidate, mockRig } from './mock';
 export interface ImageAssets {
   fingerprint(asset: ImageAsset): Promise<string>;
   dataUrl(asset: ImageAsset): Promise<string>;
+  prepareDecomposition?(
+    asset: ImageAsset,
+  ): Promise<{ dataUrl: string; width: number; height: number }>;
   download(url: string, key: string, signal?: AbortSignal): Promise<ImageAsset>;
   exists(asset: ImageAsset): Promise<boolean>;
 }

@@ -77,6 +77,8 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("prepareCharacterImage") { uri: String -> NyvemiCharacterRaster.prepare(context(), uri) }
+    AsyncFunction("analyzeCharacterImage") { uri: String -> NyvemiCharacterRaster.analyze(context(), uri) }
     Function("deviceTimeContext") {
       val clock = java.util.Calendar.getInstance()
       val hour = clock.get(java.util.Calendar.HOUR_OF_DAY)

@@ -23,6 +23,8 @@ const result = spawnSync(
       ...process.env,
       EXPO_NO_DOTENV: '1',
       NYVEMI_RUN_LIVE_FLASH_SPLIT: '1',
+      NYVEMI_ARM_NORMALIZED: process.argv.includes('--normalized') ? '1' : '0',
+      NYVEMI_ARM_SPLIT: process.argv.includes('--arms') ? '1' : '0',
       NYVEMI_FLASH_REFINED: process.argv.includes('--refined') ? '1' : '0',
       NYVEMI_ARK_API_KEY: local.NYVEMI_ARK_API_KEY,
       NYVEMI_TEST_API_KEY: local.NYVEMI_TEST_API_KEY || local.DEEPSEEK_API_KEY,

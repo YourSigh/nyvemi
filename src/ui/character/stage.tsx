@@ -74,6 +74,7 @@ function LegacyCharacterStage({
               state={state}
               headStyle={motion.headStyle}
               armStyle={motion.armStyle}
+              leftArmStyle={motion.leftArmStyle}
             />
           ) : (
             <MockCharacter

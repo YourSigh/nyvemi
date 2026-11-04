@@ -64,6 +64,11 @@ vi.mock('react-native', () => ({
     },
   },
 }));
+vi.mock('../src/native/android', () => ({
+  bridge: () => ({
+    prepareCharacterImage: async (uri: string) => ({ uri, width: 1024, height: 1024 }),
+  }),
+}));
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
 const png = readFileSync('assets/nyvemi-icon.png');
 beforeEach(() => {

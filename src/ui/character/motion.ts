@@ -215,6 +215,11 @@ export function useCharacterMotion(
         { translateY: state === 'listening' || state === 'sad' ? 1 : 0 },
       ],
     },
+    leftArmStyle: {
+      transform: [
+        { rotate: breath.interpolate({ inputRange: [0, 1], outputRange: ['-0.4deg', '0.4deg'] }) },
+      ],
+    },
     armStyle: {
       transform: [
         { rotate: arm.interpolate({ inputRange: [-45, 45], outputRange: ['-45deg', '45deg'] }) },

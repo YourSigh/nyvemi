@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { bridge } from '../../native/android';
+import { armLayout, type RenderLayer } from '../../appearance/arm-layout';
 import { Animated, Image, View, type ViewProps } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import type { CharacterRig, ImageAsset } from '../../appearance/model';
@@ -6,7 +9,9 @@ export function CharacterImage({
   asset,
   width,
   height,
+  preserveDetail = false,
 }: {
+  preserveDetail?: boolean;
   asset: ImageAsset;
   width: number;
   height: number;
@@ -14,7 +19,12 @@ export function CharacterImage({
   return asset.svg ? (
     <SvgXml xml={asset.svg} width={width} height={height} />
   ) : (
-    <Image source={{ uri: asset.uri }} resizeMode="contain" style={{ width, height }} />
+    <Image
+      source={{ uri: asset.uri }}
+      resizeMode="contain"
+      resizeMethod={preserveDetail ? 'scale' : 'auto'}
+      style={{ width, height }}
+    />
   );
 }
 export function RigCharacter({
@@ -26,6 +36,7 @@ export function RigCharacter({
   state,
   headStyle,
   armStyle,
+  leftArmStyle,
 }: {
   rig: CharacterRig;
   width: number;
@@ -35,33 +46,70 @@ export function RigCharacter({
   state: CharacterInteractionState;
   headStyle: Animated.AnimatedProps<ViewProps>['style'];
   armStyle: Animated.AnimatedProps<ViewProps>['style'];
+  leftArmStyle?: Animated.AnimatedProps<ViewProps>['style'];
 }) {
   const headRoles = ['head', 'hair', 'eyes', 'mouth'];
+  const [resolved, setResolved] = useState<{ rig: CharacterRig; layers: RenderLayer[] }>();
+  useEffect(() => {
+    let live = true;
+    void Promise.all(
+      rig.layers.map(async (layer) => {
+        if (layer.role !== 'arm' || layer.asset.svg)
+          return [{ layer, crop: [0, 0, 1, 1] } as RenderLayer];
+        try {
+          return armLayout(layer, await bridge().analyzeCharacterImage(layer.asset.uri));
+        } catch {
+          return [{ layer, crop: [0, 0, 1, 1] } as RenderLayer];
+        }
+      }),
+    ).then((layers) => {
+      if (live) setResolved({ rig, layers: layers.flat() });
+    });
+    return () => {
+      live = false;
+    };
+  }, [rig]);
+  const layers =
+    resolved?.rig === rig
+      ? resolved.layers
+      : rig.layers.map((layer) => ({ layer, crop: [0, 0, 1, 1] }) as RenderLayer);
   return (
     <View style={{ width, height }}>
-      {[...rig.layers]
-        .sort((a, b) => a.z - b.z)
-        .map((layer, i) => {
+      {[...layers]
+        .sort((a, b) => a.layer.z - b.layer.z)
+        .map(({ layer, crop, pivot, side }, i) => {
           const [x, y, w, h] = layer.bounds;
+          const isArm = layer.role === 'arm';
+          const armPosition = {
+            position: 'absolute' as const,
+            left: x * width,
+            top: y * height,
+            width: w * width,
+            height: h * height,
+            ...(pivot ? { transformOrigin: [pivot[0] * w * width, pivot[1] * h * height, 0] } : {}),
+          };
           const closed = eyesClosed || state === 'sleepy';
           return (
             <Animated.View
               key={i}
               pointerEvents="none"
               style={[
-                { position: 'absolute', width, height },
+                isArm ? armPosition : { position: 'absolute', width, height },
                 headRoles.includes(layer.role)
                   ? headStyle
-                  : layer.role === 'arm'
-                    ? armStyle
+                  : side
+                    ? side === 'right'
+                      ? armStyle
+                      : leftArmStyle
                     : undefined,
               ]}
             >
               <View
                 style={{
                   position: 'absolute',
-                  left: x * width,
-                  top: y * height,
+                  left: isArm ? 0 : x * width,
+                  top: isArm ? 0 : y * height,
+                  overflow: 'hidden',
                   width: w * width,
                   height: h * height,
                   transform: [
@@ -80,7 +128,20 @@ export function RigCharacter({
                   ],
                 }}
               >
-                <CharacterImage asset={layer.asset} width={w * width} height={h * height} />
+                <View
+                  style={{
+                    position: 'absolute',
+                    left: (-crop[0] * w * width) / crop[2],
+                    top: (-crop[1] * h * height) / crop[3],
+                  }}
+                >
+                  <CharacterImage
+                    preserveDetail={layer.role === 'eyes' || layer.role === 'mouth'}
+                    asset={layer.asset}
+                    width={(w * width) / crop[2]}
+                    height={(h * height) / crop[3]}
+                  />
+                </View>
               </View>
             </Animated.View>
           );

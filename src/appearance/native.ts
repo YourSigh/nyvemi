@@ -1,3 +1,4 @@
+import { bridge } from '../native/android';
 import { publicUrl } from '../agent/web';
 import { id } from '../domain/models';
 import { imageSecrets } from './secrets';
@@ -44,6 +45,17 @@ export const imageAssets: ImageAssets = {
     const b = await file.bytes();
     const mime = b[0] === 137 ? 'image/png' : b[0] === 255 ? 'image/jpeg' : 'image/webp';
     return `data:${mime};base64,${await file.base64()}`;
+  },
+  prepareDecomposition: async (asset) => {
+    const normalized = await bridge()
+      .prepareCharacterImage(asset.uri)
+      .catch(() => {
+        throw new Error('图片转换失败，请重新选择清晰的 PNG、JPEG 或 WebP 原图');
+      });
+    return {
+      ...normalized,
+      dataUrl: `data:image/png;base64,${await new File(normalized.uri).base64()}`,
+    };
   },
   download: async (url, key, signal) => {
     if (signal?.aborted) throw new Error('图片下载已取消，已生成结果会保留');

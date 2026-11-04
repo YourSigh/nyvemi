@@ -22,9 +22,14 @@ type Preview = {
 it.skipIf(process.env.NYVEMI_RUN_LIVE_FLASH_SPLIT !== '1')(
   'validates a real Flash decomposition using an existing portrait, bounded billing and actual alpha/composite inspection',
   async () => {
+    const arms = process.env.NYVEMI_ARM_SPLIT === '1';
     const refined = process.env.NYVEMI_FLASH_REFINED === '1';
     const root = resolve(
-      refined ? 'artifacts/live-flash-split-refined' : 'artifacts/live-flash-split',
+      arms
+        ? 'artifacts/live-arm-split'
+        : refined
+          ? 'artifacts/live-flash-split-refined'
+          : 'artifacts/live-flash-split',
     );
     mkdirSync(root, { recursive: true });
     const source = resolve('artifacts/avatar-v2-source/portrait.png');
@@ -41,6 +46,20 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE_FLASH_SPLIT !== '1')(
     const disk = (uri: string) => (uri.startsWith('file:') ? fileURLToPath(uri) : uri);
     const hash = async (text: string) => createHash('sha256').update(text).digest('hex');
     const assets: ImageAssets = {
+      ...(arms && process.env.NYVEMI_ARM_NORMALIZED === '1'
+        ? {
+            prepareDecomposition: async (a: { uri: string }) => {
+              const { PNG } = createRequire(import.meta.url)('pngjs');
+              const { decode } = createRequire(import.meta.url)('../scripts/vtuber/psd.cjs');
+              const png = decode(disk(a.uri));
+              return {
+                dataUrl: `data:image/png;base64,${PNG.sync.write(png).toString('base64')}`,
+                width: png.width,
+                height: png.height,
+              };
+            },
+          }
+        : {}),
       exists: async (a) => existsSync(disk(a.uri)),
       fingerprint: async (a) => hash(readFileSync(disk(a.uri)).toString('base64')),
       dataUrl: async (a) => {
@@ -83,7 +102,9 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE_FLASH_SPLIT !== '1')(
     const db = new TestDatabase(resolve(root, 'cache.sqlite'));
     await migrate(db);
     const store = new SQLiteStore(db);
-    const budgetFile = resolve('artifacts/live-flash-split/budget.json');
+    const budgetFile = resolve(
+      arms ? 'artifacts/live-arm-split/budget.json' : 'artifacts/live-flash-split/budget.json',
+    );
     const budget: { requests: number; limit: number } = existsSync(budgetFile)
       ? JSON.parse(readFileSync(budgetFile, 'utf8'))
       : { requests: 0, limit: 2 };
@@ -117,6 +138,17 @@ it.skipIf(process.env.NYVEMI_RUN_LIVE_FLASH_SPLIT !== '1')(
         paidPostsThisRun++;
         writeFileSync(budgetFile, JSON.stringify({ ...budget, limit: 2 }));
         const response = await fetch(url, { ...init, redirect: 'error' });
+        if (!response.ok && arms) {
+          const rejected = (await response.clone().json()) as { error?: { message?: string } };
+          const message = rejected.error?.message
+            ?.replaceAll(process.env.NYVEMI_ARK_API_KEY!, '[REDACTED]')
+            .replace(/data:image\/[^\s]+/g, '[IMAGE]')
+            .slice(0, 600);
+          writeFileSync(
+            resolve(root, `safe-error-${budget.requests}.json`),
+            JSON.stringify({ status: response.status, message }),
+          );
+        }
         if (response.ok) {
           const data = (await response.clone().json()) as { data?: unknown[]; usage?: unknown };
           outputCount = data.data?.length ?? 0;

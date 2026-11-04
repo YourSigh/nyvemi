@@ -48,7 +48,7 @@ export function referenceGenerationPrompt(input: VisualInput, index: number) {
   return `角色立绘，用户要求：${input.description}。${input.reference ? '图1是用户确认的身份参考，保留其发型轮廓、发色、瞳色、服装与标志饰物，只按用户要求改动。' : '按用户要求设计同一个原创角色。'}${input.anchor ? '最后一张参考是本批已核对形象，保持其角色设计一致。' : ''}${features ? `参考观察（用户改动优先）：${features}。` : ''}正面、头摆正、单人全身含脚、中立站姿、双手自然分开不挡身体、双眼睁开，简单背景。Q版仅简化比例与线条，不改角色身份和装束。第${index + 1}个候选，只微调表情与明暗，无文字拼贴。`;
 }
 export const decompositionPrompt =
-  'Decompose the source into aligned, animation-ready transparent PNG layers without redesigning it. English part names: body, arm, head, hair, eyes, mouth. body: torso, neck, lower body and torso clothing only; remove both arms AND their entire sleeves/cuffs from this layer, fill the hidden torso behind them. arm: both complete arms INCLUDING original sleeves/cuffs and hands, preserving their exact original pose, silhouette and alignment; do not expose new bare skin where the source has sleeves. head: complete face/scalp skin, removing eyes, mouth and hair and filling the skin underneath; a blank face is required. eyes: both original open eyes. mouth: original mouth. hair: original hair and attached accessories. Each visible feature must appear in exactly one layer, no duplicated sleeves/limbs/eyes/mouth. Complete hidden neck, shoulder roots and scalp with overlapping margins under covering parts, not transparent cuts. Keep layer placement/bounding boxes in the original canvas. Background only in the base; omit character duplicates from base. Return only the six named part groups plus the base. Preserve identity, clothes and colors.';
+  'Decompose the source into aligned, animation-ready transparent PNG layers without redesigning it. English part names: body, left_arm, right_arm, head, hair, eyes, mouth. left_arm is the arm on the LEFT of the image; right_arm is on the RIGHT of the image. Always output the two arms as independent layers, never one combined arm layer. body: torso, neck, lower body and torso clothing only; remove both arms AND their entire sleeves/cuffs from this layer, fill the hidden torso behind them. left_arm and right_arm: each is one complete arm INCLUDING its original sleeve/cuff, hand and any held prop, preserving their exact original pose, silhouette and alignment; do not expose new bare skin where the source has sleeves. head: complete face/scalp skin, removing eyes, mouth and hair and filling the skin underneath; a blank face is required. eyes: both original open eyes. mouth: original mouth. hair: original hair and attached accessories. Each visible feature must appear in exactly one layer, no duplicated sleeves/limbs/eyes/mouth. Complete hidden neck, shoulder roots and scalp with overlapping margins under covering parts, not transparent cuts. Keep layer placement/bounding boxes in the original canvas. Background only in the base; omit character duplicates from base. Return only the seven named part groups plus the base. Preserve identity, clothes and colors.';
 /** Prefer native pixel placement; normalized 0..1000 coordinates lose sub-pixel alignment. */
 export function layerBounds(
   box: {
@@ -280,6 +280,7 @@ export class SeedreamImageProvider implements ImageProvider {
             `\n候选${index + 1}/3：同一个角色、同一身份和识别特征，只允许轻微表情、线条或明暗差异，不改发型、瞳色与服装。`,
         size: '2K',
         response_format: 'url',
+        output_format: 'png',
         watermark: false,
         ...(referenceData.length
           ? { image: referenceData.length === 1 ? referenceData[0] : referenceData }
@@ -319,12 +320,22 @@ export class SeedreamImageProvider implements ImageProvider {
     );
   }
   private async decompositionImage(image: ImageAsset) {
-    if (image.width * image.height < 262144)
-      throw new Error('拆层图片至少需要 26 万像素，请选择更清晰的原图');
-    const data = await this.assets.dataUrl(image);
-    if (!/^data:image\/(png|jpeg);base64,/.test(data))
-      throw new Error('拆层暂时只支持 PNG 或 JPEG，请转换原图格式后再试');
-    return data;
+    const prepared = this.assets.prepareDecomposition
+      ? await this.assets.prepareDecomposition(image)
+      : { dataUrl: await this.assets.dataUrl(image), width: image.width, height: image.height };
+    const pixels = prepared.width * prepared.height;
+    const ratio = prepared.width / prepared.height;
+    if (
+      !Number.isFinite(pixels) ||
+      pixels < 262144 ||
+      pixels > 36_000_000 ||
+      ratio < 1 / 16 ||
+      ratio > 16
+    )
+      throw new Error('拆层图片需至少26万像素，宽高比在1:16到16:1之间，请更换原图');
+    if (!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(prepared.dataUrl))
+      throw new Error('拆层图片编码无效，请重新选择参考图');
+    return prepared.dataUrl;
   }
   async split(image: ImageAsset): Promise<CharacterRig> {
     const dataUrl = await this.decompositionImage(image);
