@@ -95,7 +95,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
-          if (!d.saved && d.providerId !== 'mock-v1') {
+          if (d.providerId !== 'mock-v1' && (!d.saved || d.rig || d.meshAvatar)) {
             setEditing(
               d.rig || d.meshAvatar || d.research
                 ? false
@@ -677,6 +677,30 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                   setDraft(await runtime.store.get('visualDrafts', cid));
                   setPreviewState('idle');
                 })
+              }
+            />
+          ) : null}
+          {rig?.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
+            <TextButton
+              title={draft.armRepairApplied ? '双臂已修复' : '修复双臂连接（付费）'}
+              disabled={Boolean(busy) || !awake.complete || draft.armRepairApplied}
+              onPress={() =>
+                Alert.alert(
+                  '修复双臂连接',
+                  '复用当前原画和其他图层，重新拆出左右手。将使用豆包拆层额度，按实际输出张数计费。',
+                  [
+                    { text: '取消', style: 'cancel' },
+                    {
+                      text: '修复',
+                      onPress: () =>
+                        void run('正在修复双臂', async () => {
+                          setRig(await runtime.visuals.repairArms(cid));
+                          setDraft(await runtime.store.get('visualDrafts', cid));
+                          setPreviewState('idle');
+                        }),
+                    },
+                  ],
+                )
               }
             />
           ) : null}

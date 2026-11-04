@@ -1,3 +1,4 @@
+import { isBackgroundPart } from './rig-metadata';
 import { z } from 'zod';
 import { ImageProviderError, readImageFailure } from './errors';
 import type { VisualBrief } from './brief';
@@ -362,19 +363,21 @@ export class SeedreamImageProvider implements ImageProvider {
           // Base backgrounds are intentionally omitted: character stage must stay transparent.
           if (item === base || !item.bounding_box) continue;
           const name = (item.name ?? item.bounding_box.name ?? '').toLowerCase();
-          const role = /eye|眼/.test(name)
-            ? 'eyes'
-            : /mouth|嘴|口部/.test(name)
-              ? 'mouth'
-              : /hair|头发|发丝/.test(name)
-                ? 'hair'
-                : /head|face|头部|脸/.test(name)
-                  ? 'head'
-                  : /arm|hand|手/.test(name)
-                    ? 'arm'
-                    : /body|torso|身体|躯干|服装|衣/.test(name)
-                      ? 'body'
-                      : 'detail';
+          const role = isBackgroundPart(name)
+            ? 'background'
+            : /eye|眼/.test(name)
+              ? 'eyes'
+              : /mouth|嘴|口部/.test(name)
+                ? 'mouth'
+                : /hair|头发|发丝/.test(name)
+                  ? 'hair'
+                  : /head|face|头部|脸/.test(name)
+                    ? 'head'
+                    : /arm|hand|手/.test(name)
+                      ? 'arm'
+                      : /body|torso|身体|躯干|服装|衣/.test(name)
+                        ? 'body'
+                        : 'detail';
           layers.push({
             role,
             asset: await this.assets.download(item.url, `${cacheId}-${i}`),
@@ -383,6 +386,53 @@ export class SeedreamImageProvider implements ImageProvider {
           });
         }
         return validateRig({ version: 1, source: 'seedream', width, height, layers });
+      },
+    );
+  }
+  async repairArms(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig> {
+    return this.cached(
+      'repair-arms-v1',
+      [await this.assets.fingerprint(image), rig],
+      {
+        model: this.config.layerModel,
+        image: await this.decompositionImage(image),
+        prompt:
+          'Only separate two complete arm layers, named left_arm and right_arm. LEFT and RIGHT refer to image sides. Each contains the entire original arm from shoulder attachment to fingertips, INCLUDING its original sleeve/cuff and any held object. Do not combine both arms. Preserve exact source pose, identity, clothing, colors and alignment. Complete shoulder roots beneath torso clothing with generous overlap. Keep the held prop attached to its hand. Return only base plus left_arm plus right_arm, transparent PNG layers and original canvas coordinates. Exclude torso, head and background from the arm layers.',
+        layer_decomposition: true,
+        size: '2K',
+        response_format: 'url',
+        watermark: false,
+      },
+      async (value, cacheId) => {
+        const response = ResponseSchema.parse(value);
+        const base = response.data.find((item) => item.z_index === 0 || !item.bounding_box);
+        if (!base) throw Error('手臂修复缺少底图尺寸，已保留当前形象');
+        const [width, height] = base.size.split('x').map(Number);
+        const parts = response.data.filter(
+          (item) =>
+            item !== base &&
+            item.bounding_box &&
+            /arm|hand|手|臂/.test((item.name ?? item.bounding_box?.name ?? '').toLowerCase()),
+        );
+        if (parts.length !== 2) throw Error('服务商没有返回独立双臂，已保留当前形象与付费响应');
+        const armZ = rig.layers.find((layer) => layer.role === 'arm')?.z ?? 4;
+        const layers = await Promise.all(
+          parts.map(async (item, i) => ({
+            role: 'arm' as const,
+            z: armZ,
+            bounds: layerBounds(item.bounding_box!, width, height),
+            asset: await this.assets.download(item.url, `${cacheId}-arm-${i}`),
+          })),
+        );
+        const centers = layers.map((layer) => layer.bounds[0] + layer.bounds[2] / 2);
+        const body = rig.layers.find((layer) => layer.role === 'body');
+        const axis = body ? body.bounds[0] + body.bounds[2] / 2 : 0.5;
+        if (!centers.some((x) => x < axis) || !centers.some((x) => x >= axis))
+          throw Error('双臂位置无法可靠区分，已保留当前形象与付费响应');
+        return validateRig({
+          ...rig,
+          layers: [...rig.layers.filter((layer) => layer.role !== 'arm'), ...layers],
+        });
       },
     );
   }

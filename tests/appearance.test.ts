@@ -505,3 +505,107 @@ it('uses decoded normalized dimensions and PNG bytes for decomposition and stops
   ).rejects.toThrow('编码无效');
   expect(request).toHaveBeenCalledOnce();
 });
+it('repairs complete arms independently, keeps other layers and reuses paid responses after download failure', async () => {
+  const { store, assets } = await setup();
+  const data = [
+    { url: 'https://cdn.example/base', size: '1024x1024', z_index: 0 },
+    ...['left_arm', 'right_arm'].map((name, i) => ({
+      url: `https://cdn.example/${name}`,
+      name,
+      size: '256x512',
+      z_index: i + 1,
+      bounding_box: { normalized: [i ? 650 : 100, 400, i ? 900 : 350, 900] },
+    })),
+  ];
+  const http = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({ data })));
+  const prepare = vi.fn(async () => ({
+    dataUrl: 'data:image/png;base64,AAAA',
+    width: 1024,
+    height: 1024,
+  }));
+  assets.prepareDecomposition = prepare;
+  const download = vi
+    .spyOn(assets, 'download')
+    .mockRejectedValueOnce(Error('download offline'))
+    .mockImplementation(async (_u, key) => ({ uri: `file://${key}`, width: 256, height: 512 }));
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'secret',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  const rig = mockRig('x');
+  rig.source = 'seedream';
+  const image = { uri: 'file://selected.jpg', width: 1024, height: 1024 };
+  await expect(provider.repairArms(image, rig)).rejects.toThrow('offline');
+  const next = await provider.repairArms(image, rig);
+  expect(next.layers.filter((l) => l.role === 'arm')).toHaveLength(2);
+  expect(next.layers.filter((l) => l.role !== 'arm')).toEqual(
+    rig.layers.filter((l) => l.role !== 'arm'),
+  );
+  expect(http).toHaveBeenCalledTimes(1);
+  expect(prepare).toHaveBeenCalled();
+  expect(download).toHaveBeenCalled();
+  expect(JSON.parse(String(http.mock.calls[0][1]?.body))).toMatchObject({
+    image: 'data:image/png;base64,AAAA',
+    layer_decomposition: true,
+  });
+});
+it('retains an invalid paid arm response without charging again or replacing the current rig', async () => {
+  const { store, assets } = await setup();
+  const http = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            { url: 'https://cdn.example/base', size: '1024x1024', z_index: 0 },
+            {
+              url: 'https://cdn.example/arms',
+              name: 'arms',
+              size: '512x512',
+              z_index: 1,
+              bounding_box: { normalized: [100, 400, 900, 900] },
+            },
+          ],
+        }),
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'secret',
+    store,
+    assets,
+    hash,
+    http,
+  );
+  const rig = mockRig('x');
+  rig.source = 'seedream';
+  for (let i = 0; i < 2; i++)
+    await expect(
+      provider.repairArms({ uri: 'file://ref', width: 1024, height: 1024 }, rig),
+    ).rejects.toThrow('独立双臂');
+  expect(http).toHaveBeenCalledTimes(1);
+  expect((await store.list('imageRequests'))[0].status).toBe('received');
+});
+it('does not charge twice when repairing the same selected arms', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const repairArms = vi.fn(async (_i: unknown, rig: ReturnType<typeof mockRig>) => rig);
+  const provider = {
+    identity: mock.identity,
+    candidate: mock.candidate.bind(mock),
+    split: mock.split.bind(mock),
+    repairArms,
+  };
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  await service.select('c', 0);
+  await service.repairArms('c');
+  await service.repairArms('c');
+  expect(repairArms).toHaveBeenCalledTimes(1);
+  await service.select('c', 1);
+  await service.repairArms('c');
+  expect(repairArms).toHaveBeenCalledTimes(2);
+});

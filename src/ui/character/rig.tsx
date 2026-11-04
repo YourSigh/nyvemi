@@ -78,6 +78,7 @@ export function RigCharacter({
   return (
     <View style={{ width, height }}>
       {[...layers]
+        .filter(({ layer }) => rig.source !== 'seedream' || layer.role !== 'background')
         .sort((a, b) => a.layer.z - b.layer.z)
         .map(({ layer, crop, pivot, side }, i) => {
           const [x, y, w, h] = layer.bounds;

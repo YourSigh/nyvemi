@@ -86,6 +86,7 @@ export interface VisualDraft {
   meshAvatar?: MeshAvatar;
   saved?: boolean;
   bodyRepairApplied?: boolean;
+  armRepairApplied?: boolean;
   brief?: VisualBrief;
   promptVersion?: 2 | 3 | 4;
   imagePrompt?: string;

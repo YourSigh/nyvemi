@@ -35,6 +35,7 @@ export interface ImageProvider {
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
   split(image: ImageAsset): Promise<CharacterRig>;
   repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
+  repairArms?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
 }
 function matches(
   provider: ImageProvider,
@@ -265,6 +266,7 @@ export class VisualCreationService {
           ? draft.rig
           : undefined;
       draft.bodyRepairApplied = reuse ? draft.bodyRepairApplied : false;
+      draft.armRepairApplied = reuse ? draft.armRepairApplied : false;
       draft.selected = image;
       draft.rig = undefined;
       await this.store.put('visualDrafts', draft);
@@ -278,6 +280,12 @@ export class VisualCreationService {
     }
   }
   async repairBody(characterId: string) {
+    return this.repairPart(characterId, 'body');
+  }
+  async repairArms(characterId: string) {
+    return this.repairPart(characterId, 'arms');
+  }
+  private async repairPart(characterId: string, part: 'body' | 'arms') {
     const lock = `visual:${characterId}`;
     if (!(await this.store.lease(lock, Date.now(), 45 * 60_000))) throw new Error('形象正在处理中');
     if (!(await this.store.lease('visual-assets', Date.now(), 45 * 60_000))) {
@@ -286,22 +294,24 @@ export class VisualCreationService {
     }
     try {
       const draft = await this.store.get('visualDrafts', characterId);
-      if (draft?.bodyRepairApplied && draft.rig) return draft.rig;
+      const flag = part === 'body' ? 'bodyRepairApplied' : 'armRepairApplied';
+      if (draft?.[flag] && draft.rig) return draft.rig;
       const provider = await this.provider();
+      const repair = part === 'body' ? provider.repairBody : provider.repairArms;
       if (
         !draft?.rig ||
         !draft.selected ||
-        !provider.repairBody ||
+        !repair ||
         !matches(provider, draft.layerProviderId ?? draft.providerId, 'layers')
       )
         throw new Error('请先使用豆包创建形象，导入形象不能直接重复付费修复');
       adopt(provider, draft);
-      const rig = await provider.repairBody(draft.selected, draft.rig);
+      const rig = await repair.call(provider, draft.selected, draft.rig);
       await this.store.put('visualDrafts', {
         ...draft,
         rig,
         saved: false,
-        bodyRepairApplied: true,
+        [flag]: true,
         layerProviderId: provider.identity,
       });
       return rig;

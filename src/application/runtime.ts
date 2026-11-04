@@ -1,3 +1,4 @@
+import { recoverRigMetadata } from '../appearance/rig-metadata';
 import { MediaService } from '../media/service';
 import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
 import { upgradeImageSettings } from '../appearance/settings';
@@ -49,6 +50,7 @@ async function createRuntime() {
   if (savedImages && upgradedImages !== savedImages)
     await store.put('imageSettings', upgradedImages);
   await recoverVisualWork(store);
+  await recoverRigMetadata(store);
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
   const redactRuntime = async (value: unknown) => {
