@@ -132,6 +132,16 @@ export function readBundle(bytes: Uint8Array): {
   const cid = manifest.character.id;
   if (manifest.character.persona.id !== cid || manifest.settings.characterId !== cid)
     throw new Error('角色引用不一致');
+  if (
+    manifest.hatching &&
+    (manifest.hatching.characterId !== cid ||
+      manifest.hatching.id !== cid ||
+      (manifest.hatching.pending &&
+        !manifest.messages.some(
+          (m) => m.id === manifest.hatching!.pending!.messageId && m.role === 'user',
+        )))
+  )
+    throw new Error('开场进度引用不一致');
   const all = [
     ...manifest.memories,
     ...manifest.messages,
@@ -389,7 +399,10 @@ export class CharacterBundleService {
             id: cid,
             characterId: cid,
             pending: m.hatching.pending
-              ? { ...m.hatching.pending, messageId: `hatch:${cid}:${m.hatching.step}:user` }
+              ? {
+                  ...m.hatching.pending,
+                  messageId: remap('messages', m.hatching.pending.messageId),
+                }
               : undefined,
           });
         // Restore appearance on a fresh installation; an existing user's app preference wins.

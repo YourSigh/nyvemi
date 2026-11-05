@@ -1,3 +1,4 @@
+import { VoiceSettingsScreen } from './src/ui/voice-settings';
 import { MediaSettingsScreen } from './src/ui/media-settings';
 import { PluginsScreen } from './src/ui/plugins';
 import { AppearanceScreen } from './src/ui/appearance';
@@ -151,6 +152,11 @@ function Application() {
                       contentStyle: { backgroundColor: palette.background },
                     }}
                   >
+                    <Stack.Screen
+                      name="VoiceSettings"
+                      component={VoiceSettingsScreen}
+                      options={{ title: '声音' }}
+                    />
                     <Stack.Screen
                       name="MediaSettings"
                       component={MediaSettingsScreen}

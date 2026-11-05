@@ -5,7 +5,22 @@ import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
+export interface LocalSpeechState {
+  available: boolean;
+  preferred?: string | null;
+  voices: { id: string; label: string }[];
+}
 interface AndroidBridge {
+  speechState(): Promise<LocalSpeechState>;
+  speakLocal(
+    id: string,
+    text: string,
+    voiceId: string | null,
+    rate: number,
+    pitch: number,
+  ): Promise<boolean>;
+  stopSpeech(): Promise<void>;
+  installSpeechData(): Promise<void>;
   refineCharacterRig(
     uri: string,
     spec: string,

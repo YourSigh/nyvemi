@@ -68,7 +68,13 @@ export const hatchQuestions: {
   {
     key: 'voice',
     question: '最后，你想听到怎样的声音？先用本机的声音试试，之后也能换。',
-    choices: ['温柔轻一点，慢慢说', '清亮活泼一点', '平静自然，别太甜', '低一点，语速放慢'],
+    choices: [
+      '温柔轻一点，慢慢说',
+      '清亮活泼一点',
+      '平静自然，别太甜',
+      '低一点，语速放慢',
+      '先静音聊天',
+    ],
   },
 ];
 export const HatchingSchema = z
@@ -99,6 +105,7 @@ const Reply = z.object({
   acknowledgement: z.string().trim().min(1).max(160),
   answer: z.string().trim().max(1000).optional(),
   deferAppearance: z.boolean().optional(),
+  voiceEnabled: z.boolean().optional(),
   voiceStyle: z.enum(['gentle', 'bright', 'calm', 'low']).optional(),
 });
 export const voiceProfile = (style = 'gentle') => ({
@@ -193,10 +200,13 @@ export class HatchingService {
       const q = hatchQuestions[draft.step];
       const value = text.trim();
       if (!value || value.length > 1000) throw Error('这一句请控制在1000字以内');
-      if (draft.pending && draft.pending.text !== value)
-        throw Error('上一句还没完成，先点重试就能接着聊');
-      const user = this.message(cid, draft.step, 'user', value);
-      if (!draft.pending) {
+      const revised = Boolean(draft.pending && draft.pending.text !== value);
+      if (revised && q.key === 'color') draft.themeApplied = false;
+      const user = {
+        ...this.message(cid, draft.step, 'user', value),
+        ...(draft.pending ? { id: draft.pending.messageId } : {}),
+      };
+      if (!draft.pending || revised) {
         draft.pending = { text: value, messageId: user.id };
         await this.store.atomic(async (tx) => {
           await tx.put('hatchings', draft);
@@ -222,7 +232,7 @@ export class HatchingService {
                 {
                   role: 'system',
                   content:
-                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
+                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
                 },
                 {
                   role: 'user',
@@ -289,7 +299,11 @@ export class HatchingService {
             if (settings)
               await tx.put('settings', {
                 ...settings,
-                voice: { ...voiceProfile(reply.voiceStyle), description: value },
+                voice: {
+                  ...voiceProfile(reply.voiceStyle),
+                  enabled: reply.voiceEnabled ?? value !== '先静音聊天',
+                  description: value,
+                },
               });
           }
           await tx.put('messages', this.message(cid, nextStep, 'ack', reply.acknowledgement));

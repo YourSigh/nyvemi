@@ -1,3 +1,6 @@
+import { SpeechQueue } from '../speech/queue';
+import { localSpeechDriver } from '../speech/native';
+import { voiceProfile } from '../characters/hatching';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
 import type { MediaAsset } from '../media/model';
@@ -81,6 +84,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [birth, setBirth] = useState<HatchingDraft>();
+  const [speaking, setSpeaking] = useState<string>();
+  const [speechNotice, setSpeechNotice] = useState('');
+  const voiceFocused = useRef(false);
+  const speech = useMemo(
+    () =>
+      new SpeechQueue(localSpeechDriver, (value) => {
+        setSpeaking(value.messageId);
+        setSpeechNotice(value.error ?? '');
+      }),
+    [],
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const times = useMemo(() => timeMarkers(messages), [messages]);
   const [dictating, setDictating] = useState(false);
@@ -130,6 +144,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     setBirth(await runtime.hatching.load(cid));
     const settings = await runtime.store.get('settings', cid);
     setDeveloperMode(settings?.developerMode ?? false);
+    if (voiceFocused.current && AppState.currentState === 'active')
+      speech.observe(page.messages, settings?.voice, Boolean(c?.creationActive));
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
     setRequested(
       (await runtime.store.list('intentions', cid, 10000))
@@ -138,9 +154,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     );
 
     if (!c) setError('这个角色已被清空，请重新创建。');
-  }, [runtime, cid, historyLimit, incoming]);
+  }, [runtime, cid, historyLimit, incoming, speech]);
   useFocusEffect(
     useCallback(() => {
+      voiceFocused.current = true;
+      speech.resume();
       void (async () => {
         await runtime.chat.recoverInterrupted(cid);
         if (route.params.notificationId)
@@ -154,17 +172,21 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         if (AppState.currentState === 'active') void refresh().catch(() => {});
       }, 3000);
       const subscription = AppState.addEventListener('change', (state) => {
+        if (state !== 'active') speech.stop();
         if (state === 'active') {
           void refresh().catch(() => {});
         }
       });
       return () => {
+        voiceFocused.current = false;
+        speech.stop();
         clearInterval(incoming);
         subscription.remove();
       };
-    }, [runtime, cid, refresh, route.params.notificationId]),
+    }, [runtime, cid, refresh, route.params.notificationId, speech]),
   );
   useEffect(() => {
+    speech.reset();
     setMessages([]);
     loaded.current = false;
     seen.current.clear();
@@ -174,7 +196,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     return () => {
       abort.current?.abort();
     };
-  }, [cid]);
+  }, [cid, speech]);
   const finishHatching = async () => {
     const c = await runtime.hatching.finish(cid);
     await refresh();
@@ -188,6 +210,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     const attachments = retry?.attachments ?? pictures.map((p) => p.id);
     if (!text.trim() && !attachments.length) return;
     sending.current = true;
+    speech.stop();
     autoScroll.current = true;
     setBusy(true);
     setError('');
@@ -287,7 +310,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             name={character?.persona.name ?? '她'}
             height={layout.character}
             state={
-              debug?.state ?? (character?.creationActive && busy ? 'thinking' : interaction.state)
+              debug?.state ??
+              (speaking
+                ? 'talking'
+                : character?.creationActive && busy
+                  ? 'thinking'
+                  : interaction.state)
             }
             command={debug?.command}
             intensity={interaction.intensity}
@@ -366,6 +394,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                           </Text>
                         ) : null}
                       </View>
+                      {m.role === 'assistant' && m.status === 'complete' && m.content ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="朗读这条消息"
+                          onPress={() => {
+                            void runtime.store
+                              .get('settings', cid)
+                              .then((settings) =>
+                                speech.replay(m, settings?.voice ?? voiceProfile()),
+                              );
+                          }}
+                        >
+                          <Text style={{ color: theme.textSecondary, fontSize: 11, paddingTop: 4 }}>
+                            {speaking === m.id ? '正在说…' : '听一听'}
+                          </Text>
+                        </Pressable>
+                      ) : null}
                       {m.status === 'error' ? (
                         <Pressable
                           accessibilityRole="button"
@@ -386,6 +431,17 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           </View>
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
+            {speechNotice ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="设置本机声音"
+                onPress={() => navigation.navigate('VoiceSettings', { characterId: cid })}
+              >
+                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+                  {speechNotice} · 去设置
+                </Text>
+              </Pressable>
+            ) : null}
             {birth?.status === 'asking' && !birth.pending ? (
               <View
                 testID="hatching-suggestions"
@@ -533,7 +589,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 <HoldToTalk
                   key={cid}
                   disabled={busy || transitioning}
-                  onActiveChange={setDictating}
+                  onActiveChange={(active) => {
+                    if (active) speech.stop();
+                    setDictating(active);
+                  }}
                   onError={setError}
                   onText={(text) => void send(undefined, text)}
                 />

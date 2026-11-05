@@ -74,3 +74,17 @@ it('uses a local acknowledgement if the optional conversational model fails', as
     (await store.list('messages', c.id)).some((m) => m.content === hatchQuestions[1].question),
   ).toBe(true);
 });
+it('allows a failed color answer to be corrected without duplicating the chat bubble', async () => {
+  const { store, service } = await fixture();
+  const c = await service.start();
+  await expect(
+    service.answer(c.id, '说不清的颜色', async () => {
+      throw Error('unclear');
+    }),
+  ).rejects.toThrow('unclear');
+  await service.answer(c.id, '淡绿色', async () => {});
+  const users = (await store.list('messages', c.id)).filter((m) => m.role === 'user');
+  expect(users).toHaveLength(1);
+  expect(users[0].content).toBe('淡绿色');
+  expect((await service.load(c.id))?.color).toBe('淡绿色');
+});

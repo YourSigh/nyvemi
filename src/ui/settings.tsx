@@ -202,6 +202,10 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
               onPress={() => navigation.navigate('Appearance', { characterId: cid })}
             />
             <Row
+              title="声音"
+              onPress={() => navigation.navigate('VoiceSettings', { characterId: cid })}
+            />
+            <Row
               title="换颜色"
               onPress={() => navigation.navigate('Theme', { mode: 'settings' })}
             />
