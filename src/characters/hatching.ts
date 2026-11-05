@@ -61,7 +61,7 @@ export const hatchQuestions: {
     choices: [
       '清爽短发，宽松白色外套',
       '银白长发，柔和的粉白配色',
-      '我来仔细描述一下',
+      '毛绒玩偶的感觉，穿红色小外套',
       '先做一颗蛋也挺好',
     ],
   },
@@ -86,6 +86,7 @@ export const HatchingSchema = z
       .strict()
       .optional(),
     themeApplied: z.boolean().optional(),
+    deferAppearance: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -97,6 +98,7 @@ export type HatchingDraft = z.infer<typeof HatchingSchema>;
 const Reply = z.object({
   acknowledgement: z.string().trim().min(1).max(160),
   answer: z.string().trim().max(1000).optional(),
+  deferAppearance: z.boolean().optional(),
   voiceStyle: z.enum(['gentle', 'bright', 'calm', 'low']).optional(),
 });
 export const voiceProfile = (style = 'gentle') => ({
@@ -220,7 +222,7 @@ export class HatchingService {
                 {
                   role: 'system',
                   content:
-                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
+                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
                 },
                 {
                   role: 'user',
@@ -268,6 +270,9 @@ export class HatchingService {
           status: next ? 'asking' : 'ready',
           ...(q.key === 'color' ? { color: value } : {}),
           ...(q.key === 'voice' ? { voice: value } : {}),
+          ...(q.key === 'appearance'
+            ? { deferAppearance: reply.deferAppearance ?? value === q.choices[3] }
+            : {}),
         };
         await this.store.atomic(async (tx) => {
           await tx.put('hatchings', nextDraft);
@@ -322,6 +327,7 @@ export class HatchingService {
           ...current,
           persona,
           creationActive: false,
+          appearancePending: !d.deferAppearance,
           interests: persona.likes.map((topic) => ({
             topic,
             score: 0.4,
@@ -343,7 +349,9 @@ export class HatchingService {
             cid,
             d.step,
             'complete',
-            '好，轮廓差不多有了。接下来，看看我会长成什么样吧。',
+            d.deferAppearance
+              ? '那就先做一颗蛋，陪你聊会儿。想好我的样子时再告诉我。'
+              : '好，轮廓差不多有了。接下来，看看我会长成什么样吧。',
           ),
         );
         return complete;

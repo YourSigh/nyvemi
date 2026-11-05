@@ -396,7 +396,11 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                   removeAvatar: bundleAssets.removeAvatar,
                   removeAppearance: () => cleanupVisualAssets(runtime.store),
                 });
-                navigation.reset({ index: 0, routes: [{ name: 'Create' }] });
+                const next = await runtime.hatching.start();
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Chat', params: { characterId: next.id } }],
+                });
               })
             }
           />

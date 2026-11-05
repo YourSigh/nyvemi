@@ -1,3 +1,4 @@
+import { EggCharacter } from './egg';
 import { hasCharacterVisual } from '../../character/visual';
 import type { MeshAvatar } from '../../avatar/model';
 import { MeshAvatarStage } from './mesh';
@@ -105,11 +106,15 @@ function LegacyCharacterStage({
 export function CharacterStage(
   props: Parameters<typeof LegacyCharacterStage>[0] & {
     meshAvatar?: MeshAvatar;
+    egg?: boolean;
+    eggProgress?: number;
     allowMockPreview?: boolean;
     onMeshReady?: (ready: boolean) => void;
   },
 ) {
   if (!hasCharacterVisual(props, props.allowMockPreview)) return null;
+  if (props.egg && !props.rig && !props.meshAvatar)
+    return <EggCharacter height={props.height} state={props.state} progress={props.eggProgress} />;
   return props.meshAvatar ? (
     <MeshAvatarStage
       model={props.meshAvatar}

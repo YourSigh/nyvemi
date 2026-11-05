@@ -14,3 +14,7 @@ it('hides missing and saved default Mock characters while keeping actual user vi
     }),
   ).toBe(true);
 });
+it('allows the new egg without restoring a removed default demo character', () => {
+  expect(hasCharacterVisual({ egg: true })).toBe(true);
+  expect(hasCharacterVisual({})).toBe(false);
+});

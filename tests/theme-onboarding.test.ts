@@ -108,6 +108,7 @@ async function fixture() {
   const themes = new ThemeService(store, provider);
   const runtime = {
     store,
+    hatching: { start: vi.fn(async () => ({ id: 'egg-test' })) },
     themes,
     provider,
     saveProvider: (config: Parameters<typeof saveProviderSettings>[2], key: string) =>
@@ -115,7 +116,7 @@ async function fixture() {
   } as unknown as Runtime;
   return { store, themes, runtime, provider, modelCall };
 }
-const navigation = () => ({ navigate: vi.fn(), replace: vi.fn() });
+const navigation = () => ({ navigate: vi.fn(), replace: vi.fn(), reset: vi.fn() });
 function tree(runtime: Runtime, screen: ReactNode) {
   return createElement(
     ThemeProvider,
@@ -172,9 +173,12 @@ it('applies a blue palette before leaving Welcome without a model/key, preserves
       .props.onChangeText('test-key-only'),
   );
   await act(async () =>
-    renderer!.root.findByProps({ accessibilityLabel: '保存并创建角色' }).props.onPress(),
+    renderer!.root.findByProps({ accessibilityLabel: '开始聊天' }).props.onPress(),
   );
-  expect(nav.replace).toHaveBeenCalledWith('Create');
+  expect(nav.reset).toHaveBeenCalledWith({
+    index: 0,
+    routes: [{ name: 'Chat', params: { characterId: 'egg-test' } }],
+  });
   expect(current.palette.accent).toBe(generatePalette(selected!.preference).accent);
   expect(await f.themes.load()).toEqual(selected);
   await act(async () => renderer!.unmount());
@@ -239,9 +243,12 @@ it('offers an explicit model path for an unclear first description without silen
       .props.onChangeText('test-key-only'),
   );
   await act(async () =>
-    renderer!.root.findByProps({ accessibilityLabel: '保存并创建角色' }).props.onPress(),
+    renderer!.root.findByProps({ accessibilityLabel: '开始聊天' }).props.onPress(),
   );
-  expect(nav.replace).toHaveBeenCalledWith('Theme');
+  expect(nav.reset).toHaveBeenCalledWith({
+    index: 0,
+    routes: [{ name: 'Chat', params: { characterId: 'egg-test' } }],
+  });
   await act(async () => {
     renderer!.update(
       tree(

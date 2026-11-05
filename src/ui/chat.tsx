@@ -1,3 +1,4 @@
+import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
 import type { MediaAsset } from '../media/model';
 import { MessageImages } from './message-images';
@@ -79,6 +80,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const layout = characterChatLayout(viewport, composerHeight);
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
+  const [birth, setBirth] = useState<HatchingDraft>();
   const [messages, setMessages] = useState<Message[]>([]);
   const times = useMemo(() => timeMarkers(messages), [messages]);
   const [dictating, setDictating] = useState(false);
@@ -125,6 +127,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     );
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
+    setBirth(await runtime.hatching.load(cid));
     const settings = await runtime.store.get('settings', cid);
     setDeveloperMode(settings?.developerMode ?? false);
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
@@ -172,6 +175,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       abort.current?.abort();
     };
   }, [cid]);
+  const finishHatching = async () => {
+    const c = await runtime.hatching.finish(cid);
+    await refresh();
+    const state = await runtime.hatching.load(cid);
+    if (!state?.deferAppearance && c.appearancePending)
+      navigation.navigate('Appearance', { characterId: cid, onboarding: true });
+  };
   const send = async (retry?: Message, spoken?: string) => {
     if (sending.current || transitioning) return;
     const text = retry?.content ?? spoken ?? draft;
@@ -185,6 +195,29 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     if (!retry) setPictures([]);
     abort.current = new AbortController();
     try {
+      const opening = await runtime.hatching.load(cid);
+      if (opening?.status === 'asking') {
+        const next = await runtime.hatching.answer(
+          cid,
+          text,
+          async (description) => {
+            await closeKeyboard();
+            const current = await runtime.themes.load();
+            const nextTheme = await runtime.themes.interpret(description, current?.preference);
+            await apply(nextTheme, (signal) => runtime.themes.completeOpening(nextTheme, signal));
+          },
+          () => {
+            void refresh().catch(() => {});
+          },
+        );
+        await refresh();
+        if (next?.status === 'ready') await finishHatching();
+        return;
+      }
+      if (opening?.status === 'ready') {
+        await finishHatching();
+        return;
+      }
       await runtime.chat.send(
         cid,
         text,
@@ -233,12 +266,29 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             </Text>
             <View style={{ width: 52 }} />
           </View>
+          {birth && birth.status !== 'complete' ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={{
+                color: theme.textSecondary,
+                textAlign: 'center',
+                fontSize: 12,
+                paddingBottom: 4,
+              }}
+            >
+              {busy ? '想一想…' : `慢慢认识你 · ${birth.step}/${hatchQuestions.length}`}
+            </Text>
+          ) : null}
           <CharacterStage
+            egg={character?.egg}
+            eggProgress={birth ? birth.step / hatchQuestions.length : 1}
             rig={character?.rig}
             meshAvatar={character?.meshAvatar}
             name={character?.persona.name ?? '她'}
             height={layout.character}
-            state={debug?.state ?? interaction.state}
+            state={
+              debug?.state ?? (character?.creationActive && busy ? 'thinking' : interaction.state)
+            }
             command={debug?.command}
             intensity={interaction.intensity}
           />
@@ -336,6 +386,43 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           </View>
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
+            {birth?.status === 'asking' && !birth.pending ? (
+              <View
+                testID="hatching-suggestions"
+                style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}
+              >
+                {hatchQuestions[birth.step]?.choices.map((choice) => (
+                  <Pressable
+                    key={choice}
+                    accessibilityRole="button"
+                    accessibilityLabel={choice}
+                    disabled={busy || transitioning}
+                    onPress={() => void send(undefined, choice)}
+                    style={{
+                      backgroundColor: theme.primarySoft,
+                      borderRadius: 16,
+                      paddingHorizontal: 12,
+                      paddingVertical: 9,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Text style={{ color: theme.primary, fontSize: 13, includeFontPadding: false }}>
+                      {choice}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {birth?.pending && !busy ? (
+              <Button
+                secondary
+                title="接着刚才那句"
+                onPress={() => void send(undefined, birth.pending!.text)}
+              />
+            ) : null}
+            {birth?.status === 'ready' && !busy ? (
+              <Button title="继续完善角色" onPress={() => void send(undefined, '继续')} />
+            ) : null}
             {pictures.length ? (
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 {pictures.map((p) => (
@@ -362,7 +449,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="添加图片"
-                disabled={busy || picking || transitioning || pictures.length >= 3}
+                disabled={
+                  Boolean(character?.creationActive) ||
+                  busy ||
+                  picking ||
+                  transitioning ||
+                  pictures.length >= 3
+                }
                 onPress={() => {
                   setPicking(true);
                   setError('');

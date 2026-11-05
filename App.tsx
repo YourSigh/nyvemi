@@ -44,13 +44,8 @@ function Application() {
       .setNavigationBarDark(record?.preference.brightness === 'dark')
       .catch(() => {});
   }, [record?.preference.brightness]);
-  const [resumeTheme, setResumeTheme] = useState(false);
-  const [resumeProvider, setResumeProvider] = useState(false);
-  const [skipTheme, setSkipTheme] = useState(false);
   const [runtime, setRuntime] = useState<Runtime>();
-  const [resumeAppearance, setResumeAppearance] = useState(false);
   const [initial, setInitial] = useState<string>();
-  const [resumeInterview, setResumeInterview] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -59,19 +54,13 @@ function Application() {
     void getRuntime()
       .then(async (r) => {
         const chars = await r.store.list('characters');
-        const draft = await r.store.get('interviews', 'active');
         const savedTheme = await r.themes.load();
         hydrate(savedTheme);
-        const opening = await r.themes.opening();
         const provider = await r.store.get('provider', 'provider');
-        setResumeProvider(!provider && Boolean(opening || savedTheme || draft));
-        setSkipTheme(Boolean(savedTheme) && !opening);
-        setResumeTheme(Boolean(opening) && Boolean(provider));
+        if (!chars.length && provider) chars.push(await r.hatching.start());
         if (live) {
           setRuntime(r);
           setInitial(chars[0]?.id);
-          setResumeAppearance(Boolean(chars[0]?.appearancePending));
-          setResumeInterview(Boolean((draft && !draft.savedCharacterId) || savedTheme));
           setReady(true);
         }
       })
@@ -155,19 +144,7 @@ function Application() {
                   }}
                 >
                   <Stack.Navigator
-                    initialRouteName={
-                      initial
-                        ? resumeAppearance
-                          ? 'Appearance'
-                          : 'Chat'
-                        : resumeProvider
-                          ? 'Provider'
-                          : resumeTheme
-                            ? 'Theme'
-                            : resumeInterview
-                              ? 'Create'
-                              : 'Welcome'
-                    }
+                    initialRouteName={initial ? 'Chat' : 'Provider'}
                     screenOptions={{
                       headerShadowVisible: false,
                       headerBackTitle: '返回',
@@ -197,8 +174,11 @@ function Application() {
                     <Stack.Screen
                       name="Provider"
                       component={ProviderScreen}
-                      initialParams={resumeProvider ? { onboarding: true, skipTheme } : undefined}
-                      options={{ title: '聊天模型' }}
+                      initialParams={!initial ? { onboarding: true } : undefined}
+                      options={({ route }) => ({
+                        title: '聊天模型',
+                        headerShown: !route.params?.onboarding,
+                      })}
                     />
                     <Stack.Screen
                       name="Theme"
@@ -213,9 +193,7 @@ function Application() {
                     <Stack.Screen
                       name="Appearance"
                       component={AppearanceScreen}
-                      initialParams={
-                        initial ? { characterId: initial, onboarding: resumeAppearance } : undefined
-                      }
+                      initialParams={initial ? { characterId: initial } : undefined}
                       options={{ title: '角色形象' }}
                     />
                     <Stack.Screen

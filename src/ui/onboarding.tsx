@@ -202,8 +202,8 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
         ).chat([{ role: 'user', content: 'Reply with OK.' }], 'connection_test');
         setNotice('连接成功');
       } else if (route.params?.onboarding) {
-        if (route.params.skipTheme) navigation.replace('Create');
-        else navigation.replace('Theme');
+        const c = await runtime.hatching.start();
+        navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: c.id } }] });
       } else {
         setNotice('已保存');
       }
@@ -216,7 +216,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
   };
   return (
     <Page>
-      <Heading>{route.params?.onboarding ? '让她能和你说话' : '聊天模型'}</Heading>
+      <Heading>{route.params?.onboarding ? 'Nyvemi' : '聊天模型'}</Heading>
       <Note>默认使用 DeepSeek，填入密钥就能开始。</Note>
       <Card>
         <View
@@ -268,14 +268,20 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
       <ErrorText text={error} />
       {notice ? <Note>{notice}</Note> : null}
       <Button
-        title={busy ? '连接中…' : route.params?.onboarding ? '保存并创建角色' : '保存设置'}
+        title={busy ? '连接中…' : route.params?.onboarding ? '开始聊天' : '保存设置'}
         disabled={busy}
         onPress={() => void save(false)}
       />
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-        <TextButton title="测试连接（一次请求）" disabled={busy} onPress={() => void save(true)} />
-        <TextButton title="用量与费用" onPress={() => navigation.navigate('Usage')} />
-      </View>
+      {!route.params?.onboarding ? (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <TextButton
+            title="测试连接（一次请求）"
+            disabled={busy}
+            onPress={() => void save(true)}
+          />
+          <TextButton title="用量与费用" onPress={() => navigation.navigate('Usage')} />
+        </View>
+      ) : null}
     </Page>
   );
 }
