@@ -30,7 +30,10 @@ vi.mock('../src/media/native', () => ({
 }));
 vi.mock('../src/avatar/native', () => ({ pickMeshAvatar: vi.fn() }));
 vi.mock('../src/native/presence', () => ({ startCompanionPresence: vi.fn() }));
-vi.mock('../src/ui/character/rig', () => ({ CharacterImage: 'CharacterImage' }));
+vi.mock('../src/ui/character/rig', () => ({
+  CharacterImage: 'CharacterImage',
+  RigCharacter: 'RigCharacter',
+}));
 vi.mock('../src/ui/character/stage', () => ({ CharacterStage: 'CharacterStage' }));
 vi.mock('../src/theme/context', () => ({
   usePalette: () => defaultPalette,
@@ -179,7 +182,7 @@ it('candidate cards only select; decomposition starts after explicit confirmatio
   expect(thumbnails).toHaveLength(3);
   expect(thumbnails.every((image) => image.props.width <= 100)).toBe(true);
   await act(async () => button('就选这张，整理图层').props.onPress());
-  expect(runtime.visuals.select).toHaveBeenCalledWith('c', 1);
+  expect(runtime.visuals.select).toHaveBeenCalledWith('c', 1, expect.any(Function));
 });
 it('starts drawing directly after entering a key without a reference selection screen', async () => {
   const { runtime, store } = await fixture();
@@ -368,4 +371,96 @@ it('shows the failing visual stage with folded safe schema details and persists 
     characterId: 'c',
     data: { event: 'visual_schema', purpose: 'visual_reference_review' },
   });
+});
+it('uses an uploaded image directly and does not ask the user to select the same reference again', async () => {
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  images.get.mockResolvedValue('stored');
+  const { pickReference } = await import('../src/appearance/native');
+  const uploaded = { uri: 'file://my-upload', width: 1024, height: 1536 };
+  vi.mocked(pickReference).mockResolvedValue(uploaded);
+  runtime.visuals.generate = vi.fn(async (_cid, input) => ({
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: 'seedream:test',
+    input,
+    candidates: [uploaded],
+  }));
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c' } },
+      navigation: {},
+    } as never),
+  );
+  const tab = renderer!.root
+    .findAllByType('Pressable' as never)
+    .find((n) => n.findAllByType('Text' as never).some((t) => t.props.children === '加参考图'))!;
+  await act(async () => tab.props.onPress());
+  await act(async () => button('上传参考图').props.onPress());
+  await act(async () => button('生成3张候选图').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenCalledWith(
+    'c',
+    expect.objectContaining({ mode: 'reference', reference: uploaded }),
+    expect.any(Object),
+  );
+  expect(renderer!.root.findAllByProps({ accessibilityLabel: '选择参考 1' })).toHaveLength(0);
+});
+it('shows a real partially built character on failure without claiming it is awake', async () => {
+  const { runtime, store } = await fixture();
+  const source = { uri: 'file://source', width: 1024, height: 1024 };
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  await store.put('visualDrafts', {
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: 'seedream:test',
+    input: { description: '角色', mode: 'text' },
+    selected: source,
+    candidates: [source],
+  });
+  runtime.visuals.select = vi.fn(async (_cid, _index, progress) => {
+    progress?.({
+      stage: 'layers',
+      source,
+      completed: 1,
+      total: 6,
+      preview: { width: 1024, height: 1024, layers: mockRig('x').layers.slice(0, 1) },
+    });
+    progress?.({
+      stage: 'failed',
+      failedStage: 'layers',
+      source,
+      completed: 1,
+      total: 6,
+      preview: { width: 1024, height: 1024, layers: mockRig('x').layers.slice(0, 1) },
+    });
+    throw Error('下载失败，已保留图层');
+  });
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c' } },
+      navigation: {},
+    } as never),
+  );
+  await act(async () => button('选择形象 1').props.onPress());
+  await act(async () => button('就选这张，整理图层').props.onPress());
+  expect(renderer!.root.findAllByProps({ testID: 'visual-build-preview' })).toHaveLength(1);
+  expect(renderer!.root.findAllByType('RigCharacter' as never)).toHaveLength(1);
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('醒来了');
+  expect(button('继续制作')).toBeDefined();
 });

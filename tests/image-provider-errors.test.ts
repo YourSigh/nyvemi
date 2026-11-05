@@ -113,3 +113,23 @@ it('distinguishes review of reference, prompt and generated output without blami
   expect(message('OutputImageSensitiveContentDetected')).toContain('不等于你的描述或参考图违规');
   expect(message('SensitiveContentDetected')).toContain('查看拒绝环节');
 });
+it('classifies image-specific rejection reasons without retaining the raw provider message', async () => {
+  for (const [message, reason] of [
+    ['Failed to decode image base64 private-key', 'decode'],
+    ['image aspect ratio exceeds range private-key', 'dimensions'],
+    ['Unsupported image format private-key', 'format'],
+    ['image file size too large private-key', 'size'],
+    ['Failed to fetch image URL private-key', 'fetch'],
+  ] as const) {
+    const result = await readImageFailure(
+      new Response(
+        JSON.stringify({ error: { code: 'InvalidParameter', param: 'image', message } }),
+        { status: 400 },
+      ),
+      'private-key',
+    );
+    expect(result.imageReason).toBe(reason);
+    expect(JSON.stringify(result)).not.toContain('private-key');
+    expect(JSON.stringify(result)).not.toContain(message);
+  }
+});

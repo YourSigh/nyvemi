@@ -10,11 +10,13 @@ import {
   type ImageSettings,
   type VisualInput,
   type VisualDraft,
+  type VisualBuildProgress,
   validateRig,
   usesVisualResearch,
 } from './model';
 import { mockCandidate, mockRig } from './mock';
 export interface ImageAssets {
+  refineRig?(source: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
   fingerprint(asset: ImageAsset): Promise<string>;
   dataUrl(asset: ImageAsset): Promise<string>;
   prepareDecomposition?(
@@ -34,7 +36,10 @@ export interface ImageProvider {
   composePrompt?(input: VisualInput): Promise<string>;
   supportsPromptPlanning?: boolean;
   candidate(input: VisualInput, index: number): Promise<ImageAsset>;
-  split(image: ImageAsset): Promise<CharacterRig>;
+  split(
+    image: ImageAsset,
+    progress?: (value: VisualBuildProgress) => Promise<void>,
+  ): Promise<CharacterRig>;
   repairBody?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
   repairArms?(image: ImageAsset, rig: CharacterRig): Promise<CharacterRig>;
 }
@@ -77,6 +82,7 @@ export class VisualCreationService {
       planOnly?: boolean;
       refreshResearch?: boolean;
       onStage?(stage: 'brief' | 'reference' | 'prompt' | 'generation' | 'review'): void;
+      onDraft?(draft: VisualDraft): void;
     } = {},
   ) {
     if (!input.description.trim() || input.description.length > 2000)
@@ -144,6 +150,7 @@ export class VisualCreationService {
         draft.imagePrompt = undefined;
       }
       await this.store.put('visualDrafts', draft);
+      options.onDraft?.(draft);
       if (usesVisualResearch(draft.promptVersion) && !draft.research) {
         options.onStage?.('reference');
         const research = await this.assist(
@@ -155,6 +162,7 @@ export class VisualCreationService {
         draft.research = research;
         draft.brief = research.brief;
         await this.store.put('visualDrafts', draft);
+        options.onDraft?.(draft);
       }
       if (draft.research) {
         // Uploading is already an explicit selection. Public references are optional enhancements.
@@ -169,6 +177,7 @@ export class VisualCreationService {
         if (reference?.id !== draft.confirmedReferenceId) draft.imagePrompt = undefined;
         draft.confirmedReferenceId = reference?.id;
         await this.store.put('visualDrafts', draft);
+        options.onDraft?.(draft);
       }
       if (
         !same &&
@@ -179,6 +188,7 @@ export class VisualCreationService {
         options.onStage?.('brief');
         draft.brief = await provider.prepare(input);
         await this.store.put('visualDrafts', draft);
+        options.onDraft?.(draft);
       }
       if (draft.promptVersion === 4 && !draft.imagePrompt) {
         options.onStage?.('prompt');
@@ -202,11 +212,13 @@ export class VisualCreationService {
           `用户原始要求：${input.description}。保留用户指定的身份、外观和风格；参考图（如有）为造型依据。单人正面全身，双手分开，双眼睁开，结构清晰，简单背景。`,
         );
         await this.store.put('visualDrafts', draft);
+        options.onDraft?.(draft);
       }
       if (options.planOnly && usesVisualResearch(draft.promptVersion)) return draft;
       if (input.mode === 'animate') {
         draft.selected = input.reference;
         await this.store.put('visualDrafts', draft);
+        options.onDraft?.(draft);
       } else {
         options.onStage?.('generation');
         for (let i = 0; i < 3; i++) {
@@ -233,6 +245,7 @@ export class VisualCreationService {
             draft.candidates.push(await provider.candidate(planned, i));
             // Persist the paid result before any fallible vision call.
             await this.store.put('visualDrafts', draft);
+            options.onDraft?.(draft);
           }
           if (
             usesVisualResearch(draft.promptVersion) &&
@@ -252,6 +265,7 @@ export class VisualCreationService {
             draft.candidateReviews ??= [];
             draft.candidateReviews[i] = review;
             await this.store.put('visualDrafts', draft);
+            options.onDraft?.(draft);
           }
         }
       }
@@ -263,7 +277,7 @@ export class VisualCreationService {
   }
   private async assist<T>(
     draft: VisualDraft,
-    stage: 'research' | 'prompt' | 'review',
+    stage: 'research' | 'prompt' | 'review' | 'repair',
     work: () => Promise<T | undefined> | undefined,
     fallback: T,
   ): Promise<T> {
@@ -284,7 +298,32 @@ export class VisualCreationService {
     });
     return fallback;
   }
-  async select(characterId: string, index?: number) {
+  async restoreLook(characterId: string) {
+    const draft = await this.store.get('visualDrafts', characterId);
+    if (
+      !draft?.rig ||
+      !draft.selected ||
+      !this.assets.refineRig ||
+      (draft.build && draft.build.stage !== 'ready')
+    )
+      return draft;
+    const rig = await this.assets.refineRig(
+      draft.selected,
+      await restoreRigMetadata(this.store, draft.rig),
+    );
+    if (rig !== draft.rig) {
+      await this.store.put('visualDrafts', { ...draft, rig });
+      const c = await this.store.get('characters', characterId);
+      if (draft.saved && c?.rig) await this.store.put('characters', { ...c, rig });
+      return { ...draft, rig };
+    }
+    return draft;
+  }
+  async select(
+    characterId: string,
+    index?: number,
+    progress?: (value: VisualBuildProgress) => void,
+  ) {
     const lock = `visual:${characterId}`;
     if (!(await this.store.lease(lock, Date.now(), 45 * 60_000))) throw new Error('形象正在处理中');
     if (!(await this.store.lease('visual-assets', Date.now(), 45 * 60_000))) {
@@ -306,18 +345,67 @@ export class VisualCreationService {
         matches(provider, draft.layerProviderId ?? draft.providerId, 'layers')
           ? draft.rig
           : undefined;
+      const sameSelection = draft.selected?.uri === image.uri;
       draft.bodyRepairApplied = reuse ? draft.bodyRepairApplied : false;
       draft.armRepairApplied = reuse ? draft.armRepairApplied : false;
+      draft.automaticArmRepairAttempted = sameSelection ? draft.automaticArmRepairAttempted : false;
       draft.selected = image;
-      draft.rig = undefined;
-      await this.store.put('visualDrafts', draft);
-      draft.rig = await restoreRigMetadata(
-        this.store,
-        reuse || validateRig(await provider.split(image)),
-      );
-      draft.layerProviderId = provider.identity;
-      await this.store.put('visualDrafts', draft);
-      return draft.rig;
+      const publish = async (value: VisualBuildProgress) => {
+        draft.build = value;
+        await this.store.put('visualDrafts', draft);
+        progress?.(value);
+      };
+      try {
+        await publish({
+          stage: 'layers',
+          source: image,
+          completed: 0,
+          preview: reuse ?? (sameSelection ? draft.build?.preview : undefined),
+        });
+        draft.rig = reuse || validateRig(await provider.split(image, publish));
+        draft.layerProviderId = provider.identity;
+        await publish({
+          stage: 'checking',
+          source: image,
+          completed: draft.rig.layers.length,
+          total: draft.rig.layers.length,
+          preview: draft.rig,
+        });
+        if (
+          draft.rig.source === 'seedream' &&
+          draft.rig.layers.filter((l) => l.role === 'arm').length < 2 &&
+          provider.repairArms &&
+          !draft.automaticArmRepairAttempted
+        ) {
+          draft.automaticArmRepairAttempted = true;
+          await publish({ ...draft.build!, stage: 'repairing_arms' });
+          draft.rig = await this.assist(
+            draft,
+            'repair',
+            async () => {
+              const result = await provider.repairArms!(image, draft.rig!);
+              draft.armRepairApplied = true;
+              return result;
+            },
+            draft.rig,
+          );
+        }
+        await publish({ ...draft.build!, stage: 'finishing', preview: draft.rig });
+        draft.rig = await restoreRigMetadata(this.store, draft.rig);
+        if (this.assets.refineRig) draft.rig = await this.assets.refineRig(image, draft.rig);
+        draft.saved = false;
+        await publish({
+          stage: 'ready',
+          source: image,
+          preview: draft.rig,
+          completed: draft.rig.layers.length,
+          total: draft.rig.layers.length,
+        });
+        return draft.rig;
+      } catch (error) {
+        await publish({ ...draft.build!, stage: 'failed', failedStage: draft.build?.stage });
+        throw error;
+      }
     } finally {
       await this.store.release(lock);
       await this.store.release('visual-assets');
@@ -350,7 +438,8 @@ export class VisualCreationService {
       )
         throw new Error('请先使用豆包创建形象，导入形象不能直接重复付费修复');
       adopt(provider, draft);
-      const rig = await repair.call(provider, draft.selected, draft.rig);
+      let rig = await repair.call(provider, draft.selected, draft.rig);
+      if (this.assets.refineRig) rig = await this.assets.refineRig(draft.selected, rig);
       await this.store.put('visualDrafts', {
         ...draft,
         rig,
@@ -380,7 +469,8 @@ export class VisualCreationService {
     await this.store.atomic(async (tx) => {
       const draft = await tx.get('visualDrafts', characterId);
       const character = await tx.get('characters', characterId);
-      if (!character || !draft?.rig) throw new Error('形象尚未完成');
+      if (!character || !draft?.rig || (draft.build && draft.build.stage !== 'ready'))
+        throw new Error('形象尚未完成');
       const rig = validateRig(draft.rig);
       for (const l of rig.layers)
         if (!(await this.assets.exists(l.asset))) throw new Error('图层文件缺失，请重新整理图层');

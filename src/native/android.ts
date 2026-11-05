@@ -6,6 +6,12 @@ import * as Notifications from 'expo-notifications';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 interface AndroidBridge {
+  refineCharacterRig(
+    uri: string,
+    spec: string,
+  ): Promise<
+    { index: number; uri: string; width: number; height: number; clearedPixels: number }[]
+  >;
   prepareCharacterImage(uri: string): Promise<{ uri: string; width: number; height: number }>;
   analyzeCharacterImage(uri: string): Promise<{ crop: number[]; pivot: number[] }[]>;
   registerMaintenance(): Promise<void>;

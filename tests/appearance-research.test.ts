@@ -193,6 +193,7 @@ it('DS selects actual fetched images by index, visually checks them, and cannot 
   expect(localAssets.download).toHaveBeenCalledWith(
     'https://cdn.example.org/ref.png',
     expect.any(String),
+    expect.any(AbortSignal),
   );
   expect(result.status).toBe('awaiting_reference');
 });
@@ -643,4 +644,31 @@ it('resumes uploaded-reference creation through format failures and a failed dow
   await service().generate('c', input);
   expect(ark).toHaveBeenCalledTimes(3);
   expect(ds).toHaveBeenCalledTimes(modelCalls);
+});
+it('bounds the entire public research stage and cancels pending work before drawing from text', async () => {
+  vi.useFakeTimers();
+  let signal: AbortSignal | undefined;
+  try {
+    const model: LLMProvider = {
+      chat: vi.fn(),
+      streamChat: vi.fn(),
+      structuredOutput: async (_m, schema) => schema.parse({ brief, queries: ['测试角色'] }),
+    };
+    const web = {
+      search: vi.fn(async (_q, s?: AbortSignal) => {
+        signal = s;
+        return await new Promise<never>(() => {});
+      }),
+      read: vi.fn(),
+    };
+    const director = new DSVisualDirector(async () => model, web, assets, hash);
+    const pending = director.research({ description: 'q版测试作品测试角色', mode: 'text' });
+    const failure = expect(pending).rejects.toThrow('辅助整理超时');
+    await vi.advanceTimersByTimeAsync(20_001);
+    await failure;
+    expect(signal?.aborted).toBe(true);
+    expect(web.read).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });

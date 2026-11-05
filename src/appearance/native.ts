@@ -36,6 +36,20 @@ async function inspect(file: File): Promise<ImageAsset> {
   return { uri: file.uri, width, height };
 }
 export const imageAssets: ImageAssets = {
+  refineRig: async (source, rig) => {
+    if (rig.source !== 'seedream') return rig;
+    const changes = await bridge().refineCharacterRig(source.uri, JSON.stringify(rig));
+    if (!changes.length) return rig;
+    return {
+      ...rig,
+      layers: rig.layers.map((layer, index) => {
+        const change = changes.find((c) => c.index === index);
+        return change
+          ? { ...layer, asset: { uri: change.uri, width: change.width, height: change.height } }
+          : layer;
+      }),
+    };
+  },
   exists: async (asset) => Boolean(asset.svg) || new File(asset.uri).exists,
   fingerprint: async (asset) => imageHash(asset.svg ?? (await new File(asset.uri).base64())),
   dataUrl: async (asset) => {

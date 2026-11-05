@@ -18,6 +18,8 @@ export async function pruneVisualAssets(
     pin(d.input.reference);
     for (const reference of d.research?.references ?? []) pin(reference.asset);
     pin(d.selected);
+    pin(d.build?.source);
+    for (const l of d.build?.preview?.layers ?? []) pin(l.asset);
     d.candidates.forEach(pin);
     for (const l of d.rig?.layers ?? []) pin(l.asset);
   }

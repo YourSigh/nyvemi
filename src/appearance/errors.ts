@@ -3,6 +3,7 @@ export interface ImageRequestFailure {
   httpStatus: number;
   code?: string;
   parameter?: string;
+  imageReason?: 'format' | 'decode' | 'dimensions' | 'size' | 'fetch' | 'reference_count';
   requestId?: string;
   category:
     | 'configuration'
@@ -78,7 +79,32 @@ export async function readImageFailure(
                 : response.status >= 500
                   ? 'service'
                   : 'unknown';
-  return { httpStatus: response.status, code, parameter, requestId, category };
+  // Classify known image rejection reasons; never store or display an arbitrary server message.
+  const message = typeof error.message === 'string' ? error.message.slice(0, 4000) : '';
+  const imageReason: ImageRequestFailure['imageReason'] =
+    parameter !== 'image'
+      ? undefined
+      : /unsupported.*format|format.*(?:invalid|not support)|图片格式|图像格式/i.test(message)
+        ? 'format'
+        : /decod|base64|corrupt|解码|编码/i.test(message)
+          ? 'decode'
+          : /dimension|resolution|aspect|pixel|宽高|像素|分辨率/i.test(message)
+            ? 'dimensions'
+            : /too large|file size|image size|megabyte|\bMB\b|文件大小|图片大小/i.test(message)
+              ? 'size'
+              : /download|fetch|image.*url|下载|无法访问/i.test(message)
+                ? 'fetch'
+                : /single image|multiple images|only one|单张|多张/i.test(message)
+                  ? 'reference_count'
+                  : undefined;
+  return {
+    httpStatus: response.status,
+    code,
+    parameter,
+    requestId,
+    category,
+    ...(imageReason ? { imageReason } : {}),
+  };
 }
 export class ImageProviderError extends Error {
   constructor(readonly failure: ImageRequestFailure) {
@@ -95,7 +121,10 @@ export class ImageProviderError extends Error {
       quota: '服务额度不可用，请查看火山方舟账户状态',
       content_review: reviewHint,
       rate_limit: '请求过于频繁，请稍后手动重试',
-      parameters: `请求参数不被接受${failure.parameter ? `（${failure.parameter}）` : ''}，请查看开发者模式中的错误码和请求编号`,
+      parameters:
+        failure.parameter === 'image'
+          ? `服务商未接受这张图片${failure.imageReason ? `（${{ format: '格式', decode: '编码', dimensions: '尺寸', size: '文件大小', fetch: '下载失败', reference_count: '图片数量' }[failure.imageReason]}）` : ''}，当前成果已保留`
+          : `请求参数不被接受${failure.parameter ? `（${failure.parameter}）` : ''}，请展开错误详情`,
       service: '服务暂不可用，结果可能不确定，请先核对服务商记录',
       unknown: '请查看开发者模式中的错误码和请求编号，或火山方舟调用记录',
     };

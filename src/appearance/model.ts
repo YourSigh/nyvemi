@@ -69,8 +69,30 @@ export const defaultImageSettings: ImageSettings = {
   layerModel: SEEDREAM_FLASH,
   routingVersion: 1,
 };
+export type VisualBuildStage =
+  | 'layers'
+  | 'checking'
+  | 'repairing_arms'
+  | 'finishing'
+  | 'ready'
+  | 'failed';
+export interface VisualBuildProgress {
+  stage: VisualBuildStage;
+  completed: number;
+  total?: number;
+  source: ImageAsset;
+  preview?: Pick<CharacterRig, 'width' | 'height' | 'layers'>;
+  failedStage?: VisualBuildStage;
+}
 export interface VisualDraft {
-  advisories?: ('research_unavailable' | 'prompt_unavailable' | 'review_unavailable')[];
+  build?: VisualBuildProgress;
+  automaticArmRepairAttempted?: boolean;
+  advisories?: (
+    | 'research_unavailable'
+    | 'prompt_unavailable'
+    | 'review_unavailable'
+    | 'repair_unavailable'
+  )[];
   research?: VisualResearch;
   confirmedReferenceId?: string;
   candidateReviews?: (VisualCheck | null)[];

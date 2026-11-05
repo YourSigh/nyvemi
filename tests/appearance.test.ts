@@ -638,3 +638,104 @@ it('corrects mislabeled backgrounds when selecting an old cached split in the sa
   const rig = await service.select('c', 0);
   expect(rig.layers.at(-1)?.role).toBe('background');
 });
+it('persists real partial layer progress on interruption and never saves an incomplete rig', async () => {
+  const { store, assets } = await setup();
+  const provider = new MockImageProvider();
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  const partial = mockRig('x');
+  const split = vi
+    .spyOn(provider, 'split')
+    .mockImplementationOnce(
+      async (
+        image,
+        progress?: (p: import('../src/appearance/model').VisualBuildProgress) => Promise<void>,
+      ) => {
+        await progress?.({
+          stage: 'layers',
+          source: image,
+          completed: 1,
+          total: 6,
+          preview: { ...partial, layers: partial.layers.slice(0, 1) },
+        });
+        throw Error('download offline');
+      },
+    );
+  const events: string[] = [];
+  await expect(service.select('c', 0, (p) => events.push(p.stage))).rejects.toThrow('offline');
+  expect(events).toEqual(['layers', 'layers', 'failed']);
+  expect((await store.get('visualDrafts', 'c'))?.build).toMatchObject({
+    stage: 'failed',
+    failedStage: 'layers',
+    completed: 1,
+    total: 6,
+  });
+  expect((await store.get('characters', 'c'))?.rig).toBeUndefined();
+  await service.select('c', undefined, (p) => events.push(p.stage));
+  expect(events.at(-1)).toBe('ready');
+  expect(split).toHaveBeenCalledTimes(2);
+});
+it('automatically repairs combined arms once, then performs local face repair without a second paid repair on resume', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const base = mockRig('x');
+  base.source = 'seedream';
+  base.layers = base.layers.filter((l) => l.role !== 'arm');
+  base.layers.push({
+    role: 'arm',
+    z: 2,
+    bounds: [0.2, 0.5, 0.6, 0.3],
+    asset: { uri: 'file://combined', width: 600, height: 300 },
+  });
+  const repairArms = vi.fn(async () => ({
+    ...base,
+    layers: [
+      ...base.layers.filter((l) => l.role !== 'arm'),
+      ...['left', 'right'].map((uri, i) => ({
+        role: 'arm' as const,
+        z: 2,
+        bounds: [i ? 0.7 : 0.2, 0.5, 0.1, 0.3] as [number, number, number, number],
+        asset: { uri: `file://${uri}`, width: 100, height: 300 },
+      })),
+    ],
+  }));
+  const refine = vi.fn(async (_source: unknown, rig: typeof base) => rig);
+  assets.refineRig = refine;
+  const provider = {
+    identity: mock.identity,
+    candidate: mock.candidate.bind(mock),
+    split: vi.fn(async () => base),
+    repairArms,
+  };
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  const stages: string[] = [];
+  await service.select('c', 0, (p) => stages.push(p.stage));
+  expect(stages).toEqual(['layers', 'checking', 'repairing_arms', 'finishing', 'ready']);
+  expect((await store.get('visualDrafts', 'c'))?.armRepairApplied).toBe(true);
+  await service.select('c', 0);
+  expect(repairArms).toHaveBeenCalledOnce();
+  expect(refine).toHaveBeenCalledTimes(2);
+});
+it('keeps an unsuccessful automatic repair bounded and exposes it without losing the successful split', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const rig = mockRig('x');
+  rig.source = 'seedream';
+  rig.layers = rig.layers.filter((l) => l.role !== 'arm');
+  const repairArms = vi.fn(async () => {
+    throw Error('400 image');
+  });
+  const provider = {
+    identity: mock.identity,
+    candidate: mock.candidate.bind(mock),
+    split: async () => rig,
+    repairArms,
+  };
+  const service = new VisualCreationService(store, async () => provider, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  await service.select('c', 0);
+  await service.select('c', 0);
+  expect(repairArms).toHaveBeenCalledOnce();
+  expect((await store.get('visualDrafts', 'c'))?.advisories).toContain('repair_unavailable');
+});

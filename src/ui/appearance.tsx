@@ -33,11 +33,12 @@ import {
   type ImageAsset,
   type ImageSettings,
   type VisualDraft,
+  type VisualBuildProgress,
 } from '../appearance/model';
 import { imageSecret, pickReference, pickLayeredLook } from '../appearance/native';
 import { validateImageSettings } from '../appearance/service';
 import { awakeningAt, awakeningDuration } from '../appearance/awakening';
-import { CharacterImage } from './character/rig';
+import { CharacterImage, RigCharacter } from './character/rig';
 import { CharacterStage } from './character/stage';
 import { startCompanionPresence } from '../native/presence';
 import type { CharacterInteractionState } from '../character/interaction';
@@ -63,6 +64,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<VisualDraft>();
   const [rig, setRig] = useState<CharacterRig>();
+  const [build, setBuild] = useState<VisualBuildProgress>();
   const [meshReady, setMeshReady] = useState(false);
   const [meshAvatar, setMeshAvatar] = useState<MeshAvatar>();
   const [editing, setEditing] = useState(true);
@@ -77,7 +79,9 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     let live = true;
     void Promise.all([
       runtime.store.get('characters', cid),
-      runtime.store.get('visualDrafts', cid),
+      runtime.visuals.restoreLook
+        ? runtime.visuals.restoreLook(cid).catch(() => runtime.store.get('visualDrafts', cid))
+        : runtime.store.get('visualDrafts', cid),
       runtime.store.get('imageSettings', 'images'),
       imageSecret.get(),
     ])
@@ -93,15 +97,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
+          if (d.build && d.build.stage !== 'ready') setBuild(d.build);
           if (d.providerId !== 'mock-v1' && (!d.saved || d.rig || d.meshAvatar)) {
             setEditing(
-              d.rig || d.meshAvatar || d.research
-                ? false
-                : d.input.mode !== 'animate'
-                  ? d.candidates.length !== 3
-                  : !d.selected,
+              !(
+                d.rig ||
+                d.meshAvatar ||
+                d.build ||
+                d.research ||
+                d.candidates.length ||
+                d.selected
+              ),
             );
-            setRig(d.rig);
+            setRig(d.build && d.build.stage !== 'ready' ? undefined : d.rig);
             setMeshAvatar(d.meshAvatar);
           }
         }
@@ -170,7 +178,12 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   };
   const select = (index?: number) =>
     void run('正在整理图层', async () => {
-      const next = await runtime.visuals.select(cid, index);
+      setRig(undefined);
+      setEditing(false);
+      const source = index === undefined ? draft?.selected : draft?.candidates[index];
+      if (source) setBuild({ stage: 'layers', source, completed: 0 });
+      const next = await runtime.visuals.select(cid, index, setBuild);
+      setBuild(undefined);
       setRig(next);
       setPreviewState('idle');
       setEditing(false);
@@ -187,6 +200,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   ) =>
     void run(mode === 'animate' ? '正在保存参考图' : '正在确认角色', async () => {
       await saveConfig(!options.planOnly && draft?.candidates.length !== 3 && !options.reviewAgain);
+      setBuild(undefined);
       try {
         const next = await runtime.visuals.generate(
           cid,
@@ -198,6 +212,10 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           {
             regenerate,
             ...options,
+            onDraft: (value) => {
+              setDraft({ ...value });
+              setEditing(false);
+            },
             onStage: (stage) =>
               setBusy(
                 {
@@ -215,7 +233,10 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         setRig(undefined);
         setEditing(false);
         if (mode === 'animate') {
-          const result = await runtime.visuals.select(cid);
+          const source = next.selected;
+          if (source) setBuild({ stage: 'layers', source, completed: 0 });
+          const result = await runtime.visuals.select(cid, undefined, setBuild);
+          setBuild(undefined);
           setRig(result);
           setPreviewState('idle');
           setDraft(await runtime.store.get('visualDrafts', cid));
@@ -250,7 +271,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       <ErrorText text={error} />
       {draft?.advisories?.length ? (
         <Details title="生成说明">
-          <Note>补充资料或自动核对暂不可用，已按你的原始描述和上传图片继续。请直接看图选择。</Note>
+          <Note>
+            {draft.advisories.includes('repair_unavailable')
+              ? '双臂自动修复未完成，已保留现有图层。可预览后决定是否使用。'
+              : '补充资料或自动核对暂不可用，已按原始要求继续。请直接看图选择。'}
+          </Note>
         </Details>
       ) : null}
       {failure || schemaFailure ? (
@@ -276,6 +301,42 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         </Details>
       ) : null}
       {!loaded ? <Busy label="读取形象…" /> : null}
+      {build && build.stage !== 'ready' && !editing ? (
+        <View testID="visual-build-preview" style={{ gap: 12, alignItems: 'center' }}>
+          {build.preview?.layers.length ? (
+            <RigCharacter
+              rig={{ version: 1, source: 'seedream', ...build.preview }}
+              width={(Math.min(width - 40, 260) * build.preview.width) / build.preview.height}
+              height={Math.min(width - 40, 260)}
+              eyesClosed={false}
+              mouthOpen={false}
+              state="idle"
+              headStyle={{}}
+              armStyle={{}}
+            />
+          ) : (
+            <CharacterImage asset={build.source} width={Math.min(width - 40, 260)} height={260} />
+          )}
+          <Note>
+            {build.stage === 'failed'
+              ? '制作暂停，已完成的部分已保留'
+              : busy
+                ? ({
+                    layers: '正在整理图层',
+                    checking: '正在检查连接和遮挡',
+                    repairing_arms: '正在自动修复双臂',
+                    finishing: '正在整理头发和五官',
+                  }[build.stage] ?? '正在制作')
+                : '制作尚未完成，可以继续'}
+          </Note>
+          {build.total ? (
+            <Note>
+              {build.completed}/{build.total} 个图层已就绪
+            </Note>
+          ) : null}
+          {!busy ? <Button title="继续制作" onPress={() => select()} /> : null}
+        </View>
+      ) : null}
       {loaded && editing ? (
         <>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -437,9 +498,16 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       !rig &&
       !meshAvatar &&
       draft &&
+      (!build || build.stage === 'ready') &&
       (draft.candidates.length > 0 || (mode === 'animate' && draft.selected)) ? (
         <>
-          <Note>{mode === 'animate' ? '参考图已就绪' : '选一张你喜欢的，再让她动起来。'}</Note>
+          <Note>
+            {mode === 'animate'
+              ? '参考图已就绪'
+              : busy && draft.candidates.length < 3
+                ? `已生成 ${draft.candidates.length}/3 张`
+                : '选一张你喜欢的，再让她动起来。'}
+          </Note>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
             {(mode === 'animate' && draft.selected ? [draft.selected] : draft.candidates).map(
               (asset, i) => (
@@ -507,8 +575,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               />
             </>
           ) : null}
-          <Note>整理图层会使用豆包额度，最多可能按17张输出图计费。</Note>
-          {mode !== 'animate' ? (
+          <Note>整理图层使用豆包额度；必要时自动修复一次双臂，均按实际输出张数计费。</Note>
+          {mode !== 'animate' && draft.candidates.length === 3 ? (
             <TextButton
               title={config.provider === 'seedream' ? '换一批候选图（重新付费）' : '换一批候选图'}
               disabled={Boolean(busy)}
@@ -540,15 +608,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             state={awake.complete ? previewState : awake.state}
           />
           <Note>
-            {!meshAvatar && (!rig || rig.source === 'mock')
-              ? '可以导入你喜欢的角色形象'
-              : !awake.complete
-                ? elapsed < 1400
-                  ? '正在让她睁开眼睛'
-                  : elapsed < 2600
-                    ? '正在让她学会眨眼'
-                    : '正在让她动起来'
-                : '醒来了。'}
+            {error
+              ? '本次操作未完成，当前预览已保留'
+              : draft?.advisories?.includes('repair_unavailable')
+                ? '双臂自动修复未完成，当前预览已保留'
+                : !meshAvatar && (!rig || rig.source === 'mock')
+                  ? '可以导入你喜欢的角色形象'
+                  : !awake.complete
+                    ? elapsed < 1400
+                      ? '正在让她睁开眼睛'
+                      : elapsed < 2600
+                        ? '正在让她学会眨眼'
+                        : '正在让她动起来'
+                    : '醒来了。'}
           </Note>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(
@@ -619,6 +691,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           disabled={Boolean(busy)}
           onPress={() => {
             setEditing(true);
+            setBuild(undefined);
             setRig(undefined);
             setMeshAvatar(undefined);
           }}

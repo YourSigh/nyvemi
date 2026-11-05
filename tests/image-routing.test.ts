@@ -34,7 +34,7 @@ async function fixture() {
         data: body.layer_decomposition
           ? [
               { url: 'https://cdn.example/base', size: '1024x1024', z_index: 0 },
-              ...['body', 'head', 'eyes', 'mouth'].map((name, i) => ({
+              ...['body', 'head', 'eyes', 'mouth', 'left_arm', 'right_arm'].map((name, i) => ({
                 name,
                 url: `https://cdn.example/${name}`,
                 size: '512x512',

@@ -2,6 +2,9 @@ package app.nyvemi.nativebridge
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
@@ -32,7 +35,7 @@ object NyvemiCharacterRaster {
       }
     }
     val hash = digest.digest().joinToString("") { "%02x".format(it) }
-    val out = File(ctx.cacheDir, "character-input-v1-$hash.png")
+    val out = File(ctx.cacheDir, "character-input-v2-$hash.png")
     var width = options.outWidth
     var height = options.outHeight
     if (!out.exists()) {
@@ -51,14 +54,19 @@ object NyvemiCharacterRaster {
           8 -> matrix.setRotate(-90f)
         }
         if (!matrix.isIdentity) upright = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        width = upright.width
-        height = upright.height
+        // Canonical sRGB 8-bit PNG, bounded to 2K. No embedded wide-gamut/EXIF metadata reaches the API.
+        val scale = minOf(1.0, 2048.0 / maxOf(upright.width, upright.height))
+        width = maxOf(1, (upright.width * scale).toInt())
+        height = maxOf(1, (upright.height * scale).toInt())
+        val canonical = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        canonical.setHasAlpha(upright.hasAlpha())
+        Canvas(canonical).drawBitmap(upright, null, Rect(0, 0, width, height), Paint(Paint.FILTER_BITMAP_FLAG))
         val temporary = File(out.path + ".tmp")
         try {
-          temporary.outputStream().use { require(upright.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+          temporary.outputStream().use { require(canonical.compress(Bitmap.CompressFormat.PNG, 100, it)) }
           require(temporary.length() <= 12 * 1024 * 1024) { "Normalized image exceeds 12 MB" }
           require(temporary.renameTo(out)) { "Could not save normalized image" }
-        } finally { temporary.delete() }
+        } finally { temporary.delete(); canonical.recycle() }
       } finally {
         if (upright !== bitmap) upright.recycle()
         bitmap.recycle()

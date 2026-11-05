@@ -9,6 +9,7 @@ import {
   type ImageAsset,
   type ImageSettings,
   type VisualInput,
+  type VisualBuildProgress,
   validateRig,
   usesVisualResearch,
 } from './model';
@@ -338,7 +339,10 @@ export class SeedreamImageProvider implements ImageProvider {
       throw new Error('拆层图片编码无效，请重新选择参考图');
     return prepared.dataUrl;
   }
-  async split(image: ImageAsset): Promise<CharacterRig> {
+  async split(
+    image: ImageAsset,
+    progress?: (value: VisualBuildProgress) => Promise<void>,
+  ): Promise<CharacterRig> {
     const dataUrl = await this.decompositionImage(image);
     return this.cached(
       'split',
@@ -359,6 +363,7 @@ export class SeedreamImageProvider implements ImageProvider {
         if (!base) throw new Error('拆层返回缺少底图尺寸');
         const [width, height] = base.size.split('x').map(Number);
         const layers: CharacterRig['layers'] = [];
+        const total = response.data.filter((item) => item !== base && item.bounding_box).length;
         for (const [i, item] of response.data.entries()) {
           // Base backgrounds are intentionally omitted: character stage must stay transparent.
           if (item === base || !item.bounding_box) continue;
@@ -383,6 +388,13 @@ export class SeedreamImageProvider implements ImageProvider {
             asset: await this.assets.download(item.url, `${cacheId}-${i}`),
             bounds: layerBounds(item.bounding_box, width, height),
             z: item.z_index ?? i,
+          });
+          await progress?.({
+            stage: 'layers',
+            source: image,
+            completed: layers.length,
+            total,
+            preview: { width, height, layers: [...layers] },
           });
         }
         return validateRig({ version: 1, source: 'seedream', width, height, layers });

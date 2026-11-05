@@ -77,6 +77,7 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("refineCharacterRig") { uri: String, spec: String -> NyvemiRigRefinement.refine(context(), uri, spec) }
     AsyncFunction("prepareCharacterImage") { uri: String -> NyvemiCharacterRaster.prepare(context(), uri) }
     AsyncFunction("analyzeCharacterImage") { uri: String -> NyvemiCharacterRaster.analyze(context(), uri) }
     Function("deviceTimeContext") {
