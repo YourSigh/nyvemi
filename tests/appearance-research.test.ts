@@ -87,17 +87,11 @@ it('discovers only actual public page images and rejects inline, private and dup
     'https://cdn.example.org/full.webp',
   ]);
 });
-it('does not spend on images before a human confirms a researched reference; shares that reference and an approved anchor', async () => {
+it('automatically adopts a verified public reference and preserves the completed batch on resume', async () => {
   const { store, provider, service } = await fixture();
   const input = { description: 'q版测试作品测试角色', mode: 'text' as const };
-  const pending = await service.generate('c', input);
-  expect(pending.research?.status).toBe('awaiting_reference');
-  expect(provider.candidate).not.toHaveBeenCalled();
-  await service.generate('c', input, { referenceId: 'invented' });
-  expect(provider.candidate).not.toHaveBeenCalled();
-  const done = await service.generate('c', input, { referenceId: 'ref' });
+  const done = await service.generate('c', input);
   expect(done.candidates).toHaveLength(3);
-  expect(provider.research).toHaveBeenCalledOnce();
   expect(vi.mocked(provider.candidate).mock.calls[0][0].reference).toEqual(asset('reference'));
   expect(vi.mocked(provider.candidate).mock.calls[1][0].anchor).toEqual(asset('candidate-0'));
   await service.generate('c', input);
@@ -105,34 +99,35 @@ it('does not spend on images before a human confirms a researched reference; sha
   expect(provider.review).toHaveBeenCalledTimes(3);
   expect((await store.get('visualDrafts', 'c'))?.confirmedReferenceId).toBe('ref');
 });
-it('persists paid images before a failed vision check; retry reuses images and blocks decomposition until verified', async () => {
+it('keeps drawing when auxiliary vision fails and lets the user select a retained image', async () => {
   const { store, provider, service } = await fixture();
+  vi.mocked(provider.review!).mockRejectedValue(Error('vision offline'));
   const input = { description: 'q版测试角色', mode: 'text' as const };
-  await service.generate('c', input);
-  vi.mocked(provider.review!).mockRejectedValueOnce(Error('vision offline'));
-  await expect(service.generate('c', input, { referenceId: 'ref' })).rejects.toThrow('offline');
-  expect((await store.get('visualDrafts', 'c'))?.candidates).toHaveLength(1);
-  await expect(service.select('c', 0)).rejects.toThrow('尚未通过');
+  const done = await service.generate('c', input);
+  expect(done.candidates).toHaveLength(3);
+  expect(done.advisories).toContain('review_unavailable');
   await service.generate('c', input);
   expect(provider.candidate).toHaveBeenCalledTimes(3);
   await service.select('c', 0);
   expect(provider.split).toHaveBeenCalledOnce();
+  expect((await store.list('diagnostics'))[0].data).toMatchObject({
+    event: 'visual_assistance_failed',
+    stage: 'review',
+  });
 });
-it('does not promote a mismatched candidate or use it as an identity anchor', async () => {
+it('does not use a mismatched candidate as an anchor but lets a person make the final choice', async () => {
   const { provider, service } = await fixture();
-  const input = { description: 'q版测试角色', mode: 'text' as const };
-  await service.generate('c', input);
   vi.mocked(provider.review!).mockResolvedValueOnce({
     status: 'mismatch',
     features: [],
     issues: ['发型改变'],
   });
-  await service.generate('c', input, { referenceId: 'ref' });
+  await service.generate('c', { description: 'q版测试角色', mode: 'text' });
   expect(vi.mocked(provider.candidate).mock.calls[1][0].anchor).toBeUndefined();
-  await expect(service.select('c', 0)).rejects.toThrow('尚未通过');
-  expect(provider.split).not.toHaveBeenCalled();
+  await service.select('c', 0);
+  expect(provider.split).toHaveBeenCalledOnce();
 });
-it('keeps a research miss explicit instead of silently charging a name-only generation', async () => {
+it('can draw named characters from text even when no public reference can be retrieved', async () => {
   const { provider, service } = await fixture();
   vi.mocked(provider.research!).mockResolvedValue({
     version: 1,
@@ -140,9 +135,29 @@ it('keeps a research miss explicit instead of silently charging a name-only gene
     references: [],
     status: 'needs_reference',
   });
-  const result = await service.generate('c', { description: 'q版测试角色', mode: 'text' });
-  expect(result.research?.status).toBe('needs_reference');
-  expect(provider.candidate).not.toHaveBeenCalled();
+  const done = await service.generate('c', { description: 'q版测试角色', mode: 'text' });
+  expect(done.candidates).toHaveLength(3);
+  expect(vi.mocked(provider.candidate).mock.calls[0][0].reference).toBeUndefined();
+});
+it('uses an uploaded reference automatically even if auxiliary analysis is unavailable', async () => {
+  const { provider, service } = await fixture();
+  provider.supportsPromptPlanning = true;
+  provider.composePrompt = vi.fn(async () => {
+    throw Error('DS unavailable');
+  });
+  vi.mocked(provider.research!).mockRejectedValue(Error('DS unavailable'));
+  const uploaded = asset('own');
+  const done = await service.generate('c', {
+    description: '原创角色',
+    mode: 'reference',
+    reference: uploaded,
+  });
+  expect(done.candidates).toHaveLength(3);
+  expect(done.advisories).toEqual(['research_unavailable', 'prompt_unavailable']);
+  expect(vi.mocked(provider.candidate).mock.calls[0][0]).toMatchObject({
+    reference: uploaded,
+    imagePrompt: expect.stringContaining('原创角色'),
+  });
 });
 it('DS selects actual fetched images by index, visually checks them, and cannot create a URL', async () => {
   const model: LLMProvider = {
@@ -357,7 +372,7 @@ it('an uploaded original reference is reviewed directly without looking for an I
     reference: asset('own'),
   });
   expect(result).toMatchObject({
-    status: 'awaiting_reference',
+    status: 'ready',
     references: [{ asset: asset('own') }],
   });
   expect(web.search).not.toHaveBeenCalled();
@@ -420,7 +435,7 @@ it('persists one compiled original design before paid calls and reuses it after 
   for (const [planned] of vi.mocked(provider.candidate).mock.calls)
     expect(planned.imagePrompt).toBe(draft.imagePrompt);
 });
-it('a failed DS prompt never falls through to a paid raw-text generation', async () => {
+it('a failed optional DS prompt falls back to a stable user-request drawing prompt', async () => {
   const { provider, service } = await fixture();
   provider.supportsPromptPlanning = true;
   provider.composePrompt = vi.fn(async () => {
@@ -432,10 +447,10 @@ it('a failed DS prompt never falls through to a paid raw-text generation', async
     references: [],
     status: 'ready',
   });
-  await expect(service.generate('c', { description: '原创画家', mode: 'text' })).rejects.toThrow(
-    'DS unavailable',
-  );
-  expect(provider.candidate).not.toHaveBeenCalled();
+  const done = await service.generate('c', { description: '原创画家', mode: 'text' });
+  expect(done.advisories).toContain('prompt_unavailable');
+  expect(done.imagePrompt).toContain('原创画家');
+  expect(provider.candidate).toHaveBeenCalledTimes(3);
 });
 it('compiles named-character prompts only after reference confirmation and preserves old paid v3 batches', async () => {
   const { provider, service } = await fixture();
@@ -562,13 +577,9 @@ it('resumes uploaded-reference creation through format failures and a failed dow
   const imagePrompt = '绘制短发的原创运动员，穿蓝色运动服和黄色运动鞋，正面全身站姿。';
   const modelResponse = (content: unknown) =>
     new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }));
-  const plan = { brief: { ...brief, subject: '', namedCharacter: false }, queries: [] };
   const ds = vi
     .fn<typeof fetch>()
-    .mockImplementationOnce(async () => modelResponse(plan))
     .mockImplementationOnce(async () => modelResponse({ ...match, status: 'invalid' }))
-    .mockImplementationOnce(async () => modelResponse(plan))
-    .mockImplementationOnce(async () => modelResponse(extraObservations))
     .mockImplementationOnce(async () => modelResponse({ prompt: imagePrompt }))
     .mockImplementationOnce(async () => modelResponse({ ...match, status: 'invalid' }))
     .mockImplementation(async () => modelResponse(extraObservations));
@@ -617,34 +628,16 @@ it('resumes uploaded-reference creation through format failures and a failed dow
       files,
     );
 
-  await expect(service().generate('c', input, { planOnly: true })).rejects.toMatchObject({
-    details: { purpose: 'visual_reference_review', reason: 'schema' },
-  });
-  expect((await store.get('visualDrafts', 'c'))?.input.reference).toEqual(reference);
   const prepared = await service().generate('c', input, { planOnly: true });
-  expect(prepared.research?.references[0].check.features).toHaveLength(6);
-  expect(prepared.research?.status).toBe('awaiting_reference');
+  expect(prepared.advisories).toContain('research_unavailable');
+  expect(prepared.input.reference).toEqual(reference);
   expect(ark).not.toHaveBeenCalled();
   expect(web.search).not.toHaveBeenCalled();
-
-  const referenceId = prepared.research!.references[0].id;
-  await expect(service().generate('c', input, { referenceId })).rejects.toThrow('下载中断');
+  await expect(service().generate('c', input)).rejects.toThrow('下载中断');
   expect((await store.list('imageRequests'))[0].status).toBe('received');
-  await expect(service().generate('c', input)).rejects.toMatchObject({
-    details: { purpose: 'visual_candidate_review', reason: 'schema' },
-  });
-  const interrupted = await store.get('visualDrafts', 'c');
-  expect(interrupted?.candidates).toHaveLength(1);
-  expect(ark).toHaveBeenCalledOnce();
-
   const done = await service().generate('c', input);
   expect(done.candidates).toHaveLength(3);
-  expect(done.candidates[0]).toEqual(interrupted?.candidates[0]);
-  expect(done.candidateReviews?.map((review) => review?.status)).toEqual([
-    'match',
-    'match',
-    'match',
-  ]);
+  expect(done.advisories).toContain('review_unavailable');
   expect(ark).toHaveBeenCalledTimes(3);
   const modelCalls = ds.mock.calls.length;
   await service().generate('c', input);

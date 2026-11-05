@@ -2,7 +2,7 @@ import { restoreRigMetadata } from './rig-metadata';
 import { MeshAvatarSchema } from '../avatar/model';
 import { id } from '../domain/models';
 import type { VisualBrief } from './brief';
-import type { VisualResearch, VisualCheck } from './research';
+import { fallbackVisualResearch, type VisualResearch, type VisualCheck } from './research';
 import type { Storage } from '../storage/store';
 import {
   type CharacterRig,
@@ -146,21 +146,28 @@ export class VisualCreationService {
       await this.store.put('visualDrafts', draft);
       if (usesVisualResearch(draft.promptVersion) && !draft.research) {
         options.onStage?.('reference');
-        const research = await provider.research?.(input);
-        if (!research) throw Error('角色核对服务暂不可用；尚未生图');
+        const research = await this.assist(
+          draft,
+          'research',
+          () => provider.research?.(input),
+          fallbackVisualResearch(input),
+        );
         draft.research = research;
         draft.brief = research.brief;
         await this.store.put('visualDrafts', draft);
       }
-      if (draft.research && draft.research.status !== 'ready') {
-        const referenceId = options.referenceId ?? draft.confirmedReferenceId;
-        const reference = draft.research.references.find((r) => r.id === referenceId);
-        if (!reference || draft.research.status === 'needs_reference') return draft;
-        if (reference.check.status === 'mismatch') throw Error('参考图与角色不符，请换一张参考图');
-        if (draft.candidates.length && referenceId !== draft.confirmedReferenceId)
+      if (draft.research) {
+        // Uploading is already an explicit selection. Public references are optional enhancements.
+        const requestedId = options.referenceId ?? draft.confirmedReferenceId;
+        const reference = input.reference
+          ? draft.research.references.find((r) => r.asset.uri === input.reference!.uri)
+          : (draft.research.references.find(
+              (r) => r.id === requestedId && r.check.status !== 'mismatch',
+            ) ?? draft.research.references.find((r) => r.check.status === 'match'));
+        if (draft.candidates.length && reference?.id !== draft.confirmedReferenceId)
           throw Error('本批已开始生图，请用新一批更换参考，避免混用形象');
-        if (reference.id !== draft.confirmedReferenceId) draft.imagePrompt = undefined;
-        draft.confirmedReferenceId = reference.id;
+        if (reference?.id !== draft.confirmedReferenceId) draft.imagePrompt = undefined;
+        draft.confirmedReferenceId = reference?.id;
         await this.store.put('visualDrafts', draft);
       }
       if (
@@ -175,18 +182,25 @@ export class VisualCreationService {
       }
       if (draft.promptVersion === 4 && !draft.imagePrompt) {
         options.onStage?.('prompt');
-        if (!provider.composePrompt) throw Error('提示词整理暂不可用；尚未生图');
         const reference = draft.research?.references.find(
           (r) => r.id === draft.confirmedReferenceId,
         );
-        draft.imagePrompt = await provider.composePrompt({
+        const planned = {
           ...input,
           reference: reference?.asset ?? input.reference,
           brief: reference
             ? { ...draft.brief!, recognizableFeatures: reference.check.features }
             : draft.brief,
-        });
-        if (!draft.imagePrompt.trim()) throw Error('提示词为空；尚未生图');
+        };
+        draft.imagePrompt = await this.assist(
+          draft,
+          'prompt',
+          async () => {
+            const prompt = await provider.composePrompt?.(planned);
+            return prompt?.trim() || undefined;
+          },
+          `用户原始要求：${input.description}。保留用户指定的身份、外观和风格；参考图（如有）为造型依据。单人正面全身，双手分开，双眼睁开，结构清晰，简单背景。`,
+        );
         await this.store.put('visualDrafts', draft);
       }
       if (options.planOnly && usesVisualResearch(draft.promptVersion)) return draft;
@@ -225,8 +239,16 @@ export class VisualCreationService {
             (!draft.candidateReviews?.[i] || options.reviewAgain)
           ) {
             options.onStage?.('review');
-            const review = await provider.review?.(planned, draft.candidates[i]);
-            if (!review) throw Error('图片已保留，核对暂不可用；重试只核对，不重复生图');
+            const review = await this.assist(
+              draft,
+              'review',
+              () => provider.review?.(planned, draft.candidates[i]),
+              {
+                status: 'uncertain' as const,
+                features: [],
+                issues: ['自动核对未完成，请直接看图选择'],
+              },
+            );
             draft.candidateReviews ??= [];
             draft.candidateReviews[i] = review;
             await this.store.put('visualDrafts', draft);
@@ -238,6 +260,29 @@ export class VisualCreationService {
       await this.store.release(lock);
       await this.store.release('visual-assets');
     }
+  }
+  private async assist<T>(
+    draft: VisualDraft,
+    stage: 'research' | 'prompt' | 'review',
+    work: () => Promise<T | undefined> | undefined,
+    fallback: T,
+  ): Promise<T> {
+    try {
+      const value = await work();
+      if (value !== undefined) return value;
+    } catch {
+      /* Auxiliary API/schema/web failures cannot turn a valid drawing request into a dead end. */
+    }
+    const code = `${stage}_unavailable` as const;
+    draft.advisories = [...new Set([...(draft.advisories ?? []), code])];
+    await this.store.put('diagnostics', {
+      id: id(),
+      characterId: draft.characterId,
+      createdAt: Date.now(),
+      kind: 'error',
+      data: { event: 'visual_assistance_failed', stage },
+    });
+    return fallback;
   }
   async select(characterId: string, index?: number) {
     const lock = `visual:${characterId}`;
@@ -255,11 +300,6 @@ export class VisualCreationService {
       adopt(provider, draft);
       const image = index === undefined ? draft.selected : draft.candidates[index];
       if (!image) throw new Error('请选择一张形象');
-      if (usesVisualResearch(draft.promptVersion)) {
-        const check = index === undefined ? undefined : draft.candidateReviews?.[index];
-        if (!check || check.status !== 'match')
-          throw Error('这张图尚未通过特征核对，请重新核对或更换参考；尚未拆层');
-      }
       const reuse =
         draft.selected?.uri === image.uri &&
         draft.rig &&

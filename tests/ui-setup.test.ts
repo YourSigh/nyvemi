@@ -181,7 +181,7 @@ it('candidate cards only select; decomposition starts after explicit confirmatio
   await act(async () => button('就选这张，整理图层').props.onPress());
   expect(runtime.visuals.select).toHaveBeenCalledWith('c', 1);
 });
-it('finds and confirms references before requiring a drawing key or starting paid generation', async () => {
+it('starts drawing directly after entering a key without a reference selection screen', async () => {
   const { runtime, store } = await fixture();
   await store.put('characters', {
     id: 'c',
@@ -190,31 +190,14 @@ it('finds and confirms references before requiring a drawing key or starting pai
     createdAt: 1,
     state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
   });
-  const check = { status: 'match' as const, features: ['参考中实际可见的发型'], issues: [] };
-  const prepared = {
+  runtime.visuals.generate = vi.fn(async () => ({
     id: 'c',
     characterId: 'c',
     createdAt: 1,
     providerId: 'seedream:test',
     input: { mode: 'text' as const, description: '角色' },
-    promptVersion: 3 as const,
-    candidates: [],
-    research: {
-      version: 1 as const,
-      status: 'awaiting_reference' as const,
-      brief: {
-        subject: '角色',
-        namedCharacter: true,
-        recognizableFeatures: [],
-        style: '',
-        confidence: 0.95,
-      },
-      references: [
-        { id: 'ref', title: '来源', asset: { uri: 'file://ref', width: 512, height: 1024 }, check },
-      ],
-    },
-  };
-  runtime.visuals.generate = vi.fn(async () => prepared);
+    candidates: [{ uri: 'file://one', width: 512, height: 1024 }],
+  }));
   await mount(
     runtime,
     createElement(AppearanceScreen, {
@@ -222,26 +205,19 @@ it('finds and confirms references before requiring a drawing key or starting pai
       navigation: {},
     } as never),
   );
-  await act(async () => button('先整理形象要求').props.onPress());
+  await act(async () => button('豆包 API Key').props.onChangeText('test-drawing-key'));
+  await act(async () => button('生成3张候选图').props.onPress());
+  expect(runtime.visuals.generate).toHaveBeenCalledOnce();
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
     'c',
     expect.any(Object),
-    expect.objectContaining({ planOnly: true }),
-  );
-  expect(images.set).not.toHaveBeenCalled();
-  expect(button('确认，生成3张候选图').props.disabled).toBe(true);
-  await act(async () => button('选择参考 1').props.onPress());
-  expect(runtime.visuals.generate).toHaveBeenCalledOnce();
-  await act(async () => button('豆包 API Key').props.onChangeText('test-drawing-key'));
-  await act(async () => button('确认，生成3张候选图').props.onPress());
-  expect(runtime.visuals.generate).toHaveBeenLastCalledWith(
-    'c',
-    expect.any(Object),
-    expect.objectContaining({ referenceId: 'ref' }),
+    expect.objectContaining({ regenerate: false }),
   );
   expect(images.set).toHaveBeenCalledWith('test-drawing-key', defaultImageSettings.baseUrl);
+  expect(renderer!.root.findAllByProps({ accessibilityLabel: '选择参考 1' })).toHaveLength(0);
+  expect(button('选择形象 1')).toBeDefined();
 });
-it('blocks decomposition for a mismatch and can recheck completed images without requiring a drawing key', async () => {
+it('treats automatic review as advisory and can recheck without requiring a drawing key', async () => {
   const { runtime, store } = await fixture();
   await store.put('characters', {
     id: 'c',
@@ -286,7 +262,7 @@ it('blocks decomposition for a mismatch and can recheck completed images without
     } as never),
   );
   await act(async () => button('选择形象 1').props.onPress());
-  expect(button('就选这张，整理图层').props.disabled).toBe(true);
+  expect(button('就选这张，整理图层').props.disabled).toBe(false);
   expect(runtime.visuals.select).not.toHaveBeenCalled();
   await act(async () => button('重新核对（不重新生图）').props.onPress());
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
@@ -320,7 +296,8 @@ it('shows safe provider error details only when requested, including during firs
       navigation: {},
     } as never),
   );
-  await act(async () => button('先整理形象要求').props.onPress());
+  await act(async () => button('豆包 API Key').props.onChangeText('test-key'));
+  await act(async () => button('生成3张候选图').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('本次生成结果未通过服务商审核');
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('safe-request-123');
   await act(async () => button('错误详情').props.onPress());
@@ -380,7 +357,8 @@ it('shows the failing visual stage with folded safe schema details and persists 
       navigation: {},
     } as never),
   );
-  await act(async () => button('先整理形象要求').props.onPress());
+  await act(async () => button('豆包 API Key').props.onChangeText('test-key'));
+  await act(async () => button('生成3张候选图').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('参考图核对返回格式有误');
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('invalid_type');
   await act(async () => button('错误详情').props.onPress());

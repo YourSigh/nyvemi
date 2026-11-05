@@ -70,6 +70,7 @@ export const defaultImageSettings: ImageSettings = {
   routingVersion: 1,
 };
 export interface VisualDraft {
+  advisories?: ('research_unavailable' | 'prompt_unavailable' | 'review_unavailable')[];
   research?: VisualResearch;
   confirmedReferenceId?: string;
   candidateReviews?: (VisualCheck | null)[];

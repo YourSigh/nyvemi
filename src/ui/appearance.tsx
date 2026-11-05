@@ -10,7 +10,7 @@ import { ImageProviderError, type ImageRequestFailure } from '../appearance/erro
 import { pickMeshAvatar } from '../avatar/native';
 import type { MeshAvatar } from '../avatar/model';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, AppState, Linking, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, AppState, Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRuntime } from './context';
 import {
@@ -60,7 +60,6 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number>();
-  const [referenceId, setReferenceId] = useState<string>();
   const [loaded, setLoaded] = useState(false);
   const [draft, setDraft] = useState<VisualDraft>();
   const [rig, setRig] = useState<CharacterRig>();
@@ -91,7 +90,6 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         setHasKey(Boolean(secret));
         if (d) {
           setDraft(d);
-          setReferenceId(d.confirmedReferenceId);
           setDescription(d.input.description);
           setMode(d.input.mode);
           setReference(d.input.reference);
@@ -188,7 +186,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     } = {},
   ) =>
     void run(mode === 'animate' ? '正在保存参考图' : '正在确认角色', async () => {
-      await saveConfig(!options.planOnly && draft?.candidates.length !== 3);
+      await saveConfig(!options.planOnly && draft?.candidates.length !== 3 && !options.reviewAgain);
       try {
         const next = await runtime.visuals.generate(
           cid,
@@ -213,14 +211,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           },
         );
         setDraft(next);
-        setReferenceId(next.confirmedReferenceId);
         setSelectedIndex(undefined);
         setRig(undefined);
         setEditing(false);
+        if (mode === 'animate') {
+          const result = await runtime.visuals.select(cid);
+          setRig(result);
+          setPreviewState('idle');
+          setDraft(await runtime.store.get('visualDrafts', cid));
+        }
       } catch (error) {
         const latest = await runtime.store.get('visualDrafts', cid);
         setDraft(latest);
-        setEditing(usesVisualResearch(latest?.promptVersion) ? !latest?.research : true);
+        setEditing(!latest?.candidates.length && !latest?.selected);
         throw error;
       }
     });
@@ -245,6 +248,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             : '描述你想见到的人，也可以上传一张参考图。'}
       </Note>
       <ErrorText text={error} />
+      {draft?.advisories?.length ? (
+        <Details title="生成说明">
+          <Note>补充资料或自动核对暂不可用，已按你的原始描述和上传图片继续。请直接看图选择。</Note>
+        </Details>
+      ) : null}
       {failure || schemaFailure ? (
         <Details title="错误详情">
           {failure ? (
@@ -376,11 +384,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               autoCapitalize="none"
             />
           </Details>
-          <Note>{imageRoutingLabel(config)}。确认后才付费生图。</Note>
+          <Note>{imageRoutingLabel(config)}。点击后使用豆包额度。</Note>
           <Button
-            title={mode === 'animate' ? '使用这张参考图' : '先整理形象要求'}
+            title={mode === 'animate' ? '使用原图，整理图层' : '生成3张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
-            onPress={() => generate(false, { planOnly: mode !== 'animate' })}
+            onPress={() => generate()}
           />
           <Details title="导入已有形象">
             <TextButton
@@ -417,119 +425,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           </Details>
         </>
       ) : null}
-      {!editing && !rig && !meshAvatar && draft?.research && !draft.candidates.length ? (
-        <>
-          <Note>
-            {draft.research.note ??
-              (draft.research.status === 'ready'
-                ? '原创形象要求已整理好，无需网上参考。'
-                : '先确认参考中的人物和造型，再开始画。')}
-          </Note>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-            {draft.research.references.map((ref, i) => (
-              <Pressable
-                key={ref.id}
-                accessibilityRole="button"
-                accessibilityLabel={`选择参考 ${i + 1}`}
-                accessibilityState={{ selected: referenceId === ref.id }}
-                disabled={Boolean(busy)}
-                onPress={() => setReferenceId(ref.id)}
-                style={{
-                  borderWidth: 2,
-                  borderColor: referenceId === ref.id ? palette.accent : palette.line,
-                  backgroundColor: palette.paper,
-                  borderRadius: 14,
-                  padding: 2,
-                  alignItems: 'center',
-                  flexShrink: 1,
-                }}
-              >
-                <CharacterImage
-                  asset={ref.asset}
-                  width={candidateWidth}
-                  height={Math.min(210, candidateWidth * 1.6)}
-                />
-                <Text style={{ color: palette.accent, fontSize: 13 }}>参考 {i + 1}</Text>
-                <Text style={{ color: palette.muted, fontSize: 12 }}>
-                  {ref.check.status === 'match' ? 'DS初检相符' : '请仔细确认'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          {draft.research.references.find((r) => r.id === referenceId) ? (
-            <Note>
-              {draft.research.references
-                .find((r) => r.id === referenceId)!
-                .check.features.slice(0, 3)
-                .join(' · ')}
-            </Note>
-          ) : null}
-          {draft.research.references.length ? (
-            <Details title="参考来源">
-              {draft.research.references.map((ref, i) =>
-                ref.sourceUrl ? (
-                  <TextButton
-                    key={ref.id}
-                    title={`${i + 1}. ${ref.title.slice(0, 38)}`}
-                    onPress={() =>
-                      void Linking.openURL(ref.sourceUrl!).catch(() => setError('无法打开来源网页'))
-                    }
-                  />
-                ) : (
-                  <Note key={ref.id}>你上传的参考图</Note>
-                ),
-              )}
-              <Note>DS初检可能有误，请确认不是其他角色或改装图。</Note>
-            </Details>
-          ) : null}
-          {draft.research.status !== 'needs_reference' ? (
-            <>
-              {!hasKey ? (
-                <Field
-                  label="豆包 API Key"
-                  value={key}
-                  onChangeText={setKey}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  placeholder="粘贴火山方舟 API Key"
-                />
-              ) : null}
-              <Button
-                title="确认，生成3张候选图"
-                disabled={Boolean(busy) || (draft.research.status !== 'ready' && !referenceId)}
-                onPress={() => generate(false, { referenceId })}
-              />
-              <Note>这一步使用豆包额度，生成后由DS逐张检查，不自动付费重画。</Note>
-            </>
-          ) : null}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <TextButton
-              title="上传自己的参考图"
-              disabled={Boolean(busy)}
-              onPress={() =>
-                void run('读取参考图', async () => {
-                  const selected = await pickReference();
-                  if (selected) {
-                    setReference(selected);
-                    setMode('reference');
-                    setEditing(true);
-                  }
-                })
-              }
-            />
-            <TextButton
-              title={draft.research.brief.namedCharacter ? '重新找参考' : '重新整理要求'}
-              disabled={Boolean(busy)}
-              onPress={() => generate(false, { planOnly: true, refreshResearch: true })}
-            />
-          </View>
-        </>
+      {!editing &&
+      !rig &&
+      !meshAvatar &&
+      draft &&
+      !draft.candidates.length &&
+      mode !== 'animate' ? (
+        <Button title="继续生成3张候选图" disabled={Boolean(busy)} onPress={() => generate()} />
       ) : null}
       {!editing &&
       !rig &&
       !meshAvatar &&
       draft &&
-      (!draft.research || draft.candidates.length > 0) ? (
+      (draft.candidates.length > 0 || (mode === 'animate' && draft.selected)) ? (
         <>
           <Note>{mode === 'animate' ? '参考图已就绪' : '选一张你喜欢的，再让她动起来。'}</Note>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
@@ -583,13 +491,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           </View>
           <Button
             title="就选这张，整理图层"
-            disabled={
-              Boolean(busy) ||
-              (mode !== 'animate' &&
-                (selectedIndex === undefined ||
-                  (usesVisualResearch(draft.promptVersion) &&
-                    draft.candidateReviews?.[selectedIndex]?.status !== 'match')))
-            }
+            disabled={Boolean(busy) || (mode !== 'animate' && selectedIndex === undefined)}
             onPress={() => select(mode === 'animate' ? undefined : selectedIndex)}
           />
           {selectedIndex !== undefined && draft.candidateReviews?.[selectedIndex]?.issues.length ? (
@@ -597,7 +499,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           ) : null}
           {usesVisualResearch(draft.promptVersion) ? (
             <>
-              <Note>DS核对仍可能出错，请以你看图确认为准。未通过的图片不会进入付费拆层。</Note>
+              <Note>自动核对仅供参考，以你喜欢哪张为准。</Note>
               <TextButton
                 title={draft.candidates.length < 3 ? '继续完成本批' : '重新核对（不重新生图）'}
                 disabled={Boolean(busy)}
@@ -614,13 +516,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 if (config.provider === 'seedream')
                   Alert.alert(
                     '重新生成3张候选图',
-                    '先确认参考，再生成新一批。生成时会使用豆包额度，当前聊天和已保存形象保留。',
+                    '将使用豆包额度生成3张新候选图，当前已保存形象保留。',
                     [
                       { text: '取消', style: 'cancel' },
-                      { text: '继续', onPress: () => generate(true, { planOnly: true }) },
+                      { text: '生成', onPress: () => generate(true) },
                     ],
                   );
-                else generate(true, { planOnly: true });
+                else generate(true);
               }}
             />
           ) : null}

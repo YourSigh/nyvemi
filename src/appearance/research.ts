@@ -52,6 +52,22 @@ export interface VisualResearch {
   status: 'ready' | 'awaiting_reference' | 'needs_reference';
   note?: string;
 }
+/** Missing auxiliary models or web sources must not prevent drawing the user's own request. */
+export function fallbackVisualResearch(input: VisualInput): VisualResearch {
+  return {
+    version: 1,
+    brief: {
+      subject: input.description.slice(0, 160),
+      namedCharacter: false,
+      recognizableFeatures: [],
+      style: '',
+      confidence: 0,
+    },
+    references: [],
+    status: 'ready',
+    note: '按你的描述生成。',
+  };
+}
 export interface AppearanceDirector {
   research(input: VisualInput): Promise<VisualResearch>;
   composePrompt?(input: VisualInput): Promise<string>;
@@ -185,12 +201,11 @@ export class DSVisualDirector implements AppearanceDirector {
     return result.prompt;
   }
   async research(input: VisualInput): Promise<VisualResearch> {
-    const model = await this.provider();
-    const { brief, queries: plannedQueries } = await this.classify(input);
     if (input.reference) {
+      const brief = fallbackVisualResearch(input).brief;
       // The user's own picture is authoritative, including an intentional alternate outfit.
       const check = await this.vision(
-        `提取用户参考图中实际可见的发型、眼睛、服装、饰物，禁止凭角色名补全看不见的细节。用户会确认这张参考，不需要用你记忆中的原作服装否定用户自己的图。画面不清晰或多人无法确定主体则uncertain；无人或无可用角色则mismatch。严格输出JSON对象，例如{"status":"match","features":["图片实际特征"],"issues":[]}，status只能是match/uncertain/mismatch，features与issues最多各6条，每条不超过120字。用户要求：${JSON.stringify(input.description)}`,
+        `提取用户参考图中实际可见的发型、眼睛、服装、饰物，禁止凭角色名补全看不见的细节。用户已选择这张参考，不需要用你记忆中的原作服装否定用户自己的图。画面不清晰或多人无法确定主体则uncertain；无人或无可用角色则mismatch。严格输出JSON对象，例如{"status":"match","features":["图片实际特征"],"issues":[]}，status只能是match/uncertain/mismatch，features与issues最多各6条，每条不超过120字。用户要求：${JSON.stringify(input.description)}`,
         [input.reference],
         VisualCheckSchema,
         'visual_reference_review',
@@ -206,9 +221,11 @@ export class DSVisualDirector implements AppearanceDirector {
             check,
           },
         ],
-        status: check.status === 'mismatch' ? 'needs_reference' : 'awaiting_reference',
+        status: 'ready',
       };
     }
+    const model = await this.provider();
+    const { brief, queries: plannedQueries } = await this.classify(input);
     if (!brief.namedCharacter) return { version: 1, brief, references: [], status: 'ready' };
     const pages: WebDocument[] = [];
     const attempted = new Set<string>();
