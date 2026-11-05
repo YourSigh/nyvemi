@@ -739,3 +739,18 @@ it('keeps an unsuccessful automatic repair bounded and exposes it without losing
   expect(repairArms).toHaveBeenCalledOnce();
   expect((await store.get('visualDrafts', 'c'))?.advisories).toContain('repair_unavailable');
 });
+it('does not overwrite an in-flight visual draft when restoring an existing look', async () => {
+  const { store, assets } = await setup();
+  const mock = new MockImageProvider();
+  const service = new VisualCreationService(store, async () => mock, assets);
+  await service.generate('c', { description: 'x', mode: 'text' });
+  await service.select('c', 0);
+  const refine = vi.fn(async (_image: unknown, rig: ReturnType<typeof mockRig>) => rig);
+  assets.refineRig = refine;
+  await store.lease('visual:c', Date.now(), 100000);
+  await service.restoreLook('c');
+  expect(refine).not.toHaveBeenCalled();
+  await store.release('visual:c');
+  await service.restoreLook('c');
+  expect(refine).toHaveBeenCalledOnce();
+});

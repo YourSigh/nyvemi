@@ -299,25 +299,37 @@ export class VisualCreationService {
     return fallback;
   }
   async restoreLook(characterId: string) {
-    const draft = await this.store.get('visualDrafts', characterId);
-    if (
-      !draft?.rig ||
-      !draft.selected ||
-      !this.assets.refineRig ||
-      (draft.build && draft.build.stage !== 'ready')
-    )
-      return draft;
-    const rig = await this.assets.refineRig(
-      draft.selected,
-      await restoreRigMetadata(this.store, draft.rig),
-    );
-    if (rig !== draft.rig) {
-      await this.store.put('visualDrafts', { ...draft, rig });
-      const c = await this.store.get('characters', characterId);
-      if (draft.saved && c?.rig) await this.store.put('characters', { ...c, rig });
-      return { ...draft, rig };
+    const lock = `visual:${characterId}`;
+    if (!(await this.store.lease(lock, Date.now(), 5 * 60_000)))
+      return this.store.get('visualDrafts', characterId);
+    if (!(await this.store.lease('visual-assets', Date.now(), 5 * 60_000))) {
+      await this.store.release(lock);
+      return this.store.get('visualDrafts', characterId);
     }
-    return draft;
+    try {
+      const draft = await this.store.get('visualDrafts', characterId);
+      if (
+        !draft?.rig ||
+        !draft.selected ||
+        !this.assets.refineRig ||
+        (draft.build && draft.build.stage !== 'ready')
+      )
+        return draft;
+      const rig = await this.assets.refineRig(
+        draft.selected,
+        await restoreRigMetadata(this.store, draft.rig),
+      );
+      if (rig !== draft.rig) {
+        await this.store.put('visualDrafts', { ...draft, rig });
+        const c = await this.store.get('characters', characterId);
+        if (draft.saved && c?.rig) await this.store.put('characters', { ...c, rig });
+        return { ...draft, rig };
+      }
+      return draft;
+    } finally {
+      await this.store.release(lock);
+      await this.store.release('visual-assets');
+    }
   }
   async select(
     characterId: string,

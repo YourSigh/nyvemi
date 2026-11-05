@@ -258,6 +258,9 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: cid } }] });
     });
   const awake = awakeningAt(elapsed);
+  const buildHeight = build?.preview
+    ? Math.min(260, ((width - 40) * build.preview.height) / build.preview.width)
+    : 260;
   return (
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
@@ -306,8 +309,8 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           {build.preview?.layers.length ? (
             <RigCharacter
               rig={{ version: 1, source: 'seedream', ...build.preview }}
-              width={(Math.min(width - 40, 260) * build.preview.width) / build.preview.height}
-              height={Math.min(width - 40, 260)}
+              width={(buildHeight * build.preview.width) / build.preview.height}
+              height={buildHeight}
               eyesClosed={false}
               mouthOpen={false}
               state="idle"
@@ -445,7 +448,12 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               autoCapitalize="none"
             />
           </Details>
-          <Note>{imageRoutingLabel(config)}。点击后使用豆包额度。</Note>
+          <Note>
+            {imageRoutingLabel(config)}。
+            {mode === 'animate'
+              ? '制作会使用拆层额度，必要时自动修复一次双臂。'
+              : '点击后使用豆包额度。'}
+          </Note>
           <Button
             title={mode === 'animate' ? '使用原图，整理图层' : '生成3张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
@@ -610,17 +618,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           <Note>
             {error
               ? '本次操作未完成，当前预览已保留'
-              : draft?.advisories?.includes('repair_unavailable')
-                ? '双臂自动修复未完成，当前预览已保留'
-                : !meshAvatar && (!rig || rig.source === 'mock')
-                  ? '可以导入你喜欢的角色形象'
-                  : !awake.complete
-                    ? elapsed < 1400
-                      ? '正在让她睁开眼睛'
-                      : elapsed < 2600
-                        ? '正在让她学会眨眼'
-                        : '正在让她动起来'
-                    : '醒来了。'}
+              : busy
+                ? `${busy}…`
+                : draft?.advisories?.includes('repair_unavailable')
+                  ? '双臂自动修复未完成，当前预览已保留'
+                  : !meshAvatar && (!rig || rig.source === 'mock')
+                    ? '可以导入你喜欢的角色形象'
+                    : !awake.complete
+                      ? elapsed < 1400
+                        ? '正在让她睁开眼睛'
+                        : elapsed < 2600
+                          ? '正在让她学会眨眼'
+                          : '正在让她动起来'
+                      : '醒来了。'}
           </Note>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(
@@ -641,42 +651,42 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             ))}
           </View>
           {rig?.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
-            <Button
-              secondary
-              title={draft.bodyRepairApplied ? '身体已补全' : '重新补全身体（付费）'}
-              disabled={draft.bodyRepairApplied || !awake.complete || Boolean(busy)}
-              onPress={() =>
-                void run('正在补全身体', async () => {
-                  setRig(await runtime.visuals.repairBody(cid));
-                  setDraft(await runtime.store.get('visualDrafts', cid));
-                  setPreviewState('idle');
-                })
-              }
-            />
-          ) : null}
-          {rig?.source === 'seedream' && draft?.selected && config.provider === 'seedream' ? (
-            <TextButton
-              title={draft.armRepairApplied ? '双臂已修复' : '修复双臂连接（付费）'}
-              disabled={Boolean(busy) || !awake.complete || draft.armRepairApplied}
-              onPress={() =>
-                Alert.alert(
-                  '修复双臂连接',
-                  '复用当前原画和其他图层，重新拆出左右手。将使用豆包拆层额度，按实际输出张数计费。',
-                  [
-                    { text: '取消', style: 'cancel' },
-                    {
-                      text: '修复',
-                      onPress: () =>
-                        void run('正在修复双臂', async () => {
-                          setRig(await runtime.visuals.repairArms(cid));
-                          setDraft(await runtime.store.get('visualDrafts', cid));
-                          setPreviewState('idle');
-                        }),
-                    },
-                  ],
-                )
-              }
-            />
+            <Details title="高级修复">
+              <Button
+                secondary
+                title={draft.bodyRepairApplied ? '身体已补全' : '重新补全身体（付费）'}
+                disabled={draft.bodyRepairApplied || !awake.complete || Boolean(busy)}
+                onPress={() =>
+                  void run('正在补全身体', async () => {
+                    setRig(await runtime.visuals.repairBody(cid));
+                    setDraft(await runtime.store.get('visualDrafts', cid));
+                    setPreviewState('idle');
+                  })
+                }
+              />
+              <TextButton
+                title={draft.armRepairApplied ? '双臂已修复' : '修复双臂连接（付费）'}
+                disabled={Boolean(busy) || !awake.complete || draft.armRepairApplied}
+                onPress={() =>
+                  Alert.alert(
+                    '修复双臂连接',
+                    '复用当前原画和其他图层，重新拆出左右手。将使用豆包拆层额度，按实际输出张数计费。',
+                    [
+                      { text: '取消', style: 'cancel' },
+                      {
+                        text: '修复',
+                        onPress: () =>
+                          void run('正在修复双臂', async () => {
+                            setRig(await runtime.visuals.repairArms(cid));
+                            setDraft(await runtime.store.get('visualDrafts', cid));
+                            setPreviewState('idle');
+                          }),
+                      },
+                    ],
+                  )
+                }
+              />
+            </Details>
           ) : null}
           <Button
             title={route.params.onboarding ? '保存，开始聊天' : '保存新形象'}
