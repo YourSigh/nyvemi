@@ -118,6 +118,16 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
               />
             ))}
           </Details>
+          {error ? (
+            <TextButton
+              title="安装或修复语音包"
+              onPress={() =>
+                void bridge()
+                  .installSpeechData()
+                  .catch(() => setError('请在系统设置中打开文字转语音'))
+              }
+            />
+          ) : null}
           <Button
             title={busy ? '停止试听' : '听听这个声音'}
             onPress={() => {

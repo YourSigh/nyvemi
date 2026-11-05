@@ -60,20 +60,28 @@ class NyvemiSpeechOutput {
     require(text.isNotBlank() && text.length <= 3500 && id.length <= 180)
     require(rate.isFinite() && rate in 0.65..1.3 && pitch.isFinite() && pitch in 0.7..1.4)
     val playToken = ++playGeneration
-    withEngine(ctx) { tts ->
-      if(playToken != playGeneration) { promise.resolve(false); return@withEngine }
-      if (tts == null) { promise.reject("tts_unavailable", "手机还没有可用的本地语音引擎", null); return@withEngine }
+    var warmupAttempts = 0
+    lateinit var attempt: (TextToSpeech?) -> Unit
+    attempt = attempt@ { tts ->
+      if(playToken != playGeneration) { promise.resolve(false); return@attempt }
+      if (tts == null) { promise.reject("tts_unavailable", "手机还没有可用的本地语音引擎", null); return@attempt }
       val selected = NyvemiSpeechPolicy.choose(candidates(tts), voiceId, tts.defaultVoice?.name)
       val voice = tts.voices.orEmpty().firstOrNull { it.name == selected }
-      if (voice == null) { promise.reject("tts_data_missing", "请先安装中文离线音色", null); return@withEngine }
+      if (voice == null && warmupAttempts++ < 2) {
+        handler.postDelayed({ attempt(tts) }, 650)
+        return@attempt
+      }
+      if (voice == null) { promise.reject("tts_data_missing", "请先安装中文离线音色", null); return@attempt }
       stop()
-      if (tts.setVoice(voice) != TextToSpeech.SUCCESS) { promise.reject("tts_voice_unavailable", "这个本机音色暂不可用，请换一个", null); return@withEngine }
+      if (tts.setVoice(voice) != TextToSpeech.SUCCESS) { promise.reject("tts_voice_unavailable", "这个本机音色暂不可用，请换一个", null); return@attempt }
       tts.setSpeechRate(rate.toFloat()); tts.setPitch(pitch.toFloat())
       tts.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-      current = id to promise
-      speechTimer = Runnable { fail(id) }; handler.postDelayed(speechTimer!!, minOf(180000L, maxOf(20000L, text.length * 500L)))
-      if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, id) != TextToSpeech.SUCCESS) fail(id)
+      val utteranceId = "$id:$playToken"
+      current = utteranceId to promise
+      speechTimer = Runnable { fail(utteranceId) }; handler.postDelayed(speechTimer!!, minOf(180000L, maxOf(20000L, text.length * 500L)))
+      if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId) != TextToSpeech.SUCCESS) fail(utteranceId)
     }
+    withEngine(ctx,attempt)
   }
   private fun complete(id: String?, result: Boolean) {
     val active = current ?: return

@@ -22,6 +22,7 @@ export class SpeechQueue {
     if (signature !== this.signature) {
       this.blocked = false;
       this.signature = signature;
+      this.state({});
     }
     const initial = !this.primed;
     this.primed = true;
@@ -64,7 +65,7 @@ export class SpeechQueue {
     this.epoch++;
     this.pending = [];
     void this.driver.stop().catch(() => {});
-    this.state({});
+    this.state(this.blocked ? { error: '本机声音尚未就绪' } : {});
   }
   private async drain() {
     if (this.draining || this.blocked) return;

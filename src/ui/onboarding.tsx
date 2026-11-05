@@ -227,14 +227,16 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
               ? 'DeepSeek'
               : '自定义聊天模型'}
           </Text>
-          <TextButton
-            title="获取 Key"
-            onPress={() =>
-              void Linking.openURL('https://platform.deepseek.com/api_keys').catch(() =>
-                setError('无法打开网页，请前往 DeepSeek 开放平台创建密钥'),
-              )
-            }
-          />
+          {config.baseUrl === deepSeekPreset.baseUrl ? (
+            <TextButton
+              title="获取 Key"
+              onPress={() =>
+                void Linking.openURL('https://platform.deepseek.com/api_keys').catch(() =>
+                  setError('无法打开网页，请前往 DeepSeek 开放平台创建密钥'),
+                )
+              }
+            />
+          ) : null}
         </View>
         <Field
           label="API Key"
@@ -243,7 +245,13 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
-          placeholder={hasKey ? '已保存，留空保留' : '粘贴 DeepSeek API Key'}
+          placeholder={
+            hasKey
+              ? '已保存，留空保留'
+              : config.baseUrl === deepSeekPreset.baseUrl
+                ? '粘贴 DeepSeek API Key'
+                : '粘贴这个服务的 API Key'
+          }
         />
         <Details title="自定义模型">
           <Field
@@ -269,7 +277,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
       {notice ? <Note>{notice}</Note> : null}
       <Button
         title={busy ? '连接中…' : route.params?.onboarding ? '开始聊天' : '保存设置'}
-        disabled={busy}
+        disabled={busy || (!hasKey && !key.trim())}
         onPress={() => void save(false)}
       />
       {!route.params?.onboarding ? (

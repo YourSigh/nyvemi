@@ -215,6 +215,10 @@ export class HatchingService {
         updated?.();
       }
       try {
+        const recentReplies = (await this.store.list('messages', cid, 8))
+          .filter((m) => m.role === 'assistant')
+          .slice(0, 4)
+          .map((m) => m.content);
         if (q.key === 'color' && !draft.themeApplied) {
           await applyColor?.(value);
           draft.themeApplied = Boolean(applyColor);
@@ -232,7 +236,7 @@ export class HatchingService {
                 {
                   role: 'system',
                   content:
-                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
+                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
                 },
                 {
                   role: 'user',
@@ -241,6 +245,7 @@ export class HatchingService {
                     key: q.key,
                     answer: value,
                     known: draft.answers,
+                    recentReplies,
                     next: hatchQuestions[draft.step + 1]?.question ?? null,
                   }),
                 },

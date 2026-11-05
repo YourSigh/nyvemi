@@ -397,8 +397,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                       {m.role === 'assistant' && m.status === 'complete' && m.content ? (
                         <Pressable
                           accessibilityRole="button"
-                          accessibilityLabel="朗读这条消息"
+                          accessibilityLabel={speaking === m.id ? '停止朗读' : '朗读这条消息'}
+                          hitSlop={8}
+                          style={{ position: 'absolute', right: -26, bottom: 8 }}
                           onPress={() => {
+                            if (speaking === m.id) {
+                              speech.stop();
+                              return;
+                            }
                             void runtime.store
                               .get('settings', cid)
                               .then((settings) =>
@@ -407,7 +413,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                           }}
                         >
                           <Text style={{ color: theme.textSecondary, fontSize: 11, paddingTop: 4 }}>
-                            {speaking === m.id ? '正在说…' : '听一听'}
+                            {speaking === m.id ? '▪' : '▷'}
                           </Text>
                         </Pressable>
                       ) : null}

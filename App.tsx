@@ -1,3 +1,4 @@
+import { secretStore } from './src/storage/native';
 import { VoiceSettingsScreen } from './src/ui/voice-settings';
 import { MediaSettingsScreen } from './src/ui/media-settings';
 import { PluginsScreen } from './src/ui/plugins';
@@ -47,6 +48,7 @@ function Application() {
   }, [record?.preference.brightness]);
   const [runtime, setRuntime] = useState<Runtime>();
   const [initial, setInitial] = useState<string>();
+  const [configured, setConfigured] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -58,9 +60,11 @@ function Application() {
         const savedTheme = await r.themes.load();
         hydrate(savedTheme);
         const provider = await r.store.get('provider', 'provider');
-        if (!chars.length && provider) chars.push(await r.hatching.start());
+        const key = await secretStore.get().catch(() => null);
+        if (!chars.length && provider && key) chars.push(await r.hatching.start());
         if (live) {
           setRuntime(r);
+          setConfigured(Boolean(provider && key));
           setInitial(chars[0]?.id);
           setReady(true);
         }
@@ -145,7 +149,7 @@ function Application() {
                   }}
                 >
                   <Stack.Navigator
-                    initialRouteName={initial ? 'Chat' : 'Provider'}
+                    initialRouteName={initial && configured ? 'Chat' : 'Provider'}
                     screenOptions={{
                       headerShadowVisible: false,
                       headerBackTitle: '返回',
@@ -180,7 +184,7 @@ function Application() {
                     <Stack.Screen
                       name="Provider"
                       component={ProviderScreen}
-                      initialParams={!initial ? { onboarding: true } : undefined}
+                      initialParams={!(initial && configured) ? { onboarding: true } : undefined}
                       options={({ route }) => ({
                         title: '聊天模型',
                         headerShown: !route.params?.onboarding,
