@@ -41,10 +41,7 @@ export class CharacterService {
     private store: Storage,
     private provider: () => Promise<LLMProvider>,
   ) {}
-  async create(input: CharacterAnswers, useDemo = false, characterId = id()): Promise<Character> {
-    const answers = AnswersSchema.parse(input);
-    const existing = await this.store.get('characters', characterId);
-    if (existing) return existing;
+  async personaFor(answers: CharacterAnswers, characterId: string, useDemo = false) {
     const persona = useDemo
       ? {
           ...personaShape(characterId, answers.name),
@@ -68,6 +65,18 @@ export class CharacterService {
           PersonaSchema,
           'persona_generation',
         );
+    return {
+      ...persona,
+      id: characterId,
+      name: answers.name,
+      appearance: answers.appearance || persona.appearance,
+    };
+  }
+  async create(input: CharacterAnswers, useDemo = false, characterId = id()): Promise<Character> {
+    const answers = AnswersSchema.parse(input);
+    const existing = await this.store.get('characters', characterId);
+    if (existing) return existing;
+    const persona = await this.personaFor(answers, characterId, useDemo);
     const now = Date.now();
     const character: Character = {
       id: characterId,

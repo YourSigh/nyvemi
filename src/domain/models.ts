@@ -11,6 +11,7 @@ import {
 import { expressionFields } from '../character/interaction';
 import { z } from 'zod';
 import type { ThemeRecord, ThemeOpening } from '../theme/model';
+import type { HatchingDraft } from '../characters/hatching';
 import type { InterviewDraft } from '../characters/interview';
 
 export const PersonaSchema = z
@@ -74,6 +75,8 @@ export const CharacterSchema = z
     rig: RigSchema.optional(),
     meshAvatar: MeshAvatarSchema.optional(),
     appearancePending: z.boolean().optional(),
+    egg: z.boolean().optional(),
+    creationActive: z.boolean().optional(),
     createdAt: z.number(),
   })
   .strict();
@@ -174,6 +177,16 @@ export const SettingsSchema = z
     lastActiveAt: z.number(),
     lastRssAt: z.number().optional(),
     lastExplorationAt: z.number().optional(),
+    voice: z
+      .object({
+        enabled: z.boolean(),
+        voiceId: z.string().max(200).optional(),
+        rate: z.number().min(0.65).max(1.3),
+        pitch: z.number().min(0.7).max(1.4),
+        description: z.string().max(1000).optional(),
+      })
+      .strict()
+      .optional(),
     explorationEnabled: z.boolean().optional(),
   })
   .strict();
@@ -237,6 +250,7 @@ export interface Entities {
   themeOpenings: ThemeOpening;
   characters: Character;
   interviews: InterviewDraft;
+  hatchings: HatchingDraft;
   memories: Memory;
   messages: Message;
   intentions: Intention;

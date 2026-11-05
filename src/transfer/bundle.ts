@@ -1,3 +1,4 @@
+import { HatchingSchema } from '../characters/hatching';
 import { MediaAssetSchema } from '../media/model';
 import { PluginManifestSchema } from '../extensions/model';
 import { validateP2lrt } from '../avatar/model';
@@ -46,6 +47,7 @@ const ManifestSchema = z
     notifications: z.array(NotificationSchema).max(100000),
     extractions: z.array(JobSchema).max(100000),
     settings: SettingsSchema,
+    hatching: HatchingSchema.optional(),
     media: z.array(MediaAssetSchema).max(350).optional(),
     plugins: z
       .array(z.object({ manifest: PluginManifestSchema, source: z.string().max(2000) }).strict())
@@ -269,6 +271,7 @@ export class CharacterBundleService {
         experiences: await tx.list('experiences', characterId, 100001),
         notifications: await tx.list('notifications', characterId, 100001),
         extractions: await tx.list('extractions', characterId, 100001),
+        hatching: await tx.get('hatchings', characterId),
       };
     });
     const rigFiles: Record<string, Uint8Array> = {};
@@ -376,10 +379,19 @@ export class CharacterBundleService {
         avatar: avatarUri,
         rig,
         meshAvatar,
-        appearancePending: false,
+        appearancePending: m.character.creationActive ? true : false,
       };
       await this.store.atomic(async (tx) => {
         await tx.put('characters', character);
+        if (m.hatching)
+          await tx.put('hatchings', {
+            ...m.hatching,
+            id: cid,
+            characterId: cid,
+            pending: m.hatching.pending
+              ? { ...m.hatching.pending, messageId: `hatch:${cid}:${m.hatching.step}:user` }
+              : undefined,
+          });
         // Restore appearance on a fresh installation; an existing user's app preference wins.
         if (m.theme && !(await tx.get('themes', 'app'))) await tx.put('themes', m.theme);
         await tx.put('settings', {

@@ -1,3 +1,4 @@
+import { HatchingService } from '../characters/hatching';
 import { recoverRigMetadata } from '../appearance/rig-metadata';
 import { MediaService } from '../media/service';
 import { mediaFiles, saveChatImage, visionSecret } from '../media/native';
@@ -50,6 +51,8 @@ async function createRuntime() {
   if (savedImages && upgradedImages !== savedImages)
     await store.put('imageSettings', upgradedImages);
   await recoverVisualWork(store);
+  await store.release('hatching-start');
+  for (const d of await store.list('hatchings')) await store.release(`hatching:${d.characterId}`);
   await recoverRigMetadata(store);
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
@@ -254,6 +257,7 @@ async function createRuntime() {
       agent,
     ),
     characters,
+    hatching: new HatchingService(store, provider, characters),
     interview: new PersonaInterview(store, provider, characters),
     chat,
   };
