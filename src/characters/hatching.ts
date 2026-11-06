@@ -1,3 +1,6 @@
+import { understandName } from './name';
+import { deliverHatching, waitForTyping } from './hatching-delivery';
+import { messageChunks } from '../chat/delivery';
 import { z } from 'zod';
 import { id, defaultSettings, type Message } from '../domain/models';
 import { personaShape } from './persona-shape';
@@ -93,8 +96,21 @@ export const HatchingSchema = z
       .optional(),
     themeApplied: z.boolean().optional(),
     deferAppearance: z.boolean().optional(),
+    nameVersion: z.literal(1).optional(),
+    nameInput: z.string().max(1000).optional(),
+    outbox: z
+      .object({
+        messageIds: z.array(z.string()).min(1).max(8),
+        delivered: z.number().int().min(0).max(8),
+        startedAt: z.number(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
+  .refine((d) => !d.outbox || d.outbox.delivered < d.outbox.messageIds.length, {
+    message: 'Invalid delivery cursor',
+  })
   .refine(
     (d) =>
       d.status === 'asking' ? d.step < hatchQuestions.length : d.step === hatchQuestions.length,
@@ -118,6 +134,7 @@ export class HatchingService {
     private store: Storage,
     private provider: () => Promise<LLMProvider>,
     private characters: CharacterService,
+    private wait = waitForTyping,
   ) {}
   async start() {
     const existing = (await this.store.list('characters'))[0];
@@ -154,12 +171,20 @@ export class HatchingService {
           step: 0,
           answers: { ...defaultAnswers },
           status: 'asking',
+          outbox: {
+            messageIds: [`hatch:${cid}:0:hello`, `hatch:${cid}:0:question`],
+            delivered: 0,
+            startedAt: now,
+          },
         });
-        await tx.put('messages', this.message(cid, 0, 'hello', '嗨，我在这儿。', now));
-        await tx.put(
-          'messages',
-          this.message(cid, 0, 'question', hatchQuestions[0].question, now + 1),
-        );
+        await tx.put('messages', {
+          ...this.message(cid, 0, 'hello', '嗨，我在这儿。', now),
+          status: 'pending',
+        });
+        await tx.put('messages', {
+          ...this.message(cid, 0, 'question', hatchQuestions[0].question, now + 1),
+          status: 'pending',
+        });
       });
       return character;
     } finally {
@@ -186,17 +211,80 @@ export class HatchingService {
   async load(cid: string) {
     return this.store.get('hatchings', cid);
   }
+  async resume(cid: string, updated: () => void = () => {}, signal?: AbortSignal) {
+    const lock = `hatching:${cid}`;
+    if (!(await this.store.lease(lock, Date.now(), 120000))) return this.load(cid);
+    try {
+      const d = await this.load(cid);
+      return d ? await deliverHatching(this.store, d, updated, this.wait, signal) : d;
+    } finally {
+      await this.store.release(lock);
+    }
+  }
+  async repairLegacyName(cid: string, signal?: AbortSignal) {
+    const lock = `hatching:${cid}`;
+    if (!(await this.store.lease(lock, Date.now(), 45000))) return;
+    try {
+      const d = await this.load(cid),
+        c = await this.store.get('characters', cid);
+      if (
+        !d ||
+        !c ||
+        d.step < 2 ||
+        d.nameVersion === 1 ||
+        d.outbox ||
+        c.persona.name !== d.answers.name
+      )
+        return;
+      const original = await this.store.get('messages', `hatch:${cid}:1:user`);
+      const result = await understandName(
+        this.provider,
+        d.nameInput ?? original?.content ?? d.answers.name,
+        signal,
+      );
+      if (!result.name) return;
+      await this.store.atomic(async (tx) => {
+        const current = await tx.get('characters', cid),
+          fresh = await tx.get('hatchings', cid);
+        if (
+          !current ||
+          !fresh ||
+          fresh.nameVersion === 1 ||
+          current.persona.name !== d.answers.name
+        )
+          return;
+        await tx.put('characters', {
+          ...current,
+          persona: { ...current.persona, name: result.name! },
+        });
+        await tx.put('hatchings', {
+          ...fresh,
+          answers: { ...fresh.answers, name: result.name! },
+          nameVersion: 1,
+          nameInput: d.nameInput ?? original?.content ?? d.answers.name,
+        });
+      });
+    } catch {
+      /* A failed optional migration never changes or deletes the existing name. */
+    } finally {
+      await this.store.release(lock);
+    }
+  }
   async answer(
     cid: string,
     text: string,
     applyColor?: (description: string) => Promise<void>,
     updated?: () => void,
+    signal?: AbortSignal,
   ) {
     const lock = `hatching:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 120000))) throw Error('等我接上这一句');
     try {
-      const draft = await this.load(cid);
+      let draft = await this.load(cid);
+      if (draft?.outbox)
+        draft = await deliverHatching(this.store, draft, updated ?? (() => {}), this.wait, signal);
       if (!draft || draft.status !== 'asking') return draft;
+      const startedAt = Date.now();
       const q = hatchQuestions[draft.step];
       const value = text.trim();
       if (!value || value.length > 1000) throw Error('这一句请控制在1000字以内');
@@ -204,7 +292,7 @@ export class HatchingService {
       if (revised && q.key === 'color') draft.themeApplied = false;
       const user = {
         ...this.message(cid, draft.step, 'user', value),
-        ...(draft.pending ? { id: draft.pending.messageId } : {}),
+        id: draft.pending?.messageId ?? id(),
       };
       if (!draft.pending || revised) {
         draft.pending = { text: value, messageId: user.id };
@@ -225,63 +313,98 @@ export class HatchingService {
           await this.store.put('hatchings', draft);
         }
         let reply: z.infer<typeof Reply>;
+        let normalizedName: string | undefined;
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 18000);
-          try {
-            reply = await (
-              await this.provider()
-            ).structuredOutput(
-              [
-                {
-                  role: 'system',
-                  content:
-                    '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
-                },
-                {
-                  role: 'user',
-                  content: JSON.stringify({
-                    question: q.question,
-                    key: q.key,
-                    answer: value,
-                    known: draft.answers,
-                    recentReplies,
-                    next: hatchQuestions[draft.step + 1]?.question ?? null,
-                  }),
-                },
-              ],
-              Reply,
-              'hatching_conversation',
-              controller.signal,
-            );
-          } finally {
-            clearTimeout(timer);
+          if (q.key === 'name') {
+            const named = await understandName(this.provider, value, signal);
+            if (named.name === null) {
+              const clarification = {
+                ...this.message(cid, draft.step, `clarify:${user.id}`, named.clarification!),
+                status: 'pending' as const,
+              };
+              const revisedDraft: HatchingDraft = {
+                ...draft,
+                pending: undefined,
+                outbox: { messageIds: [clarification.id], delivered: 0, startedAt },
+              };
+              await this.store.atomic(async (tx) => {
+                await tx.put('hatchings', revisedDraft);
+                await tx.put('messages', clarification);
+              });
+              updated?.();
+              return await deliverHatching(
+                this.store,
+                revisedDraft,
+                updated ?? (() => {}),
+                this.wait,
+                signal,
+              );
+            }
+            normalizedName = named.name;
+            reply = { acknowledgement: named.acknowledgement };
+          } else {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 18000);
+            try {
+              reply = await (
+                await this.provider()
+              ).structuredOutput(
+                [
+                  {
+                    role: 'system',
+                    content:
+                      '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
+                  },
+                  {
+                    role: 'user',
+                    content: JSON.stringify({
+                      question: q.question,
+                      key: q.key,
+                      answer: value,
+                      known: draft.answers,
+                      recentReplies,
+                      next: hatchQuestions[draft.step + 1]?.question ?? null,
+                    }),
+                  },
+                ],
+                Reply,
+                'hatching_conversation',
+                controller.signal,
+              );
+            } finally {
+              clearTimeout(timer);
+            }
           }
         } catch {
+          if (q.key === 'name') throw Error('没能确认你想起的名字，点重试我再听一次；还没有改名。');
           reply = {
             acknowledgement:
-              q.key === 'color'
-                ? '嗯，这个颜色看着很舒服。'
-                : q.key === 'name'
-                  ? '好，那以后就这么叫我。'
-                  : '好，我懂你说的那个感觉了。',
+              q.key === 'color' ? '嗯，这个颜色看着很舒服。' : '好，我懂你说的那个感觉了。',
           };
         }
-        const name =
-          q.key === 'name'
-            ? reply.answer?.slice(0, 80) || (value === '你帮我取一个' ? '小悠' : value.slice(0, 80))
-            : draft.answers.name;
+        const name = normalizedName ?? draft.answers.name;
         const nextStep = draft.step + 1,
           next = hatchQuestions[nextStep];
         const answers = {
           ...draft.answers,
           ...(q.key in defaultAnswers ? { [q.key]: q.key === 'name' ? name : value } : {}),
         };
+        const replies = messageChunks([reply.acknowledgement]).map((content, n) => ({
+          ...this.message(cid, nextStep, `ack:${n}`, content),
+          status: 'pending' as const,
+        }));
+        if (next)
+          replies.push({
+            ...this.message(cid, nextStep, 'question', next.question),
+            status: 'pending',
+          });
         const nextDraft: HatchingDraft = {
           ...draft,
           step: nextStep,
           pending: undefined,
           answers,
+          ...(q.key === 'name' ? { nameVersion: 1 as const, nameInput: value } : {}),
+          outbox: { messageIds: replies.map((m) => m.id), delivered: 0, startedAt },
           status: next ? 'asking' : 'ready',
           ...(q.key === 'color' ? { color: value } : {}),
           ...(q.key === 'voice' ? { voice: value } : {}),
@@ -311,35 +434,52 @@ export class HatchingService {
                 },
               });
           }
-          await tx.put('messages', this.message(cid, nextStep, 'ack', reply.acknowledgement));
-          if (next)
-            await tx.put(
-              'messages',
-              this.message(cid, nextStep, 'question', next.question, Date.now() + 1),
-            );
+          for (const message of replies) await tx.put('messages', message);
         });
         updated?.();
-        return nextDraft;
+        return await deliverHatching(
+          this.store,
+          nextDraft,
+          updated ?? (() => {}),
+          this.wait,
+          signal,
+        );
       } catch (e) {
         const old = await this.store.get('messages', user.id);
-        if (old) await this.store.put('messages', { ...old, status: 'error' });
+        const current = await this.load(cid);
+        if (old && current?.pending?.messageId === user.id)
+          await this.store.put('messages', { ...old, status: 'error' });
         throw e;
       }
     } finally {
       await this.store.release(lock);
     }
   }
-  async finish(cid: string) {
+  async finish(cid: string, updated: () => void = () => {}, signal?: AbortSignal) {
     const lock = `hatching:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 120000))) throw Error('正在整理最后一点');
     try {
-      const d = await this.load(cid);
+      let d = await this.load(cid);
+      if (d?.outbox) d = await deliverHatching(this.store, d, updated, this.wait, signal);
       const c = await this.store.get('characters', cid);
       if (!c || !d) throw Error('找不到这次相遇');
       if (d.status === 'complete') return c;
       if (d.status !== 'ready') throw Error('还没聊到最后呢');
       const persona = await this.characters.personaFor(d.answers, cid);
-      return await this.store.atomic(async (tx) => {
+      const completed = this.message(
+        cid,
+        d.step,
+        'complete',
+        d.deferAppearance
+          ? '那就先做一颗蛋，陪你聊会儿。想好我的样子时再告诉我。'
+          : '好，轮廓差不多有了。接下来，看看我会长成什么样吧。',
+      );
+      const finalDraft: HatchingDraft = {
+        ...d,
+        status: 'complete',
+        outbox: { messageIds: [completed.id], delivered: 0, startedAt: Date.now() },
+      };
+      const character = await this.store.atomic(async (tx) => {
         const current = await tx.get('characters', cid);
         if (!current) throw Error('角色已被清空');
         const complete = {
@@ -361,20 +501,13 @@ export class HatchingService {
             ...settings,
             proactiveEnabled: !/不主动|不要主动|不打扰/.test(d.answers.boundaries),
           });
-        await tx.put('hatchings', { ...d, status: 'complete' });
-        await tx.put(
-          'messages',
-          this.message(
-            cid,
-            d.step,
-            'complete',
-            d.deferAppearance
-              ? '那就先做一颗蛋，陪你聊会儿。想好我的样子时再告诉我。'
-              : '好，轮廓差不多有了。接下来，看看我会长成什么样吧。',
-          ),
-        );
+        await tx.put('hatchings', finalDraft);
+        await tx.put('messages', { ...completed, status: 'pending' });
         return complete;
       });
+      updated();
+      await deliverHatching(this.store, finalDraft, updated, this.wait, signal);
+      return character;
     } finally {
       await this.store.release(lock);
     }

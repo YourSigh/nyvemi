@@ -136,6 +136,10 @@ export function readBundle(bytes: Uint8Array): {
     manifest.hatching &&
     (manifest.hatching.characterId !== cid ||
       manifest.hatching.id !== cid ||
+      (manifest.hatching.outbox &&
+        !manifest.hatching.outbox.messageIds.every((id) =>
+          manifest.messages.some((m) => m.id === id && m.role === 'assistant'),
+        )) ||
       (manifest.hatching.pending &&
         !manifest.messages.some(
           (m) => m.id === manifest.hatching!.pending!.messageId && m.role === 'user',
@@ -398,6 +402,12 @@ export class CharacterBundleService {
             ...m.hatching,
             id: cid,
             characterId: cid,
+            outbox: m.hatching.outbox
+              ? {
+                  ...m.hatching.outbox,
+                  messageIds: m.hatching.outbox.messageIds.map((id) => remap('messages', id)),
+                }
+              : undefined,
             pending: m.hatching.pending
               ? {
                   ...m.hatching.pending,
@@ -453,9 +463,11 @@ export class CharacterBundleService {
             groupId: message.groupId ? remap('messages', message.groupId) : undefined,
             status:
               message.status === 'pending'
-                ? received.has(message.id)
-                  ? 'complete'
-                  : 'error'
+                ? m.hatching?.outbox?.messageIds.includes(message.id)
+                  ? 'pending'
+                  : received.has(message.id)
+                    ? 'complete'
+                    : 'error'
                 : message.status,
           });
         for (const experience of m.experiences)

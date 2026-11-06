@@ -74,10 +74,13 @@ export class ChatService {
   }
   async recoverInterrupted(characterId: string): Promise<void> {
     if (this.active.has(characterId)) return;
+    const held = new Set(
+      (await this.store.get('hatchings', characterId))?.outbox?.messageIds ?? [],
+    );
     const messages = await this.store.list('messages', characterId, 1000);
     let interrupted = false;
     for (const message of messages)
-      if (message.status === 'pending' && message.origin === 'chat') {
+      if (message.status === 'pending' && message.origin === 'chat' && !held.has(message.id)) {
         await this.store.put('messages', {
           ...message,
           status: message.role === 'user' ? 'error' : 'complete',

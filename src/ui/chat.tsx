@@ -159,12 +159,25 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     useCallback(() => {
       voiceFocused.current = true;
       speech.resume();
+      const openingController = new AbortController();
+      const resumeOpening = async () => {
+        await refresh();
+        await runtime.hatching.resume(
+          cid,
+          () => {
+            void refresh().catch(() => {});
+          },
+          openingController.signal,
+        );
+        await runtime.hatching.repairLegacyName(cid, openingController.signal);
+        if (!openingController.signal.aborted) await refresh();
+      };
       void (async () => {
         await runtime.chat.recoverInterrupted(cid);
         if (route.params.notificationId)
           await runtime.heartbeat.openNotification(route.params.notificationId);
         await runtime.heartbeat.openChat(cid);
-        await refresh();
+        await resumeOpening();
       })().catch(() => setError('读取聊天失败'));
       // App-level activity tracking owns lastActiveAt and checks AppState. A focused screen
       // remains mounted in the background; a screen timer must never keep the user "active".
@@ -174,10 +187,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       const subscription = AppState.addEventListener('change', (state) => {
         if (state !== 'active') speech.stop();
         if (state === 'active') {
-          void refresh().catch(() => {});
+          void resumeOpening().catch(() => {});
         }
       });
       return () => {
+        openingController.abort();
         voiceFocused.current = false;
         speech.stop();
         clearInterval(incoming);
@@ -198,14 +212,20 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     };
   }, [cid, speech]);
   const finishHatching = async () => {
-    const c = await runtime.hatching.finish(cid);
+    const c = await runtime.hatching.finish(
+      cid,
+      () => {
+        void refresh().catch(() => {});
+      },
+      abort.current?.signal,
+    );
     await refresh();
     const state = await runtime.hatching.load(cid);
     if (!state?.deferAppearance && c.appearancePending)
       navigation.navigate('Appearance', { characterId: cid, onboarding: true });
   };
   const send = async (retry?: Message, spoken?: string) => {
-    if (sending.current || transitioning) return;
+    if (sending.current || transitioning || birth?.outbox) return;
     const text = retry?.content ?? spoken ?? draft;
     const attachments = retry?.attachments ?? pictures.map((p) => p.id);
     if (!text.trim() && !attachments.length) return;
@@ -232,6 +252,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           () => {
             void refresh().catch(() => {});
           },
+          abort.current.signal,
         );
         await refresh();
         if (next?.status === 'ready') await finishHatching();
@@ -289,7 +310,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             </Text>
             <View style={{ width: 52 }} />
           </View>
-          {birth && birth.status !== 'complete' ? (
+          {birth && (birth.status !== 'complete' || birth.outbox) ? (
             <Text
               accessibilityLiveRegion="polite"
               style={{
@@ -299,7 +320,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 paddingBottom: 4,
               }}
             >
-              {busy ? '想一想…' : `慢慢认识你 · ${birth.step}/${hatchQuestions.length}`}
+              {birth.outbox
+                ? '正在输入…'
+                : busy
+                  ? '想一想…'
+                  : `慢慢认识你 · ${birth.step}/${hatchQuestions.length}`}
             </Text>
           ) : null}
           <CharacterStage
@@ -313,7 +338,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               debug?.state ??
               (speaking
                 ? 'talking'
-                : character?.creationActive && busy
+                : character?.creationActive && (busy || Boolean(birth?.outbox))
                   ? 'thinking'
                   : interaction.state)
             }
@@ -448,7 +473,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 </Text>
               </Pressable>
             ) : null}
-            {birth?.status === 'asking' && !birth.pending ? (
+            {birth?.status === 'asking' && !birth.pending && !birth.outbox ? (
               <View
                 testID="hatching-suggestions"
                 style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}
@@ -482,7 +507,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 onPress={() => void send(undefined, birth.pending!.text)}
               />
             ) : null}
-            {birth?.status === 'ready' && !busy ? (
+            {birth?.status === 'ready' && !busy && !birth.outbox ? (
               <Button title="继续完善角色" onPress={() => void send(undefined, '继续')} />
             ) : null}
             {pictures.length ? (
@@ -594,7 +619,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               {voiceMode ? (
                 <HoldToTalk
                   key={cid}
-                  disabled={busy || transitioning}
+                  disabled={busy || Boolean(birth?.outbox) || transitioning}
                   onActiveChange={(active) => {
                     if (active) speech.stop();
                     setDictating(active);
@@ -624,7 +649,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   />
                   <Button
                     title={busy ? '…' : '发送'}
-                    disabled={busy || picking || (!draft.trim() && !pictures.length)}
+                    disabled={
+                      busy ||
+                      Boolean(birth?.outbox) ||
+                      picking ||
+                      (!draft.trim() && !pictures.length)
+                    }
                     onPress={() => void send()}
                   />
                 </>

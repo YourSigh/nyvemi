@@ -23,33 +23,36 @@ const result = spawnSync(
   [
     'node_modules/vitest/vitest.mjs',
     'run',
-    process.argv.includes('--visual-schema')
-      ? 'tests/live-visual-schema.test.ts'
-      : process.argv.includes('--visual-prompts')
-        ? 'tests/live-visual-prompts.test.ts'
-        : process.argv.includes('--visual-research')
-          ? 'tests/live-visual-research.test.ts'
-          : process.argv.includes('--appearance-chat')
-            ? 'tests/live-appearance-chat.test.ts'
-            : process.argv.includes('--theme')
-              ? 'tests/live-theme.test.ts'
-              : process.argv.includes('--vision')
-                ? 'tests/live-vision.test.ts'
-                : process.argv.includes('--extensions')
-                  ? 'tests/live-extensions.test.ts'
-                  : process.argv.includes('--agent-autonomy')
-                    ? 'tests/live-agent-autonomy.test.ts'
-                    : process.argv.includes('--agent')
-                      ? 'tests/live-agent.test.ts'
-                      : process.argv.includes('--conversation')
-                        ? 'tests/live-conversation.test.ts'
-                        : 'tests/live-provider.test.ts',
+    process.argv.includes('--hatching')
+      ? 'tests/live-hatching-name.test.ts'
+      : process.argv.includes('--visual-schema')
+        ? 'tests/live-visual-schema.test.ts'
+        : process.argv.includes('--visual-prompts')
+          ? 'tests/live-visual-prompts.test.ts'
+          : process.argv.includes('--visual-research')
+            ? 'tests/live-visual-research.test.ts'
+            : process.argv.includes('--appearance-chat')
+              ? 'tests/live-appearance-chat.test.ts'
+              : process.argv.includes('--theme')
+                ? 'tests/live-theme.test.ts'
+                : process.argv.includes('--vision')
+                  ? 'tests/live-vision.test.ts'
+                  : process.argv.includes('--extensions')
+                    ? 'tests/live-extensions.test.ts'
+                    : process.argv.includes('--agent-autonomy')
+                      ? 'tests/live-agent-autonomy.test.ts'
+                      : process.argv.includes('--agent')
+                        ? 'tests/live-agent.test.ts'
+                        : process.argv.includes('--conversation')
+                          ? 'tests/live-conversation.test.ts'
+                          : 'tests/live-provider.test.ts',
   ],
   {
     stdio: 'inherit',
     env: {
       ...process.env,
       NYVEMI_RUN_LIVE: '1',
+      NYVEMI_RUN_LIVE_HATCHING: process.argv.includes('--hatching') ? '1' : '0',
       NYVEMI_RUN_LIVE_VISUAL_SCHEMA: process.argv.includes('--visual-schema') ? '1' : '0',
       NYVEMI_RUN_LIVE_VISUAL_PROMPTS: process.argv.includes('--visual-prompts') ? '1' : '0',
       NYVEMI_RUN_LIVE_VISUAL_RESEARCH: process.argv.includes('--visual-research') ? '1' : '0',

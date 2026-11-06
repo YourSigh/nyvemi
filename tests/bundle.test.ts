@@ -498,7 +498,12 @@ it('restores an unfinished egg and pending chat answer without duplicating the i
   const offline = async () => {
     throw Error('model offline');
   };
-  const original = new HatchingService(a.store, offline, new CharacterService(a.store, offline));
+  const original = new HatchingService(
+    a.store,
+    offline,
+    new CharacterService(a.store, offline),
+    async () => {},
+  );
   const c = await original.start();
   await expect(
     original.answer(c.id, '蓝色', async () => {
@@ -509,11 +514,50 @@ it('restores an unfinished egg and pending chat answer without duplicating the i
   const restored = await b.service.importCharacter(bytes);
   expect(restored.egg).toBe(true);
   expect(restored.creationActive).toBe(true);
-  const resumed = new HatchingService(b.store, offline, new CharacterService(b.store, offline));
+  const resumed = new HatchingService(
+    b.store,
+    offline,
+    new CharacterService(b.store, offline),
+    async () => {},
+  );
   await resumed.answer(restored.id, '蓝色', async () => {});
   expect(
     (await b.store.list('messages', restored.id)).filter((m) => m.role === 'user'),
   ).toHaveLength(1);
   expect((await resumed.load(restored.id))?.step).toBe(1);
   expect((await b.store.get('settings', restored.id))?.voice?.enabled).toBe(true);
+});
+it('remaps queued opening bubbles on import and reveals them sequentially without duplicating history', async () => {
+  const { HatchingService } = await import('../src/characters/hatching');
+  const { CharacterService } = await import('../src/characters/service');
+  const a = await setup(),
+    b = await setup();
+  const offline = async () => {
+    throw Error('offline');
+  };
+  const original = new HatchingService(
+    a.store,
+    offline,
+    new CharacterService(a.store, offline),
+    async () => {},
+  );
+  const c = await original.start();
+  const restored = await b.service.importCharacter(await a.service.exportCharacter(c.id));
+  const queue = (await b.store.get('hatchings', restored.id))!.outbox!;
+  expect(queue.messageIds).toHaveLength(2);
+  expect(queue.messageIds.every((id) => !id.includes(c.id))).toBe(true);
+  const seen: number[] = [];
+  const resumed = new HatchingService(
+    b.store,
+    offline,
+    new CharacterService(b.store, offline),
+    async () => {
+      seen.push(
+        (await b.store.list('messages', restored.id)).filter((m) => m.status === 'complete').length,
+      );
+    },
+  );
+  await resumed.resume(restored.id);
+  expect(seen).toEqual([0, 1]);
+  expect(await b.store.list('messages', restored.id)).toHaveLength(2);
 });
