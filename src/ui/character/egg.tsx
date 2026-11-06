@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Pressable, View } from 'react-native';
-import Svg, { Path, Ellipse, Circle } from 'react-native-svg';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, AppState, Image, Pressable, View } from 'react-native';
 import { useCharacterTheme } from './theme';
 import type { CharacterInteractionState } from '../../character/interaction';
+const artwork = require('../../../assets/characters/egg-expressions.png');
 export function EggCharacter({
   height,
   state = 'idle',
@@ -15,7 +15,17 @@ export function EggCharacter({
   const theme = useCharacterTheme(),
     breath = useRef(new Animated.Value(0)).current,
     touch = useRef(new Animated.Value(0)).current;
+  const [active, setActive] = useState(AppState.currentState === 'active');
+  const [blinking, setBlinking] = useState(false);
+  const [mouthOpen, setMouthOpen] = useState(false);
   useEffect(() => {
+    const subscription = AppState.addEventListener('change', (next) =>
+      setActive(next === 'active'),
+    );
+    return () => subscription.remove();
+  }, []);
+  useEffect(() => {
+    if (!active) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(breath, { toValue: 1, duration: 1900, useNativeDriver: true }),
@@ -23,9 +33,39 @@ export function EggCharacter({
       ]),
     );
     loop.start();
-    return () => loop.stop();
-  }, [breath]);
-  const size = Math.min(height - 12, 210);
+    return () => {
+      loop.stop();
+      touch.stopAnimation();
+    };
+  }, [active, breath, touch]);
+  useEffect(() => {
+    if (!active) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const blink = () => {
+      setBlinking(true);
+      timer = setTimeout(() => {
+        setBlinking(false);
+        timer = setTimeout(blink, 3000 + Math.random() * 1600);
+      }, 160);
+    };
+    timer = setTimeout(blink, 2800);
+    return () => clearTimeout(timer);
+  }, [active]);
+  useEffect(() => {
+    if (!active || state !== 'talking') return;
+    const timer = setInterval(() => setMouthOpen((open) => !open), 320);
+    return () => clearInterval(timer);
+  }, [active, state]);
+  // Each atlas cell contains a complete painted expression. No SVG face is painted on top.
+  const frame =
+    state === 'sleepy' || (active && blinking)
+      ? 1
+      : state === 'thinking'
+        ? 3
+        : active && state === 'talking' && mouthOpen
+          ? 2
+          : 0;
+  const size = Math.max(1, Math.min(height - 12, 240));
   return (
     <View testID="egg-character" style={{ height, alignItems: 'center', justifyContent: 'center' }}>
       <Pressable
@@ -40,70 +80,45 @@ export function EggCharacter({
           ]).start();
         }}
       >
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            left: size * 0.15,
+            top: size * 0.18,
+            width: size * 0.7,
+            height: size * 0.7,
+            borderRadius: size,
+            backgroundColor: theme.characterGlow,
+            opacity: 0.12 + Math.max(0, Math.min(1, progress)) * 0.1,
+          }}
+        />
         <Animated.View
           style={{
+            width: size,
+            height: size,
+            overflow: 'hidden',
             transform: [
-              { translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -5] }) },
+              { translateY: breath.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) },
               {
-                rotate: touch.interpolate({ inputRange: [-1, 1], outputRange: ['-7deg', '7deg'] }),
+                rotate: touch.interpolate({ inputRange: [-1, 1], outputRange: ['-5deg', '5deg'] }),
               },
             ],
           }}
         >
-          <Svg width={size} height={size} viewBox="0 0 240 260">
-            <Ellipse cx="120" cy="244" rx="66" ry="9" fill={theme.characterGlow} opacity={0.5} />
-            <Path
-              d="M120 17C80 17 34 111 34 166c0 48 32 73 86 73s86-25 86-73C206 111 160 17 120 17Z"
-              fill={theme.surface}
-              stroke={theme.primarySoft}
-              strokeWidth="4"
-            />
-            <Path
-              d="M47 183c22-10 45 11 73 5 29-6 51-16 75-6-9 31-35 46-75 46-39 0-65-14-73-45Z"
-              fill={theme.primarySoft}
-              opacity={0.65}
-            />
-            <Path
-              d="M87 56c-18 22-30 49-33 73"
-              fill="none"
-              stroke={theme.characterHighlight}
-              strokeWidth="9"
-              strokeLinecap="round"
-            />
-            {state === 'sleepy' ? (
-              <Path
-                d="M87 149h12m42 0h12"
-                stroke={theme.textSecondary}
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            ) : (
-              <>
-                <Ellipse cx="93" cy="148" rx="3.5" ry="5" fill={theme.textSecondary} />
-                <Ellipse cx="147" cy="148" rx="3.5" ry="5" fill={theme.textSecondary} />
-              </>
-            )}
-            <Ellipse
-              cx="120"
-              cy="163"
-              rx={state === 'talking' ? 5 : 4}
-              ry={state === 'talking' ? 7 : 2}
-              fill={theme.primary}
-            />
-            <Circle cx="78" cy="160" r="7" fill={theme.primarySoft} />
-            <Circle cx="162" cy="160" r="7" fill={theme.primarySoft} />
-            {progress > 0.5 ? (
-              <Path
-                d="m111 19 11 16-10 13 17 13-7 15"
-                fill="none"
-                stroke={theme.primarySoft}
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            ) : null}
-            <Circle cx="85" cy="205" r="6" fill={theme.primary} opacity={0.18} />
-            <Circle cx="148" cy="214" r="9" fill={theme.primary} opacity={0.12} />
-          </Svg>
+          <Image
+            source={artwork}
+            accessible={false}
+            resizeMode="stretch"
+            fadeDuration={0}
+            style={{
+              position: 'absolute',
+              width: size * 2,
+              height: size * 2,
+              left: -(frame % 2) * size,
+              top: -Math.floor(frame / 2) * size,
+            }}
+          />
         </Animated.View>
       </Pressable>
     </View>
