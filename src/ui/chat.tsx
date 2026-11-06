@@ -24,6 +24,7 @@ import {
   Image,
   AppState,
   FlatList,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
@@ -81,7 +82,16 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [viewport, setViewport] = useState(760);
   const [viewportWidth, setViewportWidth] = useState(390);
   const [composerHeight, setComposerHeight] = useState(72);
-  const layout = characterChatLayout(viewport, composerHeight, viewportWidth);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  const layout = characterChatLayout(viewport, composerHeight, viewportWidth, keyboardVisible);
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [birth, setBirth] = useState<HatchingDraft>();
@@ -141,9 +151,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     setError((current) =>
       current === '读取聊天失败' || current === '读取消息失败' ? '' : current,
     );
+    const opening = await runtime.hatching.load(cid);
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
-    setBirth(await runtime.hatching.load(cid));
+    setBirth(opening);
     const settings = await runtime.store.get('settings', cid);
     setDeveloperMode(settings?.developerMode ?? false);
     if (voiceFocused.current && AppState.currentState === 'active')
@@ -314,7 +325,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               ) : null}
             </Pressable>
             <Text style={s.name} numberOfLines={1}>
-              {character?.persona.name ?? '正在载入'}
+              {character?.persona.name ?? 'Nyvemi'}
             </Text>
             <View style={{ width: 52 }} />
           </View>
@@ -359,7 +370,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             eggProgress={birth ? birth.step / hatchQuestions.length : 1}
             rig={character?.rig}
             meshAvatar={character?.meshAvatar}
-            name={character?.persona.name ?? '她'}
+            name={character?.persona.name ?? 'Nyvemi'}
             height={layout.character}
             state={
               debug?.state ??

@@ -11,5 +11,12 @@ export function EggCharacter({
   progress?: number;
 }) {
   const theme = useCharacterTheme();
-  return <CocoonCharacter height={height} glow={theme.characterGlow} state={state} />;
+  return (
+    <CocoonCharacter
+      height={height}
+      glow={theme.characterGlow}
+      light={theme.tokens.character.support}
+      state={state}
+    />
+  );
 }

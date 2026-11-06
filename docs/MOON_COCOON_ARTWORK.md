@@ -1,5 +1,7 @@
 # 月胚之茧 · 视觉预览素材
 
+> 本文保留 0.19.2 的 v1 素材生成记录。当前 0.19.3 的光构成生命体、尺寸和互动说明见 [COCOON_COMPACT_INTERACTION_0_19_3.md](COCOON_COMPACT_INTERACTION_0_19_3.md)。
+
 使用内置 imagegen 工具，以上传的侧身抱膝光茧插画为方向参考，生成新的透明 PNG：`assets/characters/moon-cocoon.png`。没有调用用户的豆包 Key。
 
 保留闭眼、侧身抱膝、悬浮与银白淡紫的视觉识别，使用不透明的白色披覆，去掉实体蛋壳、金线花饰、塑料材质。运行时只做轻微悬浮和触碰反馈，不声称是新 Rig，也不改变用户现有可动角色。

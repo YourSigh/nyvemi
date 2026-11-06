@@ -150,7 +150,7 @@ export class HatchingService {
       const character = {
         id: cid,
         persona: {
-          ...personaShape(cid, '小小'),
+          ...personaShape(cid, 'Nyvemi'),
           identity: '一个正在和你慢慢熟悉的朋友',
           corePersonality: ['温柔但有自己的想法'],
           speechStyle: ['简短自然，不急着说教'],
@@ -210,7 +210,27 @@ export class HatchingService {
     };
   }
   async load(cid: string) {
-    return this.store.get('hatchings', cid);
+    const draft = await this.store.get('hatchings', cid);
+    // Only old, still-unnamed onboarding drafts used this placeholder. Explicit user names win.
+    if (draft && draft.step < 2 && !draft.answers.name && !draft.nameVersion) {
+      await this.store.atomic(async (tx) => {
+        const fresh = await tx.get('hatchings', cid),
+          character = await tx.get('characters', cid);
+        if (
+          fresh &&
+          fresh.step < 2 &&
+          !fresh.answers.name &&
+          !fresh.nameVersion &&
+          character?.creationActive &&
+          character.persona.name === '小小'
+        )
+          await tx.put('characters', {
+            ...character,
+            persona: { ...character.persona, name: 'Nyvemi' },
+          });
+      });
+    }
+    return draft;
   }
   async resume(cid: string, updated: () => void = () => {}, signal?: AbortSignal) {
     const lock = `hatching:${cid}`;

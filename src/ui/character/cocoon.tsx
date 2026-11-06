@@ -1,70 +1,99 @@
 import type { CharacterInteractionState } from '../../character/interaction';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, AppState, Image, Pressable, View } from 'react-native';
-const artwork = require('../../../assets/characters/moon-cocoon.png');
-/** A painted nascent spirit; user-generated character rigs are not changed by this preview. */
+import { useState } from 'react';
+import { Animated, Image, Pressable, View } from 'react-native';
+import { initialCharacterSize } from '../../character/layout';
+import { useCocoonMotion } from './cocoon-motion';
+const artwork = require('../../../assets/characters/moon-cocoon-v2.png');
+const orbit = [
+  [-0.45, 0],
+  [0, -0.42],
+  [0.45, 0],
+  [0, 0.42],
+];
+/** A painted light-being with independent light effects; existing user rigs remain untouched. */
 export function CocoonCharacter({
   height,
   glow,
+  light = '#C9B7E9',
   animated = true,
   state = 'idle',
 }: {
   height: number;
   glow: string;
+  light?: string;
   animated?: boolean;
   state?: CharacterInteractionState;
 }) {
-  const float = useRef(new Animated.Value(0)).current;
-  const touch = useRef(new Animated.Value(0)).current;
-  const [active, setActive] = useState(AppState.currentState === 'active');
-  useEffect(() => {
-    const listener = AppState.addEventListener('change', (next) => setActive(next === 'active'));
-    return () => listener.remove();
-  }, []);
-  useEffect(() => {
-    if (!animated || !active) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, { toValue: 1, duration: 2600, useNativeDriver: true }),
-        Animated.timing(float, { toValue: 0, duration: 2600, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => {
-      loop.stop();
-      touch.stopAnimation();
-    };
-  }, [active, animated, float, touch]);
-  const size = Math.max(1, height - 8);
+  const [width, setWidth] = useState(360);
+  const motion = useCocoonMotion(animated, state);
+  const size = initialCharacterSize(height, width);
+  const ring = Math.max(0, Math.min(height - 4, width - 8, size + 12));
+  const engaged = motion.flash || motion.soothing || state === 'thinking' || state === 'talking';
   return (
-    <View style={{ height, alignItems: 'center', justifyContent: 'center' }}>
-      <View
+    <View
+      testID="moon-cocoon"
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      style={{ height, width: '100%', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Animated.View
         pointerEvents="none"
         style={{
           position: 'absolute',
-          width: size * 0.84,
-          height: size * 0.84,
+          width: ring,
+          height: ring,
+          borderRadius: ring,
           backgroundColor: glow,
-          opacity: state === 'thinking' || state === 'talking' ? 0.46 : 0.28,
-          borderRadius: size,
+          opacity: motion.moving
+            ? motion.breath.interpolate({
+                inputRange: [0, 1],
+                outputRange: engaged ? [0.3, 0.6] : [0.12, 0.3],
+              })
+            : engaged
+              ? 0.5
+              : 0.18,
+          transform: [
+            {
+              scale: motion.moving
+                ? motion.breath.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1] })
+                : 1,
+            },
+          ],
         }}
       />
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="轻触月胚之茧"
-        onPress={() => {
-          touch.stopAnimation();
-          Animated.sequence([
-            Animated.timing(touch, { toValue: 1, duration: 180, useNativeDriver: true }),
-            Animated.timing(touch, { toValue: 0, duration: 700, useNativeDriver: true }),
-          ]).start();
-        }}
+        accessibilityLabel="月胚之茧，轻触泛起月光，长按轻轻安抚"
+        accessibilityHint="只与初生角色互动，不会发送聊天消息"
+        disabled={!motion.active}
+        delayLongPress={450}
+        onPress={motion.tap}
+        onLongPress={motion.soothe}
+        onPressOut={motion.release}
       >
         <Animated.View
           style={{
             transform: [
-              { translateY: float.interpolate({ inputRange: [0, 1], outputRange: [2, -4] }) },
-              { scale: touch.interpolate({ inputRange: [0, 1], outputRange: [1, 1.018] }) },
+              {
+                translateY: motion.moving
+                  ? motion.breath.interpolate({ inputRange: [0, 1], outputRange: [1, -3] })
+                  : 0,
+              },
+              {
+                translateY: motion.moving
+                  ? motion.reaction.interpolate({
+                      inputRange: [0, 0.25, 1],
+                      outputRange: [0, -5, 0],
+                    })
+                  : 0,
+              },
+              {
+                scale: motion.moving
+                  ? motion.reaction.interpolate({
+                      inputRange: [0, 0.25, 1],
+                      outputRange: [1, 1.018, 1],
+                    })
+                  : 1,
+              },
             ],
           }}
         >
@@ -77,6 +106,65 @@ export function CocoonCharacter({
           />
         </Animated.View>
       </Pressable>
+      {motion.moving ? (
+        <>
+          <Animated.View
+            testID="cocoon-touch-ripple"
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: ring,
+              height: ring,
+              borderRadius: ring,
+              borderWidth: 1.5,
+              borderColor: light,
+              opacity: motion.reaction.interpolate({
+                inputRange: [0, 0.2, 1],
+                outputRange: [0, 0.65, 0],
+              }),
+              transform: [
+                {
+                  scale: motion.reaction.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.55, 1],
+                  }),
+                },
+              ],
+            }}
+          />
+          {[0, 1, 2].map((n) => (
+            <Animated.View
+              key={n}
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                width: n === 1 ? 3 : 4,
+                height: n === 1 ? 3 : 4,
+                borderRadius: 4,
+                backgroundColor: light,
+                opacity: motion.breath.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.25, 0.8],
+                }),
+                transform: [
+                  {
+                    translateX: motion.stream.interpolate({
+                      inputRange: [0, 0.25, 0.5, 0.75, 1],
+                      outputRange: [0, 1, 2, 3, 4].map((k) => orbit[(k + n) % 4][0] * size),
+                    }),
+                  },
+                  {
+                    translateY: motion.stream.interpolate({
+                      inputRange: [0, 0.25, 0.5, 0.75, 1],
+                      outputRange: [0, 1, 2, 3, 4].map((k) => orbit[(k + n) % 4][1] * size),
+                    }),
+                  },
+                ],
+              }}
+            />
+          ))}
+        </>
+      ) : null}
     </View>
   );
 }

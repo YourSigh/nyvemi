@@ -172,7 +172,7 @@ it('requires a semantic name result and never saves the raw naming sentence on m
   vi.mocked(other.provider.structuredOutput).mockRejectedValue(Error('offline'));
   await expect(other.service.answer(egg.id, '叫小夏吧')).rejects.toThrow('还没有改名');
   expect((await other.service.load(egg.id))?.step).toBe(1);
-  expect((await other.store.get('characters', egg.id))?.persona.name).toBe('小小');
+  expect((await other.store.get('characters', egg.id))?.persona.name).toBe('Nyvemi');
   expect((await other.service.load(egg.id))?.pending?.text).toBe('叫小夏吧');
 });
 it('asks for clarification without advancing when the user only rejects a name', async () => {
@@ -186,7 +186,7 @@ it('asks for clarification without advancing when the user only rejects a name',
   });
   await service.answer(c.id, '别叫小小');
   expect((await service.load(c.id))?.step).toBe(1);
-  expect((await store.get('characters', c.id))?.persona.name).toBe('小小');
+  expect((await store.get('characters', c.id))?.persona.name).toBe('Nyvemi');
   await service.answer(c.id, '就叫小悠吧');
   expect((await service.load(c.id))?.step).toBe(2);
   expect((await store.list('messages', c.id)).filter((m) => m.role === 'user')).toHaveLength(3);
@@ -247,4 +247,30 @@ it('keeps an aborted opening queued and resumes it without an extra model reques
 it('opens in default pink and offers exactly the other three brand themes', () => {
   expect(hatchQuestions[0].choices).toEqual(['月胚 · 淡紫', '薄荷 · 清绿', '星夜 · 深色']);
   expect(hatchQuestions[0].question).toContain('粉白');
+});
+it('uses Nyvemi before naming and upgrades only an old unnamed placeholder without model calls', async () => {
+  const { store, service, provider } = await fixture();
+  const c = await service.start();
+  expect(c.persona.name).toBe('Nyvemi');
+  await store.put('characters', { ...c, persona: { ...c.persona, name: '小小' } });
+  await service.load(c.id);
+  expect((await store.get('characters', c.id))?.persona.name).toBe('Nyvemi');
+  expect(provider.structuredOutput).not.toHaveBeenCalled();
+  await store.put('characters', { ...c, persona: { ...c.persona, name: '用户已经改的名字' } });
+  await service.load(c.id);
+  expect((await store.get('characters', c.id))?.persona.name).toBe('用户已经改的名字');
+});
+it('preserves 小小 if the user explicitly chose it as the name', async () => {
+  const { store, service } = await fixture();
+  const c = await service.start();
+  const draft = (await service.load(c.id))!;
+  await store.put('characters', { ...c, persona: { ...c.persona, name: '小小' } });
+  await store.put('hatchings', {
+    ...draft,
+    step: 2,
+    answers: { ...draft.answers, name: '小小' },
+    nameVersion: 1,
+  });
+  await service.load(c.id);
+  expect((await store.get('characters', c.id))?.persona.name).toBe('小小');
 });

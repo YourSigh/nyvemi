@@ -20,7 +20,7 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
   const palette = useMemo(() => visualThemePalette(selected), [selected]);
   const t = useMemo(() => designTokens(palette), [palette]);
   const preset = visualThemes.find((item) => item.id === selected)!;
-  const stageHeight = Math.max(100, Math.min(252, height / 3, (height - 390) * 0.65));
+  const stageHeight = Math.max(100, Math.min(240, (height - 390) * 0.65));
   const choice = (id: VisualThemeId) => {
     Keyboard.dismiss();
     setSelected(id);
@@ -130,7 +130,11 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
           {before ? (
             <LegacyEggCharacter height={focused ? 72 : stageHeight} />
           ) : (
-            <CocoonCharacter height={focused ? 72 : stageHeight} glow={t.character.glow} />
+            <CocoonCharacter
+              height={focused ? 72 : stageHeight}
+              glow={t.character.glow}
+              light={t.character.support}
+            />
           )}
           <View
             style={{ flex: 1, minHeight: 0, justifyContent: 'flex-end', gap: 10, paddingBottom: 4 }}
