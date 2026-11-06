@@ -79,8 +79,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [developerMode, setDeveloperMode] = useState(false);
   const debug = useCharacterDebug(runtime.characterDebug, cid, developerMode);
   const [viewport, setViewport] = useState(760);
+  const [viewportWidth, setViewportWidth] = useState(390);
   const [composerHeight, setComposerHeight] = useState(72);
-  const layout = characterChatLayout(viewport, composerHeight);
+  const layout = characterChatLayout(viewport, composerHeight, viewportWidth);
   const [requested, setRequested] = useState<Intention[]>([]);
   const [character, setCharacter] = useState<Character>();
   const [birth, setBirth] = useState<HatchingDraft>();
@@ -291,7 +292,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={s.root}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={0}>
-        <View style={{ flex: 1 }} onLayout={(e) => setViewport(e.nativeEvent.layout.height)}>
+        <View
+          style={{ flex: 1 }}
+          onLayout={(e) => {
+            setViewport(e.nativeEvent.layout.height);
+            setViewportWidth(e.nativeEvent.layout.width);
+          }}
+        >
           <View style={[s.header, { height: layout.header }]}>
             <Pressable
               accessibilityRole="button"
