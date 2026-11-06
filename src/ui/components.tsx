@@ -1,3 +1,4 @@
+import { designTokens } from '../theme/design-tokens';
 import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 import { NavigationContext } from '@react-navigation/native';
 import { HeaderShownContext } from '@react-navigation/elements';
@@ -119,6 +120,8 @@ export function Button({
 }) {
   const { palette, transitioning } = useTheme();
   const styles = useMemo(() => createStyles(palette), [palette]);
+  const tokens = designTokens(palette);
+  const inactive = disabled || transitioning;
   return (
     <Pressable
       accessibilityRole="button"
@@ -126,9 +129,29 @@ export function Button({
       disabled={disabled || transitioning}
       accessibilityState={{ disabled: disabled || transitioning }}
       onPress={onPress}
-      style={[styles.button, secondary && styles.secondary, disabled && { opacity: 0.45 }]}
+      style={({ pressed }) => [
+        styles.button,
+        secondary && styles.secondary,
+        inactive
+          ? { backgroundColor: tokens.disabled.background }
+          : pressed
+            ? {
+                backgroundColor: secondary
+                  ? tokens.interaction.secondaryPressed
+                  : tokens.interaction.pressed,
+              }
+            : undefined,
+      ]}
     >
-      <Text style={[styles.buttonText, secondary && { color: palette.accent }]}>{title}</Text>
+      <Text
+        style={[
+          styles.buttonText,
+          secondary && { color: palette.accent },
+          inactive && { color: tokens.disabled.text },
+        ]}
+      >
+        {title}
+      </Text>
     </Pressable>
   );
 }
@@ -306,14 +329,14 @@ const createStyles = (palette: Palette) =>
       paddingVertical: 12,
       paddingHorizontal: 18,
       borderRadius: 14,
-      backgroundColor: palette.accent,
+      backgroundColor: palette.action ?? palette.accent,
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: 48,
     },
     secondary: { backgroundColor: palette.tint },
     buttonText: {
-      color: palette.onAccent,
+      color: palette.onAction ?? palette.onAccent,
       fontSize: 15,
       fontWeight: '600',
       includeFontPadding: false,

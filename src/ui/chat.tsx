@@ -103,6 +103,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [hasMore, setHasMore] = useState(false);
   const autoScroll = useRef(true);
   const [draft, setDraft] = useState('');
+  const [composerFocused, setComposerFocused] = useState(false);
   const [pictures, setPictures] = useState<MediaAsset[]>([]);
   const [picking, setPicking] = useState(false);
   const interaction = useCharacterInteraction(
@@ -311,21 +312,40 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             <View style={{ width: 52 }} />
           </View>
           {birth && (birth.status !== 'complete' || birth.outbox) ? (
-            <Text
-              accessibilityLiveRegion="polite"
-              style={{
-                color: theme.textSecondary,
-                textAlign: 'center',
-                fontSize: 12,
-                paddingBottom: 4,
-              }}
-            >
-              {birth.outbox
-                ? '正在输入…'
-                : busy
-                  ? '想一想…'
-                  : `慢慢认识你 · ${birth.step}/${hatchQuestions.length}`}
-            </Text>
+            <View style={{ alignItems: 'center', gap: 4, paddingBottom: 4 }}>
+              <Text
+                accessibilityLiveRegion="polite"
+                style={{
+                  color: theme.textSecondary,
+                  textAlign: 'center',
+                  fontSize: 12,
+                  paddingBottom: 4,
+                }}
+              >
+                {birth.outbox
+                  ? '正在输入…'
+                  : busy
+                    ? '想一想…'
+                    : `慢慢认识你 · ${birth.step}/${hatchQuestions.length}`}
+              </Text>
+              <View
+                style={{ flexDirection: 'row', gap: 4 }}
+                accessibilityElementsHidden
+                importantForAccessibility="no"
+              >
+                {hatchQuestions.map((_, n) => (
+                  <View
+                    key={n}
+                    style={{
+                      width: n === birth.step ? 14 : 4,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: n <= birth.step ? theme.tokens.primary : theme.border,
+                    }}
+                  />
+                ))}
+              </View>
+            </View>
           ) : null}
           <CharacterStage
             egg={character?.egg}
@@ -485,15 +505,26 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                     accessibilityLabel={choice}
                     disabled={busy || transitioning}
                     onPress={() => void send(undefined, choice)}
-                    style={{
-                      backgroundColor: theme.primarySoft,
-                      borderRadius: 16,
+                    style={({ pressed }) => ({
+                      backgroundColor: pressed
+                        ? theme.tokens.recommendation.pressed
+                        : theme.tokens.recommendation.background,
+                      borderColor: theme.tokens.recommendation.border,
+                      borderWidth: 1,
+                      borderRadius: theme.tokens.radius.recommendation,
                       paddingHorizontal: 12,
                       paddingVertical: 9,
                       justifyContent: 'center',
-                    }}
+                      minHeight: 44,
+                    })}
                   >
-                    <Text style={{ color: theme.primary, fontSize: 13, includeFontPadding: false }}>
+                    <Text
+                      style={{
+                        color: theme.tokens.recommendation.text,
+                        fontSize: 13,
+                        includeFontPadding: false,
+                      }}
+                    >
                       {choice}
                     </Text>
                   </Pressable>
@@ -631,14 +662,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 <>
                   <TextInput
                     accessibilityLabel="消息"
-                    style={s.input}
+                    style={[
+                      s.input,
+                      composerFocused && { borderColor: theme.tokens.input.focusBorder },
+                    ]}
                     placeholder="说点什么…"
                     placeholderTextColor={theme.textSecondary}
                     selectionColor={theme.primary}
                     cursorColor={theme.primary}
                     value={draft}
                     onChangeText={setDraft}
+                    onBlur={() => setComposerFocused(false)}
                     onFocus={() => {
+                      setComposerFocused(true);
                       autoScroll.current = true;
                       requestAnimationFrame(() =>
                         list.current?.scrollToOffset({ offset: 0, animated: false }),
@@ -691,14 +727,17 @@ const createStyles = (theme: CharacterTheme) =>
     mine: { justifyContent: 'flex-end' },
     bubble: {
       padding: 11,
-      backgroundColor: theme.primarySoft,
-      borderRadius: 16,
+      backgroundColor: theme.tokens.ai.background,
+      borderWidth: 1,
+      borderColor: theme.tokens.ai.border,
+      borderRadius: theme.tokens.radius.bubble,
       borderTopLeftRadius: 5,
       flexShrink: 1,
     },
     userBubble: {
-      backgroundColor: theme.surface,
-      borderTopLeftRadius: 16,
+      backgroundColor: theme.tokens.user.background,
+      borderColor: theme.tokens.user.border,
+      borderTopLeftRadius: theme.tokens.radius.bubble,
       borderTopRightRadius: 5,
     },
     message: { fontSize: 15, lineHeight: 23, color: theme.text },
@@ -717,8 +756,10 @@ const createStyles = (theme: CharacterTheme) =>
       maxHeight: 100,
       minHeight: 48,
       padding: 10,
-      backgroundColor: theme.surface,
-      borderRadius: 14,
+      backgroundColor: theme.tokens.input.background,
+      borderWidth: 1,
+      borderColor: theme.tokens.input.border,
+      borderRadius: theme.tokens.radius.input,
       fontSize: 15,
       color: theme.text,
       includeFontPadding: false,

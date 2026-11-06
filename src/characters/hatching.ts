@@ -1,3 +1,4 @@
+import { visualThemes } from '../theme/visual-presets';
 import { understandName } from './name';
 import { deliverHatching, waitForTyping } from './hatching-delivery';
 import { messageChunks } from '../chat/delivery';
@@ -19,8 +20,8 @@ export const hatchQuestions: {
 }[] = [
   {
     key: 'color',
-    question: '你喜欢什么颜色呀？也可以说说你喜欢的感觉。',
-    choices: ['淡粉色，柔和一点', '蓝灰色，安静一点', '清爽的薄荷绿', '暖一点的黑白灰'],
+    question: '先铺上柔软的粉白色。你喜欢这个感觉，还是想试试别的颜色？',
+    choices: visualThemes.filter((theme) => theme.id !== 'sakura').map((theme) => theme.option),
   },
   {
     key: 'name',

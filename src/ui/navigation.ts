@@ -8,6 +8,7 @@ export type Routes = {
   Usage: undefined;
   Provider: { onboarding?: boolean; skipTheme?: boolean } | undefined;
   Theme: { mode: 'settings' } | undefined;
+  ThemePreview: { preset?: string } | undefined;
   Create: undefined;
   Generate: { answers: CharacterAnswers; demo: boolean; interview?: boolean };
   Appearance: { characterId: string; onboarding?: boolean };

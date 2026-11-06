@@ -6,6 +6,7 @@ import { AppearanceScreen } from './src/ui/appearance';
 import { reconcileIntentionWork } from './src/proactive/requested-delivery';
 import { ThemeProvider, useTheme } from './src/theme/context';
 import { ThemeScreen } from './src/ui/theme';
+import { ThemePreviewScreen } from './src/ui/theme-preview';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
 import { AppState, View } from 'react-native';
@@ -145,7 +146,12 @@ function Application() {
                   }}
                   linking={{
                     prefixes: ['nyvemi://'],
-                    config: { screens: { Chat: 'chat/:characterId' } },
+                    config: {
+                      screens: {
+                        Chat: 'chat/:characterId',
+                        ThemePreview: 'theme-preview/:preset?',
+                      },
+                    },
                   }}
                 >
                   <Stack.Navigator
@@ -194,6 +200,11 @@ function Application() {
                       name="Theme"
                       component={ThemeScreen}
                       options={{ title: '属于你的颜色' }}
+                    />
+                    <Stack.Screen
+                      name="ThemePreview"
+                      component={ThemePreviewScreen}
+                      options={{ headerShown: false }}
                     />
                     <Stack.Screen
                       name="Create"

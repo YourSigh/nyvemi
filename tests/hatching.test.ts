@@ -244,3 +244,7 @@ it('keeps an aborted opening queued and resumes it without an extra model reques
   expect((await service.load(c.id))?.outbox).toBeUndefined();
   expect(provider.structuredOutput).not.toHaveBeenCalled();
 });
+it('opens in default pink and offers exactly the other three brand themes', () => {
+  expect(hatchQuestions[0].choices).toEqual(['月胚 · 淡紫', '薄荷 · 清绿', '星夜 · 深色']);
+  expect(hatchQuestions[0].question).toContain('粉白');
+});

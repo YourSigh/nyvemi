@@ -1,9 +1,5 @@
-import {
-  defaultPreference,
-  ThemePreferenceSchema,
-  type Palette,
-  type ThemePreference,
-} from './model';
+import { brandColors, type BrandThemeId } from './brand-colors';
+import { ThemePreferenceSchema, type Palette, type ThemePreference } from './model';
 export function hsl(hue: number, saturation: number, lightness: number): string {
   const a = saturation * Math.min(lightness, 1 - lightness);
   const channel = (n: number) => {
@@ -26,8 +22,67 @@ export function contrast(a: string, b: string): number {
     y = luminance(b);
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
+function blend(a: string, b: string, weight: number) {
+  return (
+    '#' +
+    [1, 3, 5]
+      .map((n) =>
+        Math.round(
+          parseInt(a.slice(n, n + 2), 16) * (1 - weight) + parseInt(b.slice(n, n + 2), 16) * weight,
+        )
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('')
+  );
+}
+export function brandPalette(id: BrandThemeId): Palette {
+  const p = brandColors[id],
+    surfaces = [p.background, p.paper, p.tint, p.user];
+  const readable = (color: string) => {
+    for (let n = 0; n <= 100; n++) {
+      const value = blend(color, p.ink, n / 100);
+      if (surfaces.every((surface) => contrast(value, surface) >= 4.5)) return value;
+    }
+    return p.ink;
+  };
+  const accent = readable(p.action);
+  const foreground = (background: string) =>
+    [p.ink, p.background, '#FFFFFF', '#000000'].find(
+      (value) => contrast(value, background) >= 4.5,
+    )!;
+  return {
+    background: p.background,
+    paper: p.paper,
+    tint: p.tint,
+    ink: p.ink,
+    brandPrimary: p.primary,
+    action: p.action,
+    onAction: foreground(p.action),
+    userBubble: p.user,
+    support: p.support,
+    accent,
+    onAccent: foreground(accent),
+    muted: readable(blend(p.ink, p.background, 0.48)),
+    line: blend(p.background, p.ink, 0.15),
+    error: readable(id === 'nebula' ? '#F4A3B8' : '#A82F58'),
+  };
+}
+export function brandForPreference(p: ThemePreference): BrandThemeId | undefined {
+  if (p.brightness === 'dark')
+    return p.base === 'blue' || p.base === 'purple' ? 'nebula' : undefined;
+  return p.base === 'pink'
+    ? 'sakura'
+    : p.base === 'purple'
+      ? 'moonlight'
+      : p.base === 'mint'
+        ? 'mint'
+        : undefined;
+}
 export function generatePalette(input: ThemePreference): Palette {
   const p = ThemePreferenceSchema.parse(input);
+  const brand = brandForPreference(p);
+  if (brand) return brandPalette(brand);
   const dark = p.brightness === 'dark';
   const hues = {
     pink: 337,
@@ -78,18 +133,15 @@ const names = {
   neutral: '素白',
 };
 export function themeName(p: ThemePreference): string {
+  const brand = brandForPreference(p);
+  if (brand)
+    return {
+      sakura: '樱雾 · Sakura Mist',
+      moonlight: '月胚 · Moonlight',
+      mint: '薄荷 · Mist Green',
+      nebula: '星夜 · Nebula',
+    }[brand];
   return `${p.brightness === 'dark' ? '夜色 · ' : ''}${names[p.base]}${p.mood === 'dreamy' ? '微梦' : p.mood === 'playful' ? '晴天' : p.mood === 'minimal' ? '留白' : '小憩'}`;
 }
-// Keep the existing pink-white default while making small captions readable.
-export const defaultPalette: Palette = {
-  ...generatePalette(defaultPreference),
-  background: '#FFF7FA',
-  paper: '#FFFFFF',
-  ink: '#49353F',
-  muted: '#775865',
-  accent: '#A33362',
-  onAccent: '#FFFFFF',
-  tint: '#FCE4EE',
-  line: '#F2DCE6',
-  error: '#AA405D',
-};
+// Exact Sakura Mist brand colors are shared by first launch and later pink requests.
+export const defaultPalette: Palette = brandPalette('sakura');

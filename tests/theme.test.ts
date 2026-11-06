@@ -239,3 +239,42 @@ it('uses semantic model output for mixed chromatic requests instead of regex-ord
   });
   expect(calls).toEqual(['theme_interpretation']);
 });
+it('switches named brand options without an API key and resets a dark theme when a light preset is selected', async () => {
+  const { visualThemes, visualThemePalette } = await import('../src/theme/visual-presets');
+  const { service, calls } = await fixture({});
+  for (const theme of visualThemes) {
+    const chosen = await service.interpret(theme.option, {
+      ...defaultPreference,
+      base: 'blue',
+      brightness: 'dark',
+    });
+    expect(chosen.source).toBe('local');
+    expect(chosen.preference).toEqual(theme.preference);
+    expect(generatePalette(chosen.preference)).toEqual(visualThemePalette(theme.id));
+  }
+  expect(calls).toHaveLength(0);
+});
+it('keeps free-form preferences within the same brand recipes rather than accepting model HEX', async () => {
+  const { service } = await fixture({ ...defaultPreference, base: 'purple', mood: 'dreamy' });
+  const chosen = await service.interpret('像一个没有名字的月亮梦境');
+  expect(generatePalette(chosen.preference).brandPrimary).toBe('#A99AE8');
+  expect(generatePalette((await service.interpret('我喜欢淡淡的粉色')).preference).background).toBe(
+    '#FFFAFC',
+  );
+});
+it('gives the model the real default pink context when the first color answer confirms the current look', async () => {
+  const { store } = await fixture({});
+  let context: unknown;
+  const provider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (messages, schema) => {
+      context = JSON.parse(messages.find((m) => m.role === 'user')!.content).currentPreference;
+      return schema.parse(defaultPreference);
+    },
+  } satisfies LLMProvider;
+  const service = new ThemeService(store, async () => provider);
+  const confirmed = await service.interpret('嗯，就这个感觉挺好的');
+  expect(context).toEqual(defaultPreference);
+  expect(generatePalette(confirmed.preference)).toEqual(defaultPalette);
+});

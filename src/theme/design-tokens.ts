@@ -1,3 +1,4 @@
+import { contrast } from './generator';
 import type { Palette } from './model';
 /** Role-specific tokens. The brand's primary HEX is always preserved exactly. */
 export function mix(a: string, b: string, amount: number): string {
@@ -19,15 +20,16 @@ export function designTokens(p: Palette) {
   return {
     background: p.background,
     card: p.paper,
-    primary: p.accent,
-    onPrimary: p.onAccent,
-    emphasis: mix(p.accent, p.tint, 0.24),
+    primary: p.brandPrimary ?? p.accent,
+    onPrimary: p.onAction ?? p.onAccent,
+    action: p.action ?? p.accent,
+    emphasis: p.action ?? p.accent,
     text: p.ink,
     secondaryText: p.muted,
     border: p.line,
     error: p.error,
     ai: { background: mix(p.paper, p.tint, 0.22), text: p.ink, border: mix(p.paper, p.line, 0.68) },
-    user: { background: p.tint, text: p.ink, border: p.tint },
+    user: { background: p.userBubble ?? p.tint, text: p.ink, border: p.userBubble ?? p.tint },
     recommendation: {
       background: p.paper,
       text: p.accent,
@@ -43,8 +45,19 @@ export function designTokens(p: Palette) {
       focusBorder: p.accent,
     },
     disabled: { background: mix(p.paper, p.line, 0.55), text: p.muted },
-    interaction: { pressed: mix(p.accent, p.ink, 0.12), secondaryPressed: p.tint, focus: p.accent },
-    character: { glow: p.tint, rim: mix(p.accent, p.paper, 0.65) },
+    interaction: {
+      pressed: mix(
+        p.action ?? p.accent,
+        contrast(p.onAction ?? p.onAccent, '#FFFFFF') >=
+          contrast(p.onAction ?? p.onAccent, '#000000')
+          ? '#FFFFFF'
+          : '#000000',
+        0.12,
+      ),
+      secondaryPressed: p.tint,
+      focus: p.accent,
+    },
+    character: { glow: p.tint, support: p.support ?? p.tint, rim: mix(p.accent, p.paper, 0.65) },
     radius: { card: 20, bubble: 18, recommendation: 12, input: 16, action: 14 },
   } as const;
 }

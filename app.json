@@ -2,25 +2,25 @@
   "expo": {
     "name": "Nyvemi",
     "slug": "nyvemi",
-    "version": "0.19.1",
+    "version": "0.19.2",
     "orientation": "portrait",
     "icon": "./assets/nyvemi-icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/nyvemi-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFF7FA"
+      "backgroundColor": "#FFFAFC"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFF7FA",
+        "backgroundColor": "#FFFAFC",
         "foregroundImage": "./assets/nyvemi-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.nyvemi.android",
       "allowBackup": false,
       "permissions": ["android.permission.RECORD_AUDIO"],
-      "versionCode": 40
+      "versionCode": 41
     },
     "scheme": "nyvemi",
     "platforms": ["android"],
@@ -41,6 +41,6 @@
       "./plugins/withNyvemiAndroid",
       "expo-asset"
     ],
-    "primaryColor": "#B94776"
+    "primaryColor": "#E8A4BE"
   }
 }

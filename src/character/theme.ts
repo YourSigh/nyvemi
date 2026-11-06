@@ -1,5 +1,7 @@
+import { designTokens, type DesignTokens } from '../theme/design-tokens';
 import type { Palette } from '../theme/model';
 export interface CharacterTheme {
+  tokens: DesignTokens;
   background: string;
   surface: string;
   primary: string;
@@ -17,6 +19,7 @@ export interface CharacterTheme {
 /** Screen semantics share the app palette; neutral illustration materials are centralized here. */
 export function characterTheme(palette: Palette): CharacterTheme {
   return {
+    tokens: designTokens(palette),
     background: palette.background,
     surface: palette.paper,
     primary: palette.accent,

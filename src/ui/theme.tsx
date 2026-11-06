@@ -5,7 +5,7 @@ import { useTheme } from '../theme/context';
 import { closeKeyboard } from './keyboard';
 import { themeName } from '../theme/generator';
 import { useRuntime } from './context';
-import { Avatar, Button, Card, ErrorText, Field, Note, Page } from './components';
+import { Avatar, Button, Card, ErrorText, Field, Note, Page, TextButton } from './components';
 import type { ScreenProps } from './navigation';
 /** Settings edits never consume the opening draft or restart character creation. */
 export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
@@ -78,6 +78,7 @@ export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
   }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps -- initialize on entry, not palette updates
   return (
     <Page>
+      <TextButton title="看看四种主题" onPress={() => navigation.navigate('ThemePreview')} />
       <View style={{ gap: 14 }}>
         <Avatar name="Nyvemi" size={44} />
         <Card>

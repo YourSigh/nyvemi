@@ -22,6 +22,11 @@ export const ThemeRecordSchema = z
   .strict();
 export type ThemeRecord = z.infer<typeof ThemeRecordSchema>;
 export interface Palette {
+  brandPrimary?: string;
+  action?: string;
+  onAction?: string;
+  userBubble?: string;
+  support?: string;
   background: string;
   paper: string;
   ink: string;
