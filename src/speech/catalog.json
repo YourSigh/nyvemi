@@ -1,0 +1,8 @@
+[
+  { "sid": 3, "name": "温柔女声", "tone": "gentle", "gender": "feminine", "rate": 0.92 },
+  { "sid": 9, "name": "清亮女声", "tone": "bright", "gender": "feminine", "rate": 1.0 },
+  { "sid": 26, "name": "平静女声", "tone": "calm", "gender": "feminine", "rate": 0.92 },
+  { "sid": 58, "name": "自然男声", "tone": "calm", "gender": "masculine", "rate": 0.95 },
+  { "sid": 71, "name": "低缓男声", "tone": "low", "gender": "masculine", "rate": 0.88 },
+  { "sid": 87, "name": "清亮男声", "tone": "bright", "gender": "masculine", "rate": 1.0 }
+]

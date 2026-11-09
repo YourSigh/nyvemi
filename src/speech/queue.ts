@@ -1,3 +1,4 @@
+import { speechChunks } from './chunks';
 import type { Message } from '../domain/models';
 import type { VoiceOptions } from './preferences';
 export interface SpeechDriver {
@@ -98,11 +99,12 @@ export class SpeechQueue {
             .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
             .replace(/[*#_`]/g, '')
             .trim();
-          for (let offset = 0; offset < text.length; offset += 1000) {
+          const chunks = speechChunks(text);
+          for (let index = 0; index < chunks.length; index++) {
             if (epoch !== this.epoch) break;
             const completed = await this.driver.play(
-              `${item.message.id}:${offset}`,
-              text.slice(offset, offset + 1000),
+              `${item.message.id}:${index}`,
+              chunks[index],
               item.options,
             );
             if (!completed) break;
