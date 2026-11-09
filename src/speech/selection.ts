@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import catalog from './catalog.json';
+import expandedCatalog from './expanded-catalog.json';
 
 export const VoiceRequestSchema = z.object({
   tone: z.enum(['gentle', 'bright', 'calm', 'low']).optional(),
@@ -9,8 +10,10 @@ export const VoiceRequestSchema = z.object({
 
 export type VoiceRequest = z.infer<typeof VoiceRequestSchema>;
 
-export function chooseVoice(request: VoiceRequest) {
-  const candidates = catalog.filter((voice) => !request.gender || request.gender === voice.gender);
+export function chooseVoice(request: VoiceRequest, expanded = false) {
+  const candidates = (expanded ? expandedCatalog : catalog).filter(
+    (voice) => !request.gender || request.gender === voice.gender,
+  );
   const voice =
     candidates.find((candidate) => candidate.tone === request.tone) ??
     (request.tone === 'low'
@@ -26,7 +29,12 @@ export function chooseVoice(request: VoiceRequest) {
         : request.pace === 'natural'
           ? 1
           : voice.rate;
-  return { voiceId: `kokoro:${voice.sid}`, label: voice.name, rate };
+  return {
+    voiceId: `kokoro:${voice.sid}`,
+    label: voice.name,
+    rate,
+    ...(expanded ? { requiresPack: true as const } : {}),
+  };
 }
 
 export const openingVoiceChoices: VoiceRequest[] = [

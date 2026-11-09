@@ -22,6 +22,14 @@ MODEL_FILES = (
 )
 VOICE_BYTES = 522240
 SPEAKER_COUNT = 103
+NOTICES = (
+    ("sherpa-LICENSE", "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v2.0.1/LICENSE",
+     "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"),
+    ("onnxruntime-LICENSE", "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/LICENSE",
+     "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"),
+    ("onnxruntime-ThirdPartyNotices.txt", "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.2/ThirdPartyNotices.txt",
+     "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2"),
+)
 
 
 def digest(path):
@@ -32,7 +40,7 @@ def digest(path):
     return checksum.hexdigest()
 
 
-def download(cache, name, expected):
+def download(cache, name, expected, url=None):
     target = cache / Path(name).name
     if target.is_file() and digest(target) == expected:
         return target
@@ -41,7 +49,7 @@ def download(cache, name, expected):
         subprocess.run([
             "curl", "--fail", "--location", "--silent", "--show-error",
             "--proto", "=https", "--proto-redir", "=https", "--retry", "2",
-            "--max-time", "300", "--output", str(partial), BASE + name,
+            "--max-time", "300", "--output", str(partial), url or BASE + name,
         ], check=True)
         if digest(partial) != expected:
             raise ValueError(f"Unexpected SHA-256 for {name}")
@@ -49,7 +57,7 @@ def download(cache, name, expected):
     return target
 
 
-def prepare(output, cache, catalog):
+def prepare(output, cache, catalog, expanded_catalog):
     cache.mkdir(parents=True, exist_ok=True)
     runtime = download(cache, RUNTIME, RUNTIME_SHA)
     model = download(cache, MODEL, MODEL_SHA)
@@ -62,6 +70,8 @@ def prepare(output, cache, catalog):
                 aar.extract(name, output)
     asset_dir = output / "assets" / "nyvemi-tts"
     asset_dir.mkdir(parents=True, exist_ok=True)
+    for name, url, checksum in NOTICES:
+        shutil.copyfile(download(cache, name, checksum, url), asset_dir / name)
     ids = {voice["sid"] for voice in json.loads(catalog.read_text(encoding="utf-8"))}
     if not ids or min(ids) < 0 or max(ids) >= SPEAKER_COUNT:
         raise ValueError("Invalid starter voice catalog")
@@ -82,6 +92,7 @@ def prepare(output, cache, catalog):
                 if source.read(1):
                     raise ValueError("Unexpected Kokoro voice table size")
     shutil.copyfile(catalog, asset_dir / "catalog.json")
+    shutil.copyfile(expanded_catalog, asset_dir / "expanded-catalog.json")
 
 
 if __name__ == "__main__":

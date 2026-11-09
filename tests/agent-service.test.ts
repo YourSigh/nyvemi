@@ -457,7 +457,9 @@ it('proposes a voice through DSH and only persists the selected voice when confi
 
 it('does not expose voice suggestions during autonomous background turns', async () => {
   const f = await setup(async (request) => {
-    expect(request.tools?.map((item) => item.name)).not.toContain('suggest_voice');
+    const names = request.tools?.map((item) => item.name);
+    expect(names).not.toContain('suggest_voice');
+    expect(names).not.toContain('suggest_voice_pack');
     return tool('wait', { reason: '没有要说的话' });
   });
   f.host.visible = () => false;
@@ -473,5 +475,19 @@ it('does not expose voice suggestions during autonomous background turns', async
       status: 'complete',
     },
   });
+  expect((await f.store.get('settings', 'c'))?.voiceOffer).toBeUndefined();
+});
+
+it('can look up voice options and then suggest a verified pack without installing or switching it', async () => {
+  const f = await setup(async (_request, n) => {
+    if (n === 1) return tool('web_search', { query: 'Kokoro 公开离线音色' });
+    if (n === 2) return tool('suggest_voice_pack', { tone: 'low', gender: 'feminine' });
+    return tool('wait', { reason: '等用户试听' });
+  });
+  await f.chat.send('c', '去网上找一款偏低的女声吧', () => {});
+  const settings = await f.store.get('settings', 'c');
+  expect(settings?.voice?.voiceId).toBeUndefined();
+  expect(settings?.voiceOffer).toMatchObject({ voiceId: 'kokoro:34', requiresPack: true });
+  await resolveVoiceOffer(f.store, 'c', settings!.voiceOffer!, false);
   expect((await f.store.get('settings', 'c'))?.voiceOffer).toBeUndefined();
 });

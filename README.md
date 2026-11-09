@@ -303,6 +303,12 @@ See [contextual participation](docs/CONVERSATION_PARTICIPATION.md) for the decis
 
 Real DeepSeek testing with reconstructed screenshot history reproduced a classifier returning roleplay narration instead of JSON. Control calls now isolate transcript data, enable DeepSeek JSON mode, fail without forcing a reply, persist quiet mode and review proposed replies before delivery. A real seven-turn acceptance run stayed silent until an explicit new question, answered it, then stopped again; pending follow-up was canceled. See [evidence and limitations](docs/QUIET_CONTACT_REPAIR.md).
 
+## Offline voice
+
+Android includes a pinned Sherpa-ONNX 2.0.1 runtime, the Kokoro v1.1 Chinese/English INT8 model, and six selectable voices. The build fetches and verifies the upstream archives using Python 3 and curl, caches them in Gradle's user home, and stages runtime files, model assets, and license notices outside Git. The first build requires network access. The APK can synthesize speech without a system voice package or network. [Sherpa-ONNX Android runtime](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v2.0.1) · [Kokoro model and examples](https://k2-fsa.github.io/sherpa/onnx/tts/all/Chinese-English/kokoro-multi-lang-v1_1.html)
+
+In chat, say “换成低一点的男声，讲慢一点” to get a voice suggestion. Preview it and tap “就用这个” to save it for that character. The chat speaker switch remains off by default. An optional 54 MB download adds five selectable voices from the pinned Kokoro voice table. DSH can suggest this pack after a web search. Nyvemi downloads the verified data only when the user chooses to download, then uses the same local synthesis engine. [Expansion data source](https://huggingface.co/csukuangfj/kokoro-int8-multi-lang-v1_1/tree/1355334be009ccce397060ee639a874137a128fa)
+
 ## Embedded DSH (0.13.0)
 
 Pinned official core: `f3803c96974ad4a94195fb97e5c637e9c2a3afe3` (`0.2.2-alpha.2`, MIT). It runs inside the app JS engine and does not require a separately installed Node server. The Android composition omits desktop shell, subprocesses, dynamic plugin installation and QQ/account tools; it does not promise compatibility with every third-party DSH plugin. Original notices and the reproducible build source are in `vendor/`.

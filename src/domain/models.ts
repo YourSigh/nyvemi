@@ -167,6 +167,7 @@ export const VoiceOfferSchema = z
     voiceId: z.string().regex(/^kokoro:\d+$/),
     label: z.string().min(1).max(40),
     rate: z.number().min(0.65).max(1.3),
+    requiresPack: z.literal(true).optional(),
   })
   .strict();
 export type VoiceOffer = z.infer<typeof VoiceOfferSchema>;

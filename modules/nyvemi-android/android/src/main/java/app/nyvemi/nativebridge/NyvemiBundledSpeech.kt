@@ -16,7 +16,7 @@ import java.io.File
 import java.util.concurrent.Executors
 
 internal class NyvemiBundledSpeech {
-  private data class Voice(val sid: Int, val label: String) {
+  private data class Voice(val sid: Int, val label: String, val expanded: Boolean) {
     val id get() = "kokoro:$sid"
   }
   private class Playback(val promise: Promise) {
@@ -28,23 +28,30 @@ internal class NyvemiBundledSpeech {
   private val handler = Handler(Looper.getMainLooper())
   private val worker = Executors.newSingleThreadExecutor()
   private var engine: OfflineTts? = null // accessed only on worker
+  private var engineExpanded = false // accessed only on worker
   private var playback: Playback? = null
   private var catalog: List<Voice>? = null
 
-  private fun voices(context: Context): List<Voice> = catalog ?: context.assets
-    .open("$ASSETS/catalog.json").bufferedReader().use { reader ->
+  private fun voices(context: Context): List<Voice> = catalog ?: (
+    readCatalog(context, "catalog.json", false) + readCatalog(context, "expanded-catalog.json", true)
+  ).also { catalog = it }
+
+  private fun readCatalog(context: Context, path: String, expanded: Boolean) =
+    context.assets.open("$ASSETS/$path").bufferedReader().use { reader ->
       val entries = JSONArray(reader.readText())
       List(entries.length()) { index ->
         val voice = entries.getJSONObject(index)
-        Voice(voice.getInt("sid"), voice.getString("name"))
-      }.also { catalog = it }
+        Voice(voice.getInt("sid"), voice.getString("name"), expanded)
+      }
     }
 
   fun state(context: Context, promise: Promise) {
-    val list = voices(context)
+    val expanded = NyvemiVoicePack.installed(context)
+    val list = voices(context).filter { expanded || !it.expanded }
     promise.resolve(mapOf(
       "available" to list.isNotEmpty(),
       "preferred" to list.firstOrNull()?.id,
+      "expanded" to expanded,
       "voices" to list.map { mapOf("id" to it.id, "label" to it.label) },
     ))
   }
@@ -53,7 +60,7 @@ internal class NyvemiBundledSpeech {
     require(text.isNotBlank() && text.length <= 240 && rate.isFinite() && rate in 0.65..1.3)
     val voices = voices(context)
     val voice = if (voiceId == null) voices.first() else voices.firstOrNull { it.id == voiceId }
-    if (voice == null) {
+    if (voice == null || (voice.expanded && !NyvemiVoicePack.installed(context))) {
       promise.reject("tts_voice_unavailable", "这个音色还不可用", null)
       return
     }
@@ -65,7 +72,14 @@ internal class NyvemiBundledSpeech {
       if (request.cancelled) return@execute
       var file: File? = null
       try {
-        val tts = engine ?: createEngine(app).also { engine = it }
+        if (voice.expanded && !engineExpanded) {
+          engine?.release()
+          engine = null
+        }
+        val tts = engine ?: createEngine(app, voice.expanded).also {
+          engine = it
+          engineExpanded = voice.expanded
+        }
         if (request.cancelled) return@execute
         val start = android.os.SystemClock.elapsedRealtime()
         val audio = tts.generate(text, voice.sid, rate.toFloat())
@@ -92,18 +106,19 @@ internal class NyvemiBundledSpeech {
     }
   }
 
-  private fun createEngine(context: Context): OfflineTts {
+  private fun createEngine(context: Context, expanded: Boolean): OfflineTts {
+    val root = if (expanded) NyvemiVoicePack.path(context).absolutePath else ASSETS
     val model = OfflineTtsKokoroModelConfig(
-      model = "$ASSETS/model.int8.onnx",
-      voices = "$ASSETS/voices.bin",
-      tokens = "$ASSETS/tokens.txt",
-      lexicon = "$ASSETS/lexicon-us-en.txt,$ASSETS/lexicon-zh.txt",
+      model = "$root/model.int8.onnx",
+      voices = "$root/voices.bin",
+      tokens = "$root/tokens.txt",
+      lexicon = "$root/lexicon-us-en.txt,$root/lexicon-zh.txt",
     )
     return OfflineTts(
-      assetManager = context.assets,
+      assetManager = if (expanded) null else context.assets,
       config = OfflineTtsConfig(
         model = OfflineTtsModelConfig(kokoro = model, numThreads = 2),
-        ruleFsts = "$ASSETS/phone-zh.fst,$ASSETS/date-zh.fst,$ASSETS/number-zh.fst",
+        ruleFsts = "$root/phone-zh.fst,$root/date-zh.fst,$root/number-zh.fst",
       ),
     )
   }

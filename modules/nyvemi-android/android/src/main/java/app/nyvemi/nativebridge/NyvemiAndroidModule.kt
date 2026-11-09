@@ -91,6 +91,7 @@ class NyvemiAndroidModule : Module() {
       if (NyvemiBundledSpeech.handles(voiceId)) bundledSpeech.speak(context(), text, voiceId, rate, promise)
       else speechOutput.speak(context(), id, text, voiceId, rate, pitch, promise)
     }.runOnQueue(Queues.MAIN)
+    AsyncFunction("downloadVoicePack") { NyvemiVoicePack.install(context().applicationContext) }
     AsyncFunction("stopSpeech") { stopSpeech() }.runOnQueue(Queues.MAIN)
     AsyncFunction("installSpeechData") { speechOutput.install(context()) }.runOnQueue(Queues.MAIN)
     AsyncFunction("refineCharacterRig") { uri: String, spec: String -> NyvemiRigRefinement.refine(context(), uri, spec) }

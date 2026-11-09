@@ -15,6 +15,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [config, setConfig] = useState<VoiceOptions>(voiceProfile());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
     setConfig(voiceOptions(settings?.voice));
@@ -48,6 +49,18 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       setError('这个声音暂时用不了，试试其他音色。');
     } finally {
       setBusy(false);
+    }
+  };
+  const download = async () => {
+    setError('');
+    setDownloading(true);
+    try {
+      await bridge().downloadVoicePack();
+      setVoices(await bridge().speechState());
+    } catch {
+      setError('音色下载失败，请检查网络和剩余空间');
+    } finally {
+      setDownloading(false);
     }
   };
   return (
@@ -99,6 +112,13 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
               />
             ))}
           </Details>
+          {!voices.expanded ? (
+            <TextButton
+              title={downloading ? '正在下载…' : '下载更多音色 · 54 MB'}
+              disabled={downloading}
+              onPress={() => void download()}
+            />
+          ) : null}
           <Button
             title={busy ? '停止试听' : '听听这个声音'}
             onPress={() => {

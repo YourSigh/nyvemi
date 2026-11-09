@@ -153,6 +153,16 @@ export const agentTools: AgentTool[] = [
     },
   },
   {
+    name: 'suggest_voice_pack',
+    description:
+      '对方明确想找更多声音或上网找语音包时，可先用 web_search 查资料，再用此工具推荐已验证的 Kokoro 扩展音色。工具仅展示下载试听卡；用户确认后应用才下载。不能接受外部链接，也不要说已经装好。',
+    parameters: {
+      tone: string('音色偏好 gentle/bright/calm/low，可省略', false),
+      gender: string('声线偏好 feminine/masculine，可省略', false),
+      pace: string('语速 slow/natural/fast，可省略', false),
+    },
+  },
+  {
     name: 'change_theme',
     description:
       '根据对方这轮明确表达的配色偏好改变App主题。有喜欢某种颜色的表达也可以，不必固定口令。不要无故替用户换色。',

@@ -19,10 +19,11 @@ def speechOutput = layout.buildDirectory.dir('generated/nyvemiSpeech')
 def speechCache = gradle.gradleUserHomeDir.toPath().resolve('nyvemi-speech').toFile()
 def speechScript = file('../../../scripts/speech/prepare.py')
 def speechCatalog = file('../../../src/speech/catalog.json')
+def expandedSpeechCatalog = file('../../../src/speech/expanded-catalog.json')
 def prepareSpeech = tasks.register('prepareNyvemiSpeech', Exec) {
-  inputs.files(speechScript, speechCatalog)
+  inputs.files(speechScript, speechCatalog, expandedSpeechCatalog)
   outputs.dir(speechOutput)
-  commandLine 'python3', speechScript, speechOutput.get().asFile, speechCache, speechCatalog
+  commandLine 'python3', speechScript, speechOutput.get().asFile, speechCache, speechCatalog, expandedSpeechCatalog
 }
 android.sourceSets.main.assets.srcDir(speechOutput.map { it.dir('assets') })
 android.sourceSets.main.jniLibs.srcDir(speechOutput.map { it.dir('jni') })

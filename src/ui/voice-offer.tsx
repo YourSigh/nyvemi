@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { AppState, Text, View } from 'react-native';
 import type { VoiceOffer } from '../domain/models';
 import { bridge } from '../native/android';
 import { usePalette } from '../theme/context';
@@ -15,17 +16,51 @@ export function VoiceOfferCard({
   onDecision(accept: boolean): Promise<void>;
 }) {
   const palette = usePalette();
+  const active = useRef(false);
+  const [packReady, setPackReady] = useState(!offer.requiresPack);
+  const [downloading, setDownloading] = useState(false);
   const [playing, setPlaying] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      active.current = true;
+      if (offer.requiresPack) {
+        void bridge()
+          .speechState()
+          .then((value) => {
+            if (active.current) setPackReady(Boolean(value.expanded));
+          })
+          .catch(() => {});
+      }
+      return () => {
+        active.current = false;
+      };
+    }, [offer.requiresPack]),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const preview = async () => {
     if (playing) {
-      await bridge().stopSpeech();
+      await bridge()
+        .stopSpeech()
+        .catch(() => {});
       return;
     }
+    setError('');
+    if (!packReady) {
+      setDownloading(true);
+      try {
+        await bridge().downloadVoicePack();
+        if (active.current) setPackReady(true);
+      } catch {
+        setError('音色下载失败，请检查网络和剩余空间');
+        return;
+      } finally {
+        setDownloading(false);
+      }
+    }
+    if (!active.current || AppState.currentState !== 'active') return;
     beforePreview();
     setPlaying(true);
-    setError('');
     try {
       await bridge().speakLocal(
         `voice-offer:${Date.now()}`,
@@ -56,12 +91,28 @@ export function VoiceOfferCard({
       <ErrorText text={error} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
         <TextButton
-          title={playing ? '停止试听' : '试听'}
-          disabled={saving}
+          title={
+            downloading
+              ? '正在下载…'
+              : playing
+                ? '停止试听'
+                : packReady
+                  ? '试听'
+                  : '下载试听 · 54 MB'
+          }
+          disabled={saving || downloading}
           onPress={() => void preview()}
         />
-        <TextButton title="就用这个" disabled={saving} onPress={() => void decide(true)} />
-        <TextButton title="先不换" disabled={saving} onPress={() => void decide(false)} />
+        <TextButton
+          title="就用这个"
+          disabled={saving || downloading || !packReady}
+          onPress={() => void decide(true)}
+        />
+        <TextButton
+          title="先不换"
+          disabled={saving || downloading}
+          onPress={() => void decide(false)}
+        />
       </View>
     </View>
   );
