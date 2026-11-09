@@ -74,7 +74,10 @@ it('finishes personality on the same character without replacing messages, then 
   expect(result.persona.appearance).toBe('蓝色短发，白色外套');
   expect((await store.list('messages', c.id)).length).toBe(before + 1);
   expect((await service.finish(c.id)).id).toBe(c.id);
-  expect((await store.get('settings', c.id))?.voice?.description).toBe('温柔一点');
+  const settings = await store.get('settings', c.id);
+  expect(settings?.voice).toMatchObject({ description: '温柔一点', enabled: false });
+  expect(settings?.voice?.voiceId).toBeUndefined();
+  expect(settings?.voiceOffer).toMatchObject({ voiceId: 'kokoro:3' });
 });
 it('uses a local acknowledgement if the optional conversational model fails', async () => {
   const { store, service, provider } = await fixture();

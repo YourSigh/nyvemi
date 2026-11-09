@@ -1,6 +1,7 @@
 import { SpeechQueue } from '../speech/queue';
 import { localSpeechDriver } from '../speech/native';
-import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
+import { VoiceOfferCard } from './voice-offer';
+import { resolveVoiceOffer, updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
 import type { MediaAsset } from '../media/model';
@@ -34,7 +35,7 @@ import {
 import type { PropsWithChildren } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Character, Message, Intention } from '../domain/models';
+import type { Character, Message, Intention, VoiceOffer } from '../domain/models';
 import { Button, ErrorText } from './components';
 import { bridge } from '../native/android';
 import { useRuntime } from './context';
@@ -100,6 +101,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const voiceFocused = useRef(false);
   const voice = useRef({ options: voiceProfile(), revision: 0, saving: false });
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceOffer, setVoiceOffer] = useState<VoiceOffer>();
   const speech = useMemo(
     () =>
       new SpeechQueue(localSpeechDriver, (value) => {
@@ -165,6 +167,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       const options = voiceOptions(settings?.voice);
       voiceSnapshot.options = options;
       setVoiceEnabled(options.enabled);
+      setVoiceOffer(settings?.voiceOffer);
     }
     setDeveloperMode(settings?.developerMode ?? false);
     if (voiceFocused.current && AppState.currentState === 'active')
@@ -236,6 +239,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     speech.reset();
     voice.current = { options: voiceProfile(), revision: 0, saving: false };
     setVoiceEnabled(false);
+    setVoiceOffer(undefined);
     setMessages([]);
     loaded.current = false;
     seen.current.clear();
@@ -315,11 +319,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           abort.current.signal,
         );
         await refresh();
-        if (next?.status === 'ready') await finishHatching();
+        if (next?.status === 'ready' && !(await runtime.store.get('settings', cid))?.voiceOffer)
+          await finishHatching();
         return;
       }
       if (opening?.status === 'ready') {
-        await finishHatching();
+        if (!(await runtime.store.get('settings', cid))?.voiceOffer) await finishHatching();
         return;
       }
       await runtime.chat.send(
@@ -579,6 +584,18 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           </View>
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
+            {voiceOffer && !birth?.outbox ? (
+              <VoiceOfferCard
+                key={`${voiceOffer.voiceId}:${voiceOffer.rate}`}
+                offer={voiceOffer}
+                beforePreview={() => speech.stop()}
+                onDecision={async (accept) => {
+                  await resolveVoiceOffer(runtime.store, cid, voiceOffer, accept);
+                  await refresh();
+                  if (birth?.status === 'ready') await finishHatching();
+                }}
+              />
+            ) : null}
             {voiceEnabled && speechNotice ? (
               <Pressable
                 accessibilityRole="button"
@@ -635,7 +652,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 onPress={() => void send(undefined, birth.pending!.text)}
               />
             ) : null}
-            {birth?.status === 'ready' && !busy && !birth.outbox ? (
+            {birth?.status === 'ready' && !busy && !birth.outbox && !voiceOffer ? (
               <Button title="继续完善角色" onPress={() => void send(undefined, '继续')} />
             ) : null}
             {pictures.length ? (

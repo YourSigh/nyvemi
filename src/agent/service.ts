@@ -1,3 +1,4 @@
+import { chooseVoice, VoiceRequestSchema } from '../speech/selection';
 import type { MediaService } from '../media/service';
 import { agentFailure } from './errors';
 import type { PluginManager } from '../extensions/manager';
@@ -543,6 +544,15 @@ export class CompanionAgent {
               (item) => item.appraisal!,
             );
             result = { remembered: true, evidenceId: doc.id };
+          } else if (name === 'suggest_voice' && input.user && this.host.visible()) {
+            const offer = chooseVoice(VoiceRequestSchema.parse(args));
+            await this.store.atomic(async (tx) => {
+              const settings = await tx.get('settings', cid);
+              if (!settings) throw Error('当前角色不存在');
+              await tx.put('settings', { ...settings, voiceOffer: offer });
+            });
+            input.onSaved?.();
+            result = { offered: true, label: offer.label, applied: false };
           } else if (name === 'change_theme' && input.onThemeChange) {
             await input.onThemeChange(z.string().min(1).max(500).parse(args.description));
             result = { applied: true };
@@ -592,6 +602,7 @@ export class CompanionAgent {
             ...agentTools.filter(
               (t) =>
                 (t.name !== 'change_theme' || input.onThemeChange) &&
+                (t.name !== 'suggest_voice' || (input.user && this.host.visible())) &&
                 (!['inspect_image', 'draw_image', 'send_image'].includes(t.name) ||
                   this.host.media) &&
                 (![
