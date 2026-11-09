@@ -2,23 +2,22 @@ import { useCallback, useState } from 'react';
 import { Switch, View, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { bridge, type LocalSpeechState } from '../native/android';
-import { voiceProfile } from '../characters/hatching';
+import { updateVoice, voiceOptions, voiceProfile, type VoiceOptions } from '../speech/preferences';
 import { useRuntime } from './context';
 import { usePalette } from '../theme/context';
 import { Page, Heading, Note, Details, Button, TextButton, ErrorText } from './components';
 import type { ScreenProps } from './navigation';
-import type { VoiceOptions } from '../speech/queue';
 export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const runtime = useRuntime(),
     palette = usePalette(),
     cid = route.params.characterId;
   const [voices, setVoices] = useState<LocalSpeechState>();
-  const [config, setConfig] = useState<VoiceOptions>({ ...voiceProfile(), enabled: false });
+  const [config, setConfig] = useState<VoiceOptions>(voiceProfile());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
-    if (settings?.voice) setConfig(settings.voice);
+    setConfig(voiceOptions(settings?.voice));
     setVoices(await bridge().speechState());
   }, [runtime, cid]);
   useFocusEffect(
@@ -31,11 +30,8 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       };
     }, [refresh]),
   );
-  const save = async (next: VoiceOptions) => {
-    const settings = await runtime.store.get('settings', cid);
-    if (!settings) throw Error('角色不存在');
-    await runtime.store.put('settings', { ...settings, voice: next });
-    setConfig(next);
+  const save = async (patch: Partial<VoiceOptions>) => {
+    setConfig(await updateVoice(runtime.store, cid, patch));
   };
   const preview = async () => {
     setBusy(true);
@@ -59,12 +55,12 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       <Heading>声音</Heading>
       <ErrorText text={error} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ color: palette.ink }}>自动读出新消息</Text>
+        <Text style={{ color: palette.ink }}>消息语音</Text>
         <Switch
-          accessibilityLabel="自动读出新消息"
+          accessibilityLabel="消息语音"
           value={config.enabled}
           onValueChange={(enabled) => {
-            void save({ ...config, enabled }).catch(() => setError('没有保存成功'));
+            void save({ enabled, playbackSet: true }).catch(() => setError('没有保存成功'));
           }}
         />
       </View>
@@ -98,11 +94,10 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
               <TextButton
                 key={style}
                 title={label}
-                onPress={() =>
-                  void save({ ...config, ...voiceProfile(style), enabled: config.enabled }).catch(
-                    () => setError('没有保存成功'),
-                  )
-                }
+                onPress={() => {
+                  const { rate, pitch } = voiceProfile(style);
+                  void save({ rate, pitch }).catch(() => setError('没有保存成功'));
+                }}
               />
             ))}
           </View>
@@ -112,7 +107,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
                 key={voice.id}
                 title={`${voice.id === (config.voiceId ?? voices.preferred) ? '✓ ' : ''}${voice.label}`}
                 onPress={() =>
-                  void save({ ...config, voiceId: voice.id }).catch(() => setError('没有保存成功'))
+                  void save({ voiceId: voice.id }).catch(() => setError('没有保存成功'))
                 }
               />
             ))}

@@ -41,7 +41,7 @@ it('starts one resumable egg with a real chat question about color and offline v
   expect((await service.start()).id).toBe(c.id);
   expect(c.egg).toBe(true);
   expect((await store.list('messages', c.id)).map((m) => m.content).join(' ')).toContain('颜色');
-  expect((await store.get('settings', c.id))?.voice).toMatchObject({ enabled: true, rate: 0.92 });
+  expect((await store.get('settings', c.id))?.voice).toMatchObject({ enabled: false, rate: 0.92 });
   expect(provider.structuredOutput).not.toHaveBeenCalled();
 });
 it('keeps one user message across interrupted color changes and resumes without repeating a completed step', async () => {

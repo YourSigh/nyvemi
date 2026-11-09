@@ -525,7 +525,7 @@ it('restores an unfinished egg and pending chat answer without duplicating the i
     (await b.store.list('messages', restored.id)).filter((m) => m.role === 'user'),
   ).toHaveLength(1);
   expect((await resumed.load(restored.id))?.step).toBe(1);
-  expect((await b.store.get('settings', restored.id))?.voice?.enabled).toBe(true);
+  expect((await b.store.get('settings', restored.id))?.voice?.enabled).toBe(false);
 });
 it('remaps queued opening bubbles on import and reveals them sequentially without duplicating history', async () => {
   const { HatchingService } = await import('../src/characters/hatching');

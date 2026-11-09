@@ -1,3 +1,4 @@
+import { voiceOptions, voiceProfile } from '../speech/preferences';
 import { visualThemes } from '../theme/visual-presets';
 import { understandName } from './name';
 import { deliverHatching, waitForTyping } from './hatching-delivery';
@@ -122,13 +123,7 @@ const Reply = z.object({
   acknowledgement: z.string().trim().min(1).max(160),
   answer: z.string().trim().max(1000).optional(),
   deferAppearance: z.boolean().optional(),
-  voiceEnabled: z.boolean().optional(),
   voiceStyle: z.enum(['gentle', 'bright', 'calm', 'low']).optional(),
-});
-export const voiceProfile = (style = 'gentle') => ({
-  enabled: true,
-  rate: style === 'bright' ? 1.05 : style === 'low' ? 0.85 : 0.92,
-  pitch: style === 'low' ? 0.85 : style === 'calm' ? 1 : style === 'bright' ? 1.17 : 1.08,
 });
 export class HatchingService {
   constructor(
@@ -374,7 +369,7 @@ export class HatchingService {
                   {
                     role: 'system',
                     content:
-                      '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题用户明确不要朗读时voiceEnabled=false，否则true。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
+                      '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题只提取音色偏好。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
                   },
                   {
                     role: 'user',
@@ -449,8 +444,9 @@ export class HatchingService {
               await tx.put('settings', {
                 ...settings,
                 voice: {
+                  ...settings.voice,
                   ...voiceProfile(reply.voiceStyle),
-                  enabled: reply.voiceEnabled ?? value !== '先静音聊天',
+                  enabled: value !== '先静音聊天' && voiceOptions(settings.voice).enabled,
                   description: value,
                 },
               });

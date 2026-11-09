@@ -180,6 +180,7 @@ export const SettingsSchema = z
     voice: z
       .object({
         enabled: z.boolean(),
+        playbackSet: z.literal(true).optional(),
         voiceId: z.string().max(200).optional(),
         rate: z.number().min(0.65).max(1.3),
         pitch: z.number().min(0.7).max(1.4),

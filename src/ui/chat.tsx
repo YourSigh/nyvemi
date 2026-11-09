@@ -1,6 +1,6 @@
 import { SpeechQueue } from '../speech/queue';
 import { localSpeechDriver } from '../speech/native';
-import { voiceProfile } from '../characters/hatching';
+import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
 import type { MediaAsset } from '../media/model';
@@ -98,6 +98,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [speaking, setSpeaking] = useState<string>();
   const [speechNotice, setSpeechNotice] = useState('');
   const voiceFocused = useRef(false);
+  const voice = useRef({ options: voiceProfile(), revision: 0, saving: false });
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
   const speech = useMemo(
     () =>
       new SpeechQueue(localSpeechDriver, (value) => {
@@ -155,10 +157,18 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     const c = await runtime.store.get('characters', cid);
     setCharacter(c);
     setBirth(opening);
+    const voiceSnapshot = voice.current;
+    const revision = voiceSnapshot.revision;
     const settings = await runtime.store.get('settings', cid);
+    if (voice.current !== voiceSnapshot) return;
+    if (!voiceSnapshot.saving && voiceSnapshot.revision === revision) {
+      const options = voiceOptions(settings?.voice);
+      voiceSnapshot.options = options;
+      setVoiceEnabled(options.enabled);
+    }
     setDeveloperMode(settings?.developerMode ?? false);
     if (voiceFocused.current && AppState.currentState === 'active')
-      speech.observe(page.messages, settings?.voice, Boolean(c?.creationActive));
+      speech.observe(page.messages, voiceSnapshot.options);
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
     setRequested(
       (await runtime.store.list('intentions', cid, 10000))
@@ -172,6 +182,19 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     useCallback(() => {
       voiceFocused.current = true;
       speech.resume();
+      const subscription = AppState.addEventListener('change', (state) => {
+        if (state === 'active') speech.resume();
+        else speech.stop();
+      });
+      return () => {
+        voiceFocused.current = false;
+        speech.stop();
+        subscription.remove();
+      };
+    }, [speech]),
+  );
+  useFocusEffect(
+    useCallback(() => {
       const openingController = new AbortController();
       const resumeOpening = async () => {
         await refresh();
@@ -198,22 +221,21 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         if (AppState.currentState === 'active') void refresh().catch(() => {});
       }, 3000);
       const subscription = AppState.addEventListener('change', (state) => {
-        if (state !== 'active') speech.stop();
         if (state === 'active') {
           void resumeOpening().catch(() => {});
         }
       });
       return () => {
         openingController.abort();
-        voiceFocused.current = false;
-        speech.stop();
         clearInterval(incoming);
         subscription.remove();
       };
-    }, [runtime, cid, refresh, route.params.notificationId, speech]),
+    }, [runtime, cid, refresh, route.params.notificationId]),
   );
   useEffect(() => {
     speech.reset();
+    voice.current = { options: voiceProfile(), revision: 0, saving: false };
+    setVoiceEnabled(false);
     setMessages([]);
     loaded.current = false;
     seen.current.clear();
@@ -224,6 +246,32 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       abort.current?.abort();
     };
   }, [cid, speech]);
+  const toggleVoice = async () => {
+    const state = voice.current;
+    if (state.saving) return;
+    const previous = state.options;
+    const enabled = !previous.enabled;
+    state.saving = true;
+    state.revision++;
+    state.options = { ...previous, enabled, playbackSet: true };
+    setVoiceEnabled(enabled);
+    if (enabled) speech.resume();
+    else speech.stop();
+    try {
+      const saved = await updateVoice(runtime.store, cid, { enabled, playbackSet: true });
+      if (voice.current === state) state.options = saved;
+    } catch {
+      if (voice.current !== state) return;
+      state.options = previous;
+      setVoiceEnabled(previous.enabled);
+      if (previous.enabled) speech.resume();
+      else speech.stop();
+      setError('声音设置未保存，请重试');
+    } finally {
+      state.revision++;
+      state.saving = false;
+    }
+  };
   const finishHatching = async () => {
     const c = await runtime.hatching.finish(
       cid,
@@ -243,7 +291,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     const attachments = retry?.attachments ?? pictures.map((p) => p.id);
     if (!text.trim() && !attachments.length) return;
     sending.current = true;
-    speech.stop();
     autoScroll.current = true;
     setBusy(true);
     setError('');
@@ -327,7 +374,33 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             <Text style={s.name} numberOfLines={1}>
               {character?.persona.name ?? 'Nyvemi'}
             </Text>
-            <View style={{ width: 52 }} />
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="消息语音"
+              accessibilityState={{ checked: voiceEnabled }}
+              onPress={() => void toggleVoice()}
+              style={s.speakerButton}
+              testID="chat-speech-toggle"
+            >
+              <Svg width={22} height={22} viewBox="0 0 24 24">
+                <Path
+                  d="M11 5 6 9H3v6h3l5 4V5Z"
+                  fill="none"
+                  stroke={voiceEnabled ? theme.primary : theme.textSecondary}
+                  strokeWidth={1.6}
+                  strokeLinejoin="round"
+                />
+                <Path
+                  d={
+                    voiceEnabled ? 'M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12' : 'm16 10 4 4m0-4-4 4'
+                  }
+                  fill="none"
+                  stroke={voiceEnabled ? theme.primary : theme.textSecondary}
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                />
+              </Svg>
+            </Pressable>
           </View>
           {birth && (birth.status !== 'complete' || birth.outbox) ? (
             <View style={{ alignItems: 'center', gap: 4, paddingBottom: 4 }}>
@@ -435,72 +508,78 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                 ) : null
               }
               ListEmptyComponent={<Text style={s.empty}>从一句随便的话开始吧。</Text>}
-              renderItem={({ item: m }) => (
-                <Arrival messageId={m.id} arrivals={arrivals.current}>
-                  <View style={[s.row, m.role === 'user' && s.mine]}>
-                    <View style={{ maxWidth: '88%', gap: 4 }}>
-                      {times.has(m.id) ? (
-                        <Text style={s.time}>
-                          {new Date(m.createdAt).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </Text>
-                      ) : null}
-                      <View style={[s.bubble, m.role === 'user' && s.userBubble]}>
-                        {m.attachments?.length ? (
-                          <MessageImages ids={m.attachments} characterId={cid} />
-                        ) : null}
-                        {m.content ? (
-                          <Text selectable style={s.message}>
-                            {m.content}
+              renderItem={({ item: m }) => {
+                const canSpeak =
+                  voiceEnabled &&
+                  m.role === 'assistant' &&
+                  m.status === 'complete' &&
+                  m.content.trim() !== '';
+                const Bubble = canSpeak ? Pressable : View;
+                const toggleBubble = () => {
+                  if (
+                    !voiceFocused.current ||
+                    AppState.currentState !== 'active' ||
+                    !voice.current.options.enabled
+                  )
+                    return;
+                  if (speaking === m.id) speech.stop();
+                  else speech.replay(m, voice.current.options);
+                };
+                return (
+                  <Arrival messageId={m.id} arrivals={arrivals.current}>
+                    <View style={[s.row, m.role === 'user' && s.mine]}>
+                      <View style={{ maxWidth: '88%', gap: 4 }}>
+                        {times.has(m.id) ? (
+                          <Text style={s.time}>
+                            {new Date(m.createdAt).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
                           </Text>
+                        ) : null}
+                        <Bubble
+                          style={[s.bubble, m.role === 'user' && s.userBubble]}
+                          accessibilityRole={canSpeak ? 'button' : undefined}
+                          accessibilityHint={
+                            canSpeak ? (speaking === m.id ? '停止朗读' : '朗读这条消息') : undefined
+                          }
+                          onPress={canSpeak ? toggleBubble : undefined}
+                        >
+                          {m.attachments?.length ? (
+                            <MessageImages ids={m.attachments} characterId={cid} />
+                          ) : null}
+                          {m.content ? (
+                            <Text
+                              selectable
+                              onPress={canSpeak ? toggleBubble : undefined}
+                              style={s.message}
+                            >
+                              {m.content}
+                            </Text>
+                          ) : null}
+                        </Bubble>
+                        {m.status === 'error' ? (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="重试消息"
+                            disabled={busy}
+                            onPress={() => void send(m)}
+                          >
+                            <Text style={{ color: theme.error, fontSize: 12 }}>
+                              未收到回复 · 点此重试
+                            </Text>
+                          </Pressable>
                         ) : null}
                       </View>
-                      {m.role === 'assistant' && m.status === 'complete' && m.content ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={speaking === m.id ? '停止朗读' : '朗读这条消息'}
-                          hitSlop={8}
-                          style={{ position: 'absolute', right: -26, bottom: 8 }}
-                          onPress={() => {
-                            if (speaking === m.id) {
-                              speech.stop();
-                              return;
-                            }
-                            void runtime.store
-                              .get('settings', cid)
-                              .then((settings) =>
-                                speech.replay(m, settings?.voice ?? voiceProfile()),
-                              );
-                          }}
-                        >
-                          <Text style={{ color: theme.textSecondary, fontSize: 11, paddingTop: 4 }}>
-                            {speaking === m.id ? '▪' : '▷'}
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                      {m.status === 'error' ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel="重试消息"
-                          disabled={busy}
-                          onPress={() => void send(m)}
-                        >
-                          <Text style={{ color: theme.error, fontSize: 12 }}>
-                            未收到回复 · 点此重试
-                          </Text>
-                        </Pressable>
-                      ) : null}
                     </View>
-                  </View>
-                </Arrival>
-              )}
+                  </Arrival>
+                );
+              }}
             />
           </View>
           <View style={s.footer} onLayout={(e) => setComposerHeight(e.nativeEvent.layout.height)}>
             <ErrorText text={error} />
-            {speechNotice ? (
+            {voiceEnabled && speechNotice ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="设置本机声音"
@@ -737,6 +816,7 @@ const createStyles = (theme: CharacterTheme) =>
       alignItems: 'center',
       gap: 4,
     },
+    speakerButton: { width: 52, minHeight: 44, alignItems: 'flex-end', justifyContent: 'center' },
     name: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '600', color: theme.text },
     sub: { fontSize: 12, color: theme.textSecondary, marginTop: 4 },
     more: { fontSize: 26, padding: 8, color: theme.primary },
