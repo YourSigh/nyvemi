@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { designTokens } from '../theme/design-tokens';
 import { visualThemes, visualThemePalette, type VisualThemeId } from '../theme/visual-presets';
 import { CocoonCharacter } from './character/cocoon';
-import { LegacyEggCharacter } from './character/legacy-egg-preview';
 import { StatusBar } from 'expo-status-bar';
 import type { ScreenProps } from './navigation';
 /** Read-only design sandbox: no model calls, saved theme writes, or onboarding progress changes. */
@@ -13,7 +12,6 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
   const [selected, setSelected] = useState<VisualThemeId>(
     () => visualThemes.find((t) => t.id === route.params?.preset)?.id ?? 'sakura',
   );
-  const [before, setBefore] = useState(false);
   const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState('');
   const { height } = useWindowDimensions();
@@ -50,18 +48,9 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
               <Text style={{ color: t.secondaryText, fontSize: 14 }}>‹ 返回</Text>
             </Pressable>
             <Text style={{ color: t.text, fontSize: 19, letterSpacing: 1, fontWeight: '600' }}>
-              Nyvemi
+              主题预览
             </Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={before ? '查看新设计' : '对比旧设计'}
-              onPress={() => setBefore(!before)}
-              style={{ minHeight: 44, justifyContent: 'center' }}
-            >
-              <Text style={{ color: t.recommendation.text, fontSize: 13 }}>
-                {before ? '看新版' : '看旧版'}
-              </Text>
-            </Pressable>
+            <View style={{ width: 42 }} />
           </View>
           <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6 }}>
             {visualThemes.map((item) => (
@@ -109,7 +98,6 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
                 }}
               >
                 {preset.name}
-                {before ? ' · 原样式' : ''}
               </Text>
               <Text style={{ color: t.secondaryText, fontSize: 11 }}>慢慢认识你 · 1/8</Text>
               <View style={{ flexDirection: 'row', gap: 4 }}>
@@ -127,15 +115,11 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
               </View>
             </View>
           ) : null}
-          {before ? (
-            <LegacyEggCharacter height={focused ? 72 : stageHeight} />
-          ) : (
-            <CocoonCharacter
-              height={focused ? 72 : stageHeight}
-              glow={t.character.glow}
-              light={t.character.support}
-            />
-          )}
+          <CocoonCharacter
+            height={focused ? 72 : stageHeight}
+            glow={t.character.glow}
+            light={t.character.support}
+          />
           <View
             style={{ flex: 1, minHeight: 0, justifyContent: 'flex-end', gap: 10, paddingBottom: 4 }}
           >
@@ -147,7 +131,7 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
                 paddingVertical: 11,
                 borderRadius: t.radius.bubble,
                 borderTopRightRadius: 5,
-                backgroundColor: before ? palette.paper : t.user.background,
+                backgroundColor: t.user.background,
               }}
             >
               <Text style={{ color: t.user.text, fontSize: 14, lineHeight: 21 }}>
@@ -162,9 +146,9 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
                 paddingVertical: 11,
                 borderRadius: t.radius.bubble,
                 borderTopLeftRadius: 5,
-                borderWidth: before ? 0 : 1,
+                borderWidth: 1,
                 borderColor: t.ai.border,
-                backgroundColor: before ? palette.tint : t.ai.background,
+                backgroundColor: t.ai.background,
               }}
             >
               <Text style={{ color: t.ai.text, fontSize: 14, lineHeight: 21 }}>
@@ -185,10 +169,12 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
                     minHeight: 44,
                     paddingHorizontal: 12,
                     justifyContent: 'center',
-                    borderWidth: before ? 0 : 1,
+                    borderWidth: 1,
                     borderColor: t.recommendation.border,
-                    backgroundColor: before || pressed ? palette.tint : t.recommendation.background,
-                    borderRadius: before ? 24 : t.radius.recommendation,
+                    backgroundColor: pressed
+                      ? t.recommendation.pressed
+                      : t.recommendation.background,
+                    borderRadius: t.radius.recommendation,
                   })}
                 >
                   <Text
@@ -215,7 +201,7 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
           >
             <TextInput
               accessibilityLabel="预览输入框"
-              placeholder="试试输入框的感觉…"
+              placeholder="试着打几个字…"
               value={draft}
               onChangeText={setDraft}
               placeholderTextColor={t.input.placeholder}
@@ -251,9 +237,6 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
               <Text style={{ color: draft ? t.onPrimary : t.disabled.text, fontSize: 22 }}>↑</Text>
             </View>
           </View>
-          <Text style={{ color: t.secondaryText, textAlign: 'center', fontSize: 10 }}>
-            视觉预览 · 不会发送消息或更改你的设置
-          </Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

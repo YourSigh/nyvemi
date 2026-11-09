@@ -100,7 +100,6 @@ export function WelcomeScreen({ navigation }: ScreenProps<'Welcome'>) {
           <Text style={{ color: palette.ink, fontSize: 22, lineHeight: 30 }}>
             你喜欢什么颜色呀？
           </Text>
-          <Note>先把这里换成你喜欢的样子。现在不需要密钥。</Note>
         </Card>
         <Field
           label="你喜欢的颜色和感觉"
@@ -217,7 +216,6 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
   return (
     <Page>
       <Heading>{route.params?.onboarding ? 'Nyvemi' : '聊天模型'}</Heading>
-      <Note>默认使用 DeepSeek，填入密钥就能开始。</Note>
       <Card>
         <View
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
@@ -229,7 +227,7 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
           </Text>
           {config.baseUrl === deepSeekPreset.baseUrl ? (
             <TextButton
-              title="获取 Key"
+              title="获取密钥"
               onPress={() =>
                 void Linking.openURL('https://platform.deepseek.com/api_keys').catch(() =>
                   setError('无法打开网页，请前往 DeepSeek 开放平台创建密钥'),
@@ -272,21 +270,16 @@ export function ProviderScreen({ navigation, route }: ScreenProps<'Provider'>) {
           <Note>更换服务地址后，请重新填写对应的密钥。</Note>
         </Details>
       </Card>
-      <Note>密钥仅存本机。豆包画图可以稍后单独设置。</Note>
       <ErrorText text={error} />
       {notice ? <Note>{notice}</Note> : null}
       <Button
-        title={busy ? '连接中…' : route.params?.onboarding ? '开始聊天' : '保存设置'}
+        title={busy ? '处理中…' : route.params?.onboarding ? '开始聊天' : '保存设置'}
         disabled={busy || (!hasKey && !key.trim())}
         onPress={() => void save(false)}
       />
       {!route.params?.onboarding ? (
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <TextButton
-            title="测试连接（一次请求）"
-            disabled={busy}
-            onPress={() => void save(true)}
-          />
+          <TextButton title="测试连接" disabled={busy} onPress={() => void save(true)} />
           <TextButton title="用量与费用" onPress={() => navigation.navigate('Usage')} />
         </View>
       ) : null}

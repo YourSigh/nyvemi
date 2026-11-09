@@ -71,7 +71,7 @@ export const hatchQuestions: {
   },
   {
     key: 'voice',
-    question: '最后，你想听到怎样的声音？先用本机的声音试试，之后也能换。',
+    question: '最后，你想听到怎样的声音？',
     choices: [
       '温柔轻一点，慢慢说',
       '清亮活泼一点',

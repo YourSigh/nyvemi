@@ -16,9 +16,6 @@ vi.mock('react-native-keyboard-controller', () => ({
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('../src/ui/character/cocoon', () => ({ CocoonCharacter: 'CocoonCharacter' }));
-vi.mock('../src/ui/character/legacy-egg-preview', () => ({
-  LegacyEggCharacter: 'LegacyEggCharacter',
-}));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 let screen: ReactTestRenderer | undefined;
 afterEach(async () => {
@@ -56,13 +53,7 @@ it('previews four local themes without RuntimeContext, offering only the other t
   expect(
     screen!.root.find((node) => String(node.type) === 'SafeAreaView').props.style.backgroundColor,
   ).toBe(visualThemePalette('moonlight').background);
-  const navigation = screen!.root.find(
-    (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === '对比旧设计',
-  );
-  await act(async () => navigation.props.onPress());
-  expect(screen!.root.findAll((node) => String(node.type) === 'LegacyEggCharacter')).toHaveLength(
-    1,
-  );
+  expect(labels()).not.toContain('对比旧设计');
 });
 it('opens a requested preview directly and falls back safely for unknown names', async () => {
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;

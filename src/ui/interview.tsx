@@ -102,15 +102,11 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
                 {turn.role === 'assistant' ? <Avatar name="Nyvemi" size={32} /> : null}
                 <View style={[s.bubble, turn.role === 'user' && { backgroundColor: palette.tint }]}>
                   <Text style={s.message}>{turn.content}</Text>
-                  {turn.localFallback ? (
-                    <Text style={s.fallback}>网络回应暂不可用，已用本地引导继续</Text>
-                  ) : null}
                 </View>
               </View>
             ))}
           {finished && draft ? (
             <View style={{ gap: 12 }}>
-              <Note>这是共同写下的设定。正式创建后，对话中的反馈仍会慢慢塑造她。</Note>
               <Card>
                 <Text style={{ color: palette.ink, fontSize: 22, fontWeight: '600' }}>
                   {draft.answers.name}
@@ -271,7 +267,6 @@ const createStyles = (palette: Palette) =>
       gap: 8,
     },
     message: { fontSize: 16, color: palette.ink, lineHeight: 25 },
-    fallback: { fontSize: 11, color: palette.muted },
     composer: { padding: 12, gap: 10, borderTopWidth: 1, borderColor: palette.line },
     input: {
       minHeight: 48,

@@ -57,7 +57,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   return (
     <Page>
       <Heading>声音</Heading>
-      <Note>本机朗读，不消耗模型额度。</Note>
       <ErrorText text={error} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={{ color: palette.ink }}>自动读出新消息</Text>

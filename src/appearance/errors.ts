@@ -107,28 +107,30 @@ export async function readImageFailure(
   };
 }
 export class ImageProviderError extends Error {
+  readonly userMessage: string;
   constructor(readonly failure: ImageRequestFailure) {
     const reviewHint = failure.code?.startsWith('InputImage')
       ? '参考图未通过服务商审核，请更换参考图后重试'
       : failure.code?.startsWith('OutputImage')
-        ? '本次生成结果未通过服务商审核，已暂停；这不等于你的描述或参考图违规'
+        ? '生成的图片未通过审核，请重试'
         : failure.code?.startsWith('InputText')
           ? '绘图文字未通过服务商审核，请检查并调整描述'
-          : '服务商内容审核未通过，已暂停；请展开错误详情查看拒绝环节';
+          : '内容未通过审核，请调整描述或参考图';
     const hint: Record<ImageRequestFailure['category'], string> = {
-      configuration: '模型尚未开通，请先在火山方舟控制台开通此模型',
-      credentials: '密钥校验失败，请检查豆包 API Key',
+      configuration: '模型尚未开通，请前往火山方舟设置',
+      credentials: '豆包密钥无效，请检查后重试',
       quota: '服务额度不可用，请查看火山方舟账户状态',
       content_review: reviewHint,
-      rate_limit: '请求过于频繁，请稍后手动重试',
+      rate_limit: '请求过于频繁，请稍后重试',
       parameters:
         failure.parameter === 'image'
           ? `服务商未接受这张图片${failure.imageReason ? `（${{ format: '格式', decode: '编码', dimensions: '尺寸', size: '文件大小', fetch: '下载失败', reference_count: '图片数量' }[failure.imageReason]}）` : ''}，当前成果已保留`
-          : `请求参数不被接受${failure.parameter ? `（${failure.parameter}）` : ''}，请展开错误详情`,
+          : '画图失败，请检查模型设置',
       service: '服务暂不可用，结果可能不确定，请先核对服务商记录',
-      unknown: '请查看开发者模式中的错误码和请求编号，或火山方舟调用记录',
+      unknown: '生成失败，请查看错误详情',
     };
     super(`生图接口返回 HTTP ${failure.httpStatus}：${hint[failure.category]}`);
     this.name = 'ImageProviderError';
+    this.userMessage = hint[failure.category];
   }
 }

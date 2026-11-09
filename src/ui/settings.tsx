@@ -331,7 +331,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
               onChangeText={setIntervalMinutes}
               keyboardType="number-pad"
             />
-            <Note>接着刚才聊的话题另计，最多 2 次/小时、6 次/天；设为 0 会同时关闭。</Note>
+            <Note>设为 0 后，她不会主动开启或接续话题。</Note>
           </Card>
           <Button
             title={busy ? '保存中…' : '保存'}

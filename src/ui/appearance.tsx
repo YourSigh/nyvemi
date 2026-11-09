@@ -1,8 +1,4 @@
-import {
-  upgradeImageSettings,
-  imageRoutingLabel,
-  qualityImageSettings,
-} from '../appearance/settings';
+import { upgradeImageSettings, qualityImageSettings } from '../appearance/settings';
 import { StructuredOutputError } from '../providers/structured-error';
 import { id } from '../domain/models';
 import { usesVisualResearch } from '../appearance/model';
@@ -158,7 +154,15 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           })
           .catch(() => undefined);
       }
-      setError(e instanceof Error ? e.message : '操作失败，请重试');
+      setError(
+        e instanceof ImageProviderError
+          ? e.userMessage
+          : e instanceof StructuredOutputError
+            ? `${e.details.stage}未完成，请重试`
+            : e instanceof Error
+              ? e.message
+              : '操作失败，请重试',
+      );
     } finally {
       working.current = false;
       setBusy('');
@@ -177,7 +181,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
     await runtime.store.put('imageSettings', next);
   };
   const select = (index?: number) =>
-    void run('正在整理图层', async () => {
+    void run('正在制作动态形象', async () => {
       setRig(undefined);
       setEditing(false);
       const source = index === undefined ? draft?.selected : draft?.candidates[index];
@@ -198,7 +202,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       referenceId?: string;
     } = {},
   ) =>
-    void run(mode === 'animate' ? '正在保存参考图' : '正在确认角色', async () => {
+    void run(mode === 'animate' ? '正在读取图片' : '正在准备形象', async () => {
       await saveConfig(!options.planOnly && draft?.candidates.length !== 3 && !options.reviewAgain);
       setBuild(undefined);
       try {
@@ -219,11 +223,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             onStage: (stage) =>
               setBusy(
                 {
-                  brief: '正在确认角色特征',
-                  prompt: '正在整理绘图描述',
-                  reference: '正在理解角色要求',
+                  brief: '正在准备形象',
+                  prompt: '正在准备形象',
+                  reference: '正在准备形象',
                   generation: '正在生成形象',
-                  review: '正在对照参考检查形象',
+                  review: '正在检查候选图',
                 }[stage],
               ),
           },
@@ -264,30 +268,15 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   return (
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
-      <Note>
-        {meshAvatar || rig
-          ? '看看她现在的样子。'
-          : !editing && draft?.research
-            ? `这次画：${draft.research.brief.subject}`
-            : '描述你想见到的人，也可以上传一张参考图。'}
-      </Note>
       <ErrorText text={error} />
-      {draft?.advisories?.length ? (
-        <Details title="生成说明">
-          <Note>
-            {draft.advisories.includes('repair_unavailable')
-              ? '双臂自动修复未完成，已保留现有图层。可预览后决定是否使用。'
-              : '补充资料或自动核对暂不可用，已按原始要求继续。请直接看图选择。'}
-          </Note>
-        </Details>
-      ) : null}
       {failure || schemaFailure ? (
         <Details title="错误详情">
           {failure ? (
             <>
-              <Note>错误码：{failure.code ?? '服务商未提供'}</Note>
+              <Note>HTTP {failure.httpStatus}</Note>
+              {failure.code ? <Note>错误码：{failure.code}</Note> : null}
               {failure.parameter ? <Note>参数：{failure.parameter}</Note> : null}
-              <Note>请求编号：{failure.requestId ?? '服务商未提供'}</Note>
+              {failure.requestId ? <Note>请求编号：{failure.requestId}</Note> : null}
             </>
           ) : null}
           {schemaFailure ? (
@@ -322,19 +311,19 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           )}
           <Note>
             {build.stage === 'failed'
-              ? '制作暂停，已完成的部分已保留'
+              ? '制作暂停，可从当前进度继续'
               : busy
                 ? ({
-                    layers: '正在整理图层',
-                    checking: '正在检查连接和遮挡',
-                    repairing_arms: '正在自动修复双臂',
-                    finishing: '正在整理头发和五官',
+                    layers: '正在制作动态形象',
+                    checking: '正在检查效果',
+                    repairing_arms: '正在调整手臂',
+                    finishing: '正在完善细节',
                   }[build.stage] ?? '正在制作')
-                : '制作尚未完成，可以继续'}
+                : '可以继续制作'}
           </Note>
-          {build.total ? (
+          {busy && build.total ? (
             <Note>
-              {build.completed}/{build.total} 个图层已就绪
+              进度 {build.completed}/{build.total}
             </Note>
           ) : null}
           {!busy ? <Button title="继续制作" onPress={() => select()} /> : null}
@@ -426,9 +415,6 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               disabled={Boolean(busy)}
               onPress={() => setConfig(qualityImageSettings)}
             />
-            <Note>
-              Flash需在方舟开通，复杂形象效果可能有差异。失败不自动换用Pro；保存不会生图。
-            </Note>
             <Field
               label="Base URL"
               value={config.baseUrl}
@@ -448,14 +434,9 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
               autoCapitalize="none"
             />
           </Details>
-          <Note>
-            {imageRoutingLabel(config)}。
-            {mode === 'animate'
-              ? '制作会使用拆层额度，必要时自动修复一次双臂。'
-              : '点击后使用豆包额度。'}
-          </Note>
+          {config.provider === 'seedream' ? <Note>可能使用豆包额度。</Note> : null}
           <Button
-            title={mode === 'animate' ? '使用原图，整理图层' : '生成3张候选图'}
+            title={mode === 'animate' ? '让原图动起来' : '生成 3 张候选图'}
             disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
             onPress={() => generate()}
           />
@@ -500,7 +481,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       draft &&
       !draft.candidates.length &&
       mode !== 'animate' ? (
-        <Button title="继续生成3张候选图" disabled={Boolean(busy)} onPress={() => generate()} />
+        <Button title="继续生成候选图" disabled={Boolean(busy)} onPress={() => generate()} />
       ) : null}
       {!editing &&
       !rig &&
@@ -509,13 +490,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       (!build || build.stage === 'ready') &&
       (draft.candidates.length > 0 || (mode === 'animate' && draft.selected)) ? (
         <>
-          <Note>
-            {mode === 'animate'
-              ? '参考图已就绪'
-              : busy && draft.candidates.length < 3
-                ? `已生成 ${draft.candidates.length}/3 张`
-                : '选一张你喜欢的，再让她动起来。'}
-          </Note>
+          {mode !== 'animate' ? <Note>选一张你喜欢的形象。</Note> : null}
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
             {(mode === 'animate' && draft.selected ? [draft.selected] : draft.candidates).map(
               (asset, i) => (
@@ -542,62 +517,48 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                     height={Math.min(220, candidateWidth * 1.6)}
                   />
                   <Text style={{ color: palette.accent, textAlign: 'center' }}>选择 {i + 1}</Text>
-                  {usesVisualResearch(draft.promptVersion) ? (
-                    <Text
-                      style={{
-                        color:
-                          draft.candidateReviews?.[i]?.status === 'mismatch'
-                            ? palette.error
-                            : palette.muted,
-                        fontSize: 12,
-                      }}
-                    >
-                      {!draft.candidateReviews?.[i]
-                        ? '待核对'
-                        : draft.candidateReviews[i]?.status === 'match'
-                          ? '特征相符'
-                          : draft.candidateReviews[i]?.status === 'mismatch'
-                            ? '特征不符'
-                            : '不确定'}
-                    </Text>
-                  ) : null}
                 </Pressable>
               ),
             )}
           </View>
           <Button
-            title="就选这张，整理图层"
+            title="让她动起来"
             disabled={Boolean(busy) || (mode !== 'animate' && selectedIndex === undefined)}
             onPress={() => select(mode === 'animate' ? undefined : selectedIndex)}
           />
-          {selectedIndex !== undefined && draft.candidateReviews?.[selectedIndex]?.issues.length ? (
-            <Note>{draft.candidateReviews[selectedIndex]!.issues.slice(0, 2).join('；')}</Note>
-          ) : null}
-          {usesVisualResearch(draft.promptVersion) ? (
-            <>
-              <Note>自动核对仅供参考，以你喜欢哪张为准。</Note>
+          {config.provider === 'seedream' ? <Note>可能使用豆包额度。</Note> : null}
+          {usesVisualResearch(draft.promptVersion) &&
+            (draft.candidates.length < 3 ? (
               <TextButton
-                title={draft.candidates.length < 3 ? '继续完成本批' : '重新核对（不重新生图）'}
+                title="生成剩余候选图"
                 disabled={Boolean(busy)}
-                onPress={() => generate(false, { reviewAgain: draft.candidates.length === 3 })}
+                onPress={() => generate(false)}
               />
-            </>
-          ) : null}
-          <Note>整理图层使用豆包额度；必要时自动修复一次双臂，均按实际输出张数计费。</Note>
+            ) : (
+              <Details title="形象核对">
+                {selectedIndex !== undefined &&
+                draft.candidateReviews?.[selectedIndex]?.issues.length ? (
+                  <Note>
+                    {draft.candidateReviews[selectedIndex]!.issues.slice(0, 2).join('；')}
+                  </Note>
+                ) : null}
+                <TextButton
+                  title="重新核对"
+                  disabled={Boolean(busy)}
+                  onPress={() => generate(false, { reviewAgain: true })}
+                />
+              </Details>
+            ))}
           {mode !== 'animate' && draft.candidates.length === 3 ? (
             <TextButton
-              title={config.provider === 'seedream' ? '换一批候选图（重新付费）' : '换一批候选图'}
+              title="换一批"
               disabled={Boolean(busy)}
               onPress={() => {
                 if (config.provider === 'seedream')
-                  Alert.alert(
-                    '重新生成3张候选图',
-                    '将使用豆包额度生成3张新候选图，当前已保存形象保留。',
-                    [
-                      { text: '取消', style: 'cancel' },
-                      { text: '生成', onPress: () => generate(true) },
-                    ],
-                  );
+                  Alert.alert('换一批形象？', '将使用豆包额度生成 3 张新图。', [
+                    { text: '取消', style: 'cancel' },
+                    { text: '生成', onPress: () => generate(true) },
+                  ]);
                 else generate(true);
               }}
             />
@@ -615,23 +576,9 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
             forceEyesClosed={!awake.complete && awake.eyesClosed}
             state={awake.complete ? previewState : awake.state}
           />
-          <Note>
-            {error
-              ? '本次操作未完成，当前预览已保留'
-              : busy
-                ? `${busy}…`
-                : draft?.advisories?.includes('repair_unavailable')
-                  ? '双臂自动修复未完成，当前预览已保留'
-                  : !meshAvatar && (!rig || rig.source === 'mock')
-                    ? '可以导入你喜欢的角色形象'
-                    : !awake.complete
-                      ? elapsed < 1400
-                        ? '正在让她睁开眼睛'
-                        : elapsed < 2600
-                          ? '正在让她学会眨眼'
-                          : '正在让她动起来'
-                      : '醒来了。'}
-          </Note>
+          {draft?.advisories?.includes('repair_unavailable') && !busy && !error ? (
+            <Note>部分动作可能不自然，请先预览。</Note>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {(
               [
@@ -668,22 +615,18 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 title={draft.armRepairApplied ? '双臂已修复' : '修复双臂连接（付费）'}
                 disabled={Boolean(busy) || !awake.complete || draft.armRepairApplied}
                 onPress={() =>
-                  Alert.alert(
-                    '修复双臂连接',
-                    '复用当前原画和其他图层，重新拆出左右手。将使用豆包拆层额度，按实际输出张数计费。',
-                    [
-                      { text: '取消', style: 'cancel' },
-                      {
-                        text: '修复',
-                        onPress: () =>
-                          void run('正在修复双臂', async () => {
-                            setRig(await runtime.visuals.repairArms(cid));
-                            setDraft(await runtime.store.get('visualDrafts', cid));
-                            setPreviewState('idle');
-                          }),
-                      },
-                    ],
-                  )
+                  Alert.alert('修复双臂连接', '修复将使用豆包额度。', [
+                    { text: '取消', style: 'cancel' },
+                    {
+                      text: '修复',
+                      onPress: () =>
+                        void run('正在修复双臂', async () => {
+                          setRig(await runtime.visuals.repairArms(cid));
+                          setDraft(await runtime.store.get('visualDrafts', cid));
+                          setPreviewState('idle');
+                        }),
+                    },
+                  ])
                 }
               />
             </Details>
@@ -726,7 +669,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           }
         />
       ) : null}
-      {busy ? <Busy label={`${busy}…`} /> : null}
+      {busy && !build ? <Busy label={`${busy}…`} /> : null}
     </Page>
   );
 }

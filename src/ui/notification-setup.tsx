@@ -30,10 +30,12 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
   );
   const refresh = useCallback(async () => {
     setAllowed(bridge().canNotify());
-    setBackground(
-      backgroundSummary(await bridge().maintenanceState(), bridge().presenceState().running),
-    );
-    if (expanded) setHealth(deliverySummary(await report()));
+    if (expanded) {
+      setBackground(
+        backgroundSummary(await bridge().maintenanceState(), bridge().presenceState().running),
+      );
+      setHealth(deliverySummary(await report()));
+    }
   }, [expanded, report]);
   useFocusEffect(
     useCallback(() => {
@@ -68,31 +70,24 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
         <Text style={{ color: palette.ink, fontSize: 16 }}>
           {allowed ? '系统通知已开启' : '系统通知未开启'}
         </Text>
-        {!allowed ? (
-          <>
-            <Note>请允许通知，并打开「角色来信」。</Note>
-            <Button
-              title="开启通知"
-              disabled={busy}
-              onPress={() =>
-                void act(async () => {
-                  if (!(await requestNotifications())) await bridge().openNotificationSettings();
-                })
-              }
-            />
-          </>
-        ) : null}
-        <Button
-          title="系统通知设置"
-          secondary
-          onPress={() => void act(() => bridge().openNotificationSettings())}
-        />
-        <Button
-          title="后台电池设置"
-          secondary
-          onPress={() => void act(() => bridge().openBatterySettings())}
-        />
-        <Note>{background}</Note>
+        {allowed ? (
+          <Button
+            title="系统通知设置"
+            secondary
+            onPress={() => void act(() => bridge().openNotificationSettings())}
+          />
+        ) : (
+          <Button
+            title="开启通知"
+            disabled={busy}
+            onPress={() =>
+              void act(async () => {
+                if (!(await requestNotifications()) || !bridge().canNotify())
+                  await bridge().openNotificationSettings();
+              })
+            }
+          />
+        )}
       </Card>
       <Card>
         <Pressable
@@ -107,7 +102,12 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
         {expanded ? (
           <View style={{ gap: 12 }}>
             <Note>{health}</Note>
-            <Note>后台受省电和网络影响，可能延迟。强行停止后需重新打开 App。</Note>
+            <Note>{background}</Note>
+            <Button
+              title="后台电池设置"
+              secondary
+              onPress={() => void act(() => bridge().openBatterySettings())}
+            />
             <Button
               title="测试通知"
               secondary

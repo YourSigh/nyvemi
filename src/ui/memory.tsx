@@ -33,7 +33,7 @@ export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
     }, [refresh]),
   );
   const forget = (m: Memory) =>
-    Alert.alert('忘记这条记忆？', '这会删除本地的这条记忆。', [
+    Alert.alert('忘记这条记忆？', '忘记后无法恢复。', [
       { text: '取消', style: 'cancel' },
       {
         text: '忘记',
@@ -49,7 +49,6 @@ export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
   return (
     <Page>
       <Heading>她记住的事</Heading>
-      <Note>记忆来自你们的对话，也可能理解错。你可以让她忘记不想保留的内容。</Note>
       <ErrorText text={error} />
       {memories.length ? (
         memories.map((m) => (
@@ -74,7 +73,7 @@ export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
           </Card>
         ))
       ) : (
-        <Note>还没有需要留下的记忆。先随意聊聊吧。</Note>
+        <Note>还没有记忆</Note>
       )}
     </Page>
   );

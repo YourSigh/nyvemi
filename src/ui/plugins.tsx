@@ -77,7 +77,7 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
             }
           />
         </View>
-        <Note>可保存技能、组合现有工具。新增权限需你同意。</Note>
+        <Note>启用新权限时需要你确认。</Note>
       </Card>
       <Details title="添加插件">
         <Card>
@@ -109,9 +109,7 @@ export function PluginsScreen({ route }: ScreenProps<'Plugins'>) {
         </Card>
       </Details>
       <ErrorText text={error} />
-      {!rows.length ? (
-        <Note>还没有技能。你可以让她记住一种做事方法，或把现有工具组合成新工具。</Note>
-      ) : null}
+      {!rows.length ? <Note>还没有技能或插件</Note> : null}
       {rows.map((row) => (
         <Card key={row.id}>
           <Text style={{ color: palette.ink, fontSize: 17, fontWeight: '600' }}>

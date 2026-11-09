@@ -175,13 +175,13 @@ it('candidate cards only select; decomposition starts after explicit confirmatio
       navigation: {},
     } as never),
   );
-  expect(button('就选这张，整理图层').props.disabled).toBe(true);
+  expect(button('让她动起来').props.disabled).toBe(true);
   await act(async () => button('选择形象 2').props.onPress());
   expect(runtime.visuals.select).not.toHaveBeenCalled();
   const thumbnails = renderer!.root.findAllByType('CharacterImage' as never);
   expect(thumbnails).toHaveLength(3);
   expect(thumbnails.every((image) => image.props.width <= 100)).toBe(true);
-  await act(async () => button('就选这张，整理图层').props.onPress());
+  await act(async () => button('让她动起来').props.onPress());
   expect(runtime.visuals.select).toHaveBeenCalledWith('c', 1, expect.any(Function));
 });
 it('starts drawing directly after entering a key without a reference selection screen', async () => {
@@ -209,7 +209,7 @@ it('starts drawing directly after entering a key without a reference selection s
     } as never),
   );
   await act(async () => button('豆包 API Key').props.onChangeText('test-drawing-key'));
-  await act(async () => button('生成3张候选图').props.onPress());
+  await act(async () => button('生成 3 张候选图').props.onPress());
   expect(runtime.visuals.generate).toHaveBeenCalledOnce();
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
     'c',
@@ -265,9 +265,12 @@ it('treats automatic review as advisory and can recheck without requiring a draw
     } as never),
   );
   await act(async () => button('选择形象 1').props.onPress());
-  expect(button('就选这张，整理图层').props.disabled).toBe(false);
+  expect(button('让她动起来').props.disabled).toBe(false);
   expect(runtime.visuals.select).not.toHaveBeenCalled();
-  await act(async () => button('重新核对（不重新生图）').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('发型不符');
+  await act(async () => button('形象核对').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('发型不符');
+  await act(async () => button('重新核对').props.onPress());
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
     'c',
     expect.any(Object),
@@ -300,9 +303,10 @@ it('shows safe provider error details only when requested, including during firs
     } as never),
   );
   await act(async () => button('豆包 API Key').props.onChangeText('test-key'));
-  await act(async () => button('生成3张候选图').props.onPress());
-  expect(JSON.stringify(renderer!.toJSON())).toContain('本次生成结果未通过服务商审核');
+  await act(async () => button('生成 3 张候选图').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('生成的图片未通过审核');
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('safe-request-123');
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('HTTP 400');
   await act(async () => button('错误详情').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('safe-request-123');
   expect(JSON.stringify(renderer!.toJSON())).toContain('OutputImageSensitiveContentDetected');
@@ -361,8 +365,8 @@ it('shows the failing visual stage with folded safe schema details and persists 
     } as never),
   );
   await act(async () => button('豆包 API Key').props.onChangeText('test-key'));
-  await act(async () => button('生成3张候选图').props.onPress());
-  expect(JSON.stringify(renderer!.toJSON())).toContain('参考图核对返回格式有误');
+  await act(async () => button('生成 3 张候选图').props.onPress());
+  expect(JSON.stringify(renderer!.toJSON())).toContain('参考图核对未完成，请重试');
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('invalid_type');
   await act(async () => button('错误详情').props.onPress());
   expect(JSON.stringify(renderer!.toJSON())).toContain('features.0');
@@ -405,7 +409,7 @@ it('uses an uploaded image directly and does not ask the user to select the same
     .find((n) => n.findAllByType('Text' as never).some((t) => t.props.children === '加参考图'))!;
   await act(async () => tab.props.onPress());
   await act(async () => button('上传参考图').props.onPress());
-  await act(async () => button('生成3张候选图').props.onPress());
+  await act(async () => button('生成 3 张候选图').props.onPress());
   expect(runtime.visuals.generate).toHaveBeenCalledWith(
     'c',
     expect.objectContaining({ mode: 'reference', reference: uploaded }),
@@ -458,7 +462,7 @@ it('shows a real partially built character on failure without claiming it is awa
     } as never),
   );
   await act(async () => button('选择形象 1').props.onPress());
-  await act(async () => button('就选这张，整理图层').props.onPress());
+  await act(async () => button('让她动起来').props.onPress());
   expect(renderer!.root.findAllByProps({ testID: 'visual-build-preview' })).toHaveLength(1);
   expect(renderer!.root.findAllByType('RigCharacter' as never)).toHaveLength(1);
   expect(JSON.stringify(renderer!.toJSON())).not.toContain('醒来了');

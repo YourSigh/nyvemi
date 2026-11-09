@@ -59,7 +59,8 @@ it.each([400, 401, 402, 429, 503])(
       throw Error('expected failure');
     } catch (error) {
       const failure = agentFailure(error);
-      expect(failure.message).toContain(`HTTP ${status}`);
+      expect(failure.detail).toContain(`HTTP ${status}`);
+      expect(failure.message).not.toContain('HTTP');
       expect(failure.message).not.toContain('DSH');
       expect(failure.code).toMatch(/^provider_/);
     }

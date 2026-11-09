@@ -415,7 +415,9 @@ it('reports the actual provider failure, keeps private details redacted and retr
   });
   const { redactKnownSecret } = await import('../src/domain/privacy');
   f.host.redact = async (value) => redactKnownSecret(value, 'test-secret');
-  await expect(f.chat.send('c', '你好', () => {})).rejects.toThrow('鉴权');
+  await expect(f.chat.send('c', '你好', () => {})).rejects.toThrow(
+    '请在聊天模型设置里检查密钥和权限',
+  );
   const user = (await f.chat.history('c')).find((m) => m.role === 'user')!;
   expect(user.status).toBe('error');
   const errors = await f.store.list('diagnostics', 'c');

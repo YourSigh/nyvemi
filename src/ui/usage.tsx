@@ -83,10 +83,7 @@ export function UsageScreen() {
   return (
     <Page>
       <Heading>相处的用量</Heading>
-      <Note>
-        只统计这台设备通过 Nyvemi 发出的请求。不查询余额。Token
-        来自服务商响应；费用是估算，账单以服务商为准。
-      </Note>
+      <Note>本机用量。费用为估算，以服务商账单为准。</Note>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {(
           [
@@ -106,7 +103,7 @@ export function UsageScreen() {
       <ErrorText text={error} />
       {!summary.length ? (
         <Card>
-          <Note>还没有请求记录。聊天、角色访谈、记忆整理和主动消息都会计入这里。</Note>
+          <Note>暂无用量</Note>
         </Card>
       ) : null}
       {summary.map((s) => (
@@ -125,15 +122,8 @@ export function UsageScreen() {
             其中缓存命中 {s.cachedInputTokens.toLocaleString()} token · {s.requests} 次请求 ·{' '}
             {s.failures} 次失败
           </Note>
-          {s.unpriced ? (
-            <Note>
-              {s.unpriced} 次未能计价（无单价、缺少 usage
-              或缓存拆分）。上面的费用仅是已计价部分，不是总账单。
-            </Note>
-          ) : null}
-          {s.unknownUsage ? (
-            <Note>{s.unknownUsage} 次未完整返回 token，未把它们算作零消耗。</Note>
-          ) : null}
+          {s.unpriced ? <Note>{s.unpriced} 次费用未计入</Note> : null}
+          {s.unknownUsage ? <Note>{s.unknownUsage} 次用量不完整</Note> : null}
         </Card>
       ))}
       <Details title="调整计费单价">
@@ -141,10 +131,7 @@ export function UsageScreen() {
           <Note>
             {model || '先连接聊天模型'} · {endpoint}
           </Note>
-          <Note>
-            单位：每百万
-            token。固定单价不会自动跟随高峰/空闲或节假日变化；按你的实际计费档位选择，也可以手动填写。不同币种分开统计。
-          </Note>
+          <Note>填写每百万 token 的单价，按实际计费档位调整。</Note>
           {new URL(endpoint || 'https://example.org').hostname === 'api.deepseek.com'
             ? deepSeekPrices
                 .filter(
@@ -162,7 +149,7 @@ export function UsageScreen() {
                       setInput(String(p.price.inputPerMillion));
                       setCached(String(p.price.cachedInputPerMillion));
                       setOutput(String(p.price.outputPerMillion));
-                      setNotice('已填入 2026-10-22 官方人民币价格，确认后请保存。');
+                      setNotice('已填入参考单价，请核对后保存。');
                     }}
                   />
                 ))
@@ -242,6 +229,6 @@ function purposeLabel(purpose: string): string {
         proactive_generation: '主动来信',
         connection_test: '连接测试',
       } as Record<string, string>
-    )[purpose] ?? purpose
+    )[purpose] ?? '其他用量'
   );
 }

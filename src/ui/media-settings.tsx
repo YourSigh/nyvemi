@@ -1,8 +1,4 @@
-import {
-  upgradeImageSettings,
-  imageRoutingLabel,
-  qualityImageSettings,
-} from '../appearance/settings';
+import { upgradeImageSettings, qualityImageSettings } from '../appearance/settings';
 import { saveMediaConfiguration } from '../application/media-settings';
 import { useCallback, useState } from 'react';
 import { Linking, Switch, Text, View } from 'react-native';
@@ -76,19 +72,12 @@ export function MediaSettingsScreen() {
     <Page>
       <Card>
         <Text style={{ color: palette.ink, fontSize: 17 }}>看懂你发来的图片</Text>
-        <Note>
-          {settings.visionSource === 'chat'
-            ? '默认使用聊天模型看图，共用已保存的密钥。'
-            : '正在使用自定义识图模型。'}
-        </Note>
         <Details title="自定义识图">
           {toggle('使用聊天模型识图', settings.visionSource === 'chat', (v) => {
             setKey('');
             setSettings({ ...settings, visionSource: v ? 'chat' : 'custom' });
           })}
-          {settings.visionSource === 'chat' ? (
-            <Note>无需额外配置。</Note>
-          ) : (
+          {settings.visionSource !== 'chat' ? (
             <>
               <Field
                 label="识图 Base URL"
@@ -107,14 +96,14 @@ export function MediaSettingsScreen() {
               )}
               <Field
                 label={settings.reuseImageKey ? '豆包共用 API Key' : '视觉模型 API Key'}
-                placeholder={hasKey ? '已保存，留空保留' : '填入你自己的Key'}
+                placeholder={hasKey ? '已保存，留空保留' : '粘贴 API Key'}
                 value={key}
                 onChangeText={setKey}
                 secureTextEntry
                 autoCapitalize="none"
               />
             </>
-          )}
+          ) : null}
         </Details>
       </Card>
       <Card>
@@ -123,7 +112,7 @@ export function MediaSettingsScreen() {
         >
           <Text style={{ color: palette.ink, fontSize: 17 }}>豆包 · 画图</Text>
           <TextButton
-            title="获取 Key"
+            title="获取密钥"
             onPress={() =>
               void Linking.openURL(
                 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey',
@@ -131,7 +120,6 @@ export function MediaSettingsScreen() {
             }
           />
         </View>
-        <Note>{imageRoutingLabel(draw)}；共用一个豆包Key。</Note>
         {toggle('允许聊天中生图', settings.drawingEnabled, (v) =>
           setSettings({ ...settings, drawingEnabled: v }),
         )}
@@ -166,7 +154,7 @@ export function MediaSettingsScreen() {
               setSaved(false);
             }}
           />
-          {toggle('允许后台自主生图', settings.autonomousDrawing, (v) =>
+          {toggle('允许后台画图（使用豆包额度）', settings.autonomousDrawing, (v) =>
             setSettings({ ...settings, autonomousDrawing: v }),
           )}
           <Field
@@ -187,11 +175,7 @@ export function MediaSettingsScreen() {
             onChangeText={(layerModel) => setDraw({ ...draw, layerModel })}
             autoCapitalize="none"
           />
-
-          <Note>Flash价格更低，复杂形象拆层效果可能有差异；失败不自动换用更贵模型。</Note>
-          <Note>后台自主生图会使用你的额度；每个角色每天最多 5 次尝试。</Note>
         </Details>
-        <Note>按服务商规则计费。保存设置不会生成图片。</Note>
       </Card>
       <ErrorText text={error} />
       {saved ? <Note>已保存</Note> : null}

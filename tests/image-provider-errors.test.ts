@@ -110,8 +110,8 @@ it('distinguishes review of reference, prompt and generated output without blami
     new ImageProviderError({ httpStatus: 400, code, category: 'content_review' }).message;
   expect(message('InputImageSensitiveContentDetected')).toContain('参考图未通过');
   expect(message('InputTextSensitiveContentDetected')).toContain('绘图文字未通过');
-  expect(message('OutputImageSensitiveContentDetected')).toContain('不等于你的描述或参考图违规');
-  expect(message('SensitiveContentDetected')).toContain('查看拒绝环节');
+  expect(message('OutputImageSensitiveContentDetected')).toContain('生成的图片未通过审核');
+  expect(message('SensitiveContentDetected')).toContain('调整描述或参考图');
 });
 it('classifies image-specific rejection reasons without retaining the raw provider message', async () => {
   for (const [message, reason] of [

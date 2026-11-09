@@ -74,7 +74,7 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
           mimeType: 'application/zip',
           dialogTitle: '保存 Nyvemi 角色备份',
         });
-      else setNotice(`备份已保存到本地缓存：${uri}`);
+      else setNotice(`备份已保存：${uri}`);
     } catch {
       setError('导出失败，请检查设备剩余空间、头像文件与本地数据后重试。');
     } finally {
@@ -84,7 +84,7 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
   return (
     <Page>
       <Heading>角色备份与恢复</Heading>
-      <Note>保存角色、记忆、聊天和形象。备份包含私人对话，请妥善保管。</Note>
+      <Note>备份含私人对话，请妥善保管。</Note>
       <Details title="备份包含什么？">
         <Note>
           包含人格、记忆、关系、兴趣、经历、对话、未完成事件和头像。不含密钥和模型连接配置，文件未加密。
@@ -111,8 +111,8 @@ export function TransferScreen({ navigation, route }: ScreenProps<'Transfer'>) {
             {preview.messages.length} 条对话 · {preview.memories.length} 条记忆 ·{' '}
             {preview.experiences.length} 个经历
           </Note>
-          <Note>导入用于恢复这位角色；已有角色时，请先到设置中备份并确认清空。</Note>
-          <Button title="导入这个人" disabled={busy} onPress={() => void importPerson()} />
+          {route.params?.characterId ? <Note>导入前，请先备份并清空当前角色。</Note> : null}
+          <Button title="恢复角色" disabled={busy} onPress={() => void importPerson()} />
         </Card>
       ) : null}
     </Page>
