@@ -15,7 +15,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [config, setConfig] = useState<VoiceOptions>(voiceProfile());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
     setConfig(voiceOptions(settings?.voice));
@@ -46,21 +45,9 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         config.pitch,
       );
     } catch {
-      setError('这个声音暂时用不了，试试其他音色。');
+      setError('这个声音暂时用不了，试着安装语音包或换一个音色。');
     } finally {
       setBusy(false);
-    }
-  };
-  const download = async () => {
-    setError('');
-    setDownloading(true);
-    try {
-      await bridge().downloadVoicePack();
-      setVoices(await bridge().speechState());
-    } catch {
-      setError('音色下载失败，请检查网络和剩余空间');
-    } finally {
-      setDownloading(false);
     }
   };
   return (
@@ -97,10 +84,23 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         </>
       ) : (
         <>
-          <Note>
-            {voices.voices.find((voice) => voice.id === (config.voiceId ?? voices.preferred))
-              ?.label ?? '系统音色'}
-          </Note>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {[
+              ['gentle', '轻柔'],
+              ['bright', '清亮'],
+              ['calm', '自然'],
+              ['low', '低缓'],
+            ].map(([style, label]) => (
+              <TextButton
+                key={style}
+                title={label}
+                onPress={() => {
+                  const { rate, pitch } = voiceProfile(style);
+                  void save({ rate, pitch }).catch(() => setError('没有保存成功'));
+                }}
+              />
+            ))}
+          </View>
           <Details title="换个音色">
             {voices.voices.map((voice) => (
               <TextButton
@@ -112,11 +112,14 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
               />
             ))}
           </Details>
-          {!voices.expanded ? (
+          {error ? (
             <TextButton
-              title={downloading ? '正在下载…' : '下载更多音色 · 54 MB'}
-              disabled={downloading}
-              onPress={() => void download()}
+              title="安装或修复语音包"
+              onPress={() =>
+                void bridge()
+                  .installSpeechData()
+                  .catch(() => setError('请在系统设置中打开文字转语音'))
+              }
             />
           ) : null}
           <Button

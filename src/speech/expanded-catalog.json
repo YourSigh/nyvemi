@@ -1,7 +1,0 @@
-[
-  { "sid": 15, "name": "轻声 · 女声", "tone": "gentle", "gender": "feminine", "rate": 0.9 },
-  { "sid": 46, "name": "明朗 · 女声", "tone": "bright", "gender": "feminine", "rate": 1.0 },
-  { "sid": 34, "name": "沉静 · 女声", "tone": "low", "gender": "feminine", "rate": 0.9 },
-  { "sid": 66, "name": "柔和 · 男声", "tone": "gentle", "gender": "masculine", "rate": 0.94 },
-  { "sid": 96, "name": "低音 · 男声", "tone": "low", "gender": "masculine", "rate": 0.9 }
-]

@@ -1,4 +1,3 @@
-import { resolveVoiceOffer } from '../src/speech/preferences';
 import { executeIntentionWork } from '../src/proactive/requested-delivery';
 import { HeartbeatEngine } from '../src/proactive/heartbeat/engine';
 import { expect, it } from 'vitest';
@@ -437,57 +436,4 @@ it('reports the actual provider failure, keeps private details redacted and retr
   expect(history.filter((m) => m.role === 'user')).toHaveLength(1);
   expect(history.find((m) => m.id === user.id)?.status).toBe('complete');
   expect(history.some((m) => m.content === '现在连上了')).toBe(true);
-});
-
-it('proposes a voice through DSH and only persists the selected voice when confirmed', async () => {
-  const f = await setup(async (_request, n) =>
-    n === 1
-      ? tool('suggest_voice', { tone: 'low', gender: 'masculine', pace: 'slow' })
-      : tool('wait', { reason: '试听卡片已经显示' }),
-  );
-  await f.chat.send('c', '你能换个低一点的男声，讲慢一点吗？', () => {});
-  const offered = await f.store.get('settings', 'c');
-  expect(offered?.voice?.voiceId).toBeUndefined();
-  expect(offered?.voiceOffer).toMatchObject({ voiceId: 'kokoro:71', rate: 0.85 });
-  await resolveVoiceOffer(f.store, 'c', offered!.voiceOffer!, true);
-  const confirmed = await f.store.get('settings', 'c');
-  expect(confirmed?.voiceOffer).toBeUndefined();
-  expect(confirmed?.voice).toMatchObject({ enabled: false, voiceId: 'kokoro:71', rate: 0.85 });
-});
-
-it('does not expose voice suggestions during autonomous background turns', async () => {
-  const f = await setup(async (request) => {
-    const names = request.tools?.map((item) => item.name);
-    expect(names).not.toContain('suggest_voice');
-    expect(names).not.toContain('suggest_voice_pack');
-    return tool('wait', { reason: '没有要说的话' });
-  });
-  f.host.visible = () => false;
-  await f.agent.run({
-    characterId: 'c',
-    user: {
-      id: 'u',
-      characterId: 'c',
-      role: 'user',
-      content: '换音色',
-      origin: 'chat',
-      createdAt: Date.now(),
-      status: 'complete',
-    },
-  });
-  expect((await f.store.get('settings', 'c'))?.voiceOffer).toBeUndefined();
-});
-
-it('can look up voice options and then suggest a verified pack without installing or switching it', async () => {
-  const f = await setup(async (_request, n) => {
-    if (n === 1) return tool('web_search', { query: 'Kokoro 公开离线音色' });
-    if (n === 2) return tool('suggest_voice_pack', { tone: 'low', gender: 'feminine' });
-    return tool('wait', { reason: '等用户试听' });
-  });
-  await f.chat.send('c', '去网上找一款偏低的女声吧', () => {});
-  const settings = await f.store.get('settings', 'c');
-  expect(settings?.voice?.voiceId).toBeUndefined();
-  expect(settings?.voiceOffer).toMatchObject({ voiceId: 'kokoro:34', requiresPack: true });
-  await resolveVoiceOffer(f.store, 'c', settings!.voiceOffer!, false);
-  expect((await f.store.get('settings', 'c'))?.voiceOffer).toBeUndefined();
 });

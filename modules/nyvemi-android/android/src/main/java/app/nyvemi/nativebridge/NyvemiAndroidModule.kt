@@ -36,11 +36,6 @@ class NyvemiAndroidModule : Module() {
   private val voiceInput = NyvemiVoiceInput { id, text -> sendEvent("voicePartial", mapOf("id" to id, "text" to text)) }
   private val channelId = "nyvemi-companions-v1"
   private val speechOutput = NyvemiSpeechOutput()
-  private val bundledSpeech = NyvemiBundledSpeech()
-  private fun stopSpeech() {
-    bundledSpeech.stop()
-    speechOutput.stop()
-  }
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
   private fun manager(ctx: Context): NotificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
   private fun channel(ctx: Context) {
@@ -83,16 +78,9 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
-    AsyncFunction("speechState") { promise: expo.modules.kotlin.Promise ->
-      bundledSpeech.state(context(), promise)
-    }.runOnQueue(Queues.MAIN)
-    AsyncFunction("speakLocal") { id: String, text: String, voiceId: String?, rate: Double, pitch: Double, promise: expo.modules.kotlin.Promise ->
-      stopSpeech()
-      if (NyvemiBundledSpeech.handles(voiceId)) bundledSpeech.speak(context(), text, voiceId, rate, promise)
-      else speechOutput.speak(context(), id, text, voiceId, rate, pitch, promise)
-    }.runOnQueue(Queues.MAIN)
-    AsyncFunction("downloadVoicePack") { NyvemiVoicePack.install(context().applicationContext) }
-    AsyncFunction("stopSpeech") { stopSpeech() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("speechState") { promise: expo.modules.kotlin.Promise -> speechOutput.state(context(),promise) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("speakLocal") { id: String, text: String, voiceId: String?, rate: Double, pitch: Double, promise: expo.modules.kotlin.Promise -> speechOutput.speak(context(),id,text,voiceId,rate,pitch,promise) }.runOnQueue(Queues.MAIN)
+    AsyncFunction("stopSpeech") { speechOutput.stop() }.runOnQueue(Queues.MAIN)
     AsyncFunction("installSpeechData") { speechOutput.install(context()) }.runOnQueue(Queues.MAIN)
     AsyncFunction("refineCharacterRig") { uri: String, spec: String -> NyvemiRigRefinement.refine(context(), uri, spec) }
     AsyncFunction("prepareCharacterImage") { uri: String -> NyvemiCharacterRaster.prepare(context(), uri) }
@@ -116,8 +104,8 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("startVoice") { id: String -> voiceInput.start(context(), id) }.runOnQueue(Queues.MAIN)
     AsyncFunction("finishVoice") { id: String, cancel: Boolean, promise: expo.modules.kotlin.Promise -> voiceInput.finish(id, cancel, promise) }.runOnQueue(Queues.MAIN)
     AsyncFunction("cancelVoice") { id: String -> voiceInput.cancel(id) }.runOnQueue(Queues.MAIN)
-    OnActivityEntersBackground { themeTransition.finish(); voiceInput.cancel(); stopSpeech() }
-    OnDestroy { bundledSpeech.shutdown(); speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
+    OnActivityEntersBackground { themeTransition.finish(); voiceInput.cancel(); speechOutput.stop() }
+    OnDestroy { speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
     AsyncFunction("dictate") { promise: expo.modules.kotlin.Promise ->
       val activity = appContext.currentActivity
       if (activity == null || dictation != null) { promise.reject("dictation_unavailable", "请稍后重试语音输入", null); return@AsyncFunction }

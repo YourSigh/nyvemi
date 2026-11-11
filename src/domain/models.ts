@@ -162,16 +162,6 @@ export const ExperienceSchema = z
   })
   .strict();
 export type Experience = z.infer<typeof ExperienceSchema>;
-export const VoiceOfferSchema = z
-  .object({
-    voiceId: z.string().regex(/^kokoro:\d+$/),
-    label: z.string().min(1).max(40),
-    rate: z.number().min(0.65).max(1.3),
-    requiresPack: z.literal(true).optional(),
-  })
-  .strict();
-export type VoiceOffer = z.infer<typeof VoiceOfferSchema>;
-
 export const SettingsSchema = z
   .object({
     id: z.string(),
@@ -198,7 +188,16 @@ export const SettingsSchema = z
       })
       .strict()
       .optional(),
-    voiceOffer: VoiceOfferSchema.optional(),
+    // Character bundles from 0.20.0 can still contain an unused Kokoro voice offer.
+    voiceOffer: z
+      .object({
+        voiceId: z.string().regex(/^kokoro:\d+$/),
+        label: z.string().min(1).max(40),
+        rate: z.number().min(0.65).max(1.3),
+        requiresPack: z.literal(true).optional(),
+      })
+      .strict()
+      .optional(),
     explorationEnabled: z.boolean().optional(),
   })
   .strict();

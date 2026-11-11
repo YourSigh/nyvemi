@@ -1,4 +1,3 @@
-import { chooseVoice, openingVoiceChoices, VoiceRequestSchema } from '../speech/selection';
 import { voiceOptions, voiceProfile } from '../speech/preferences';
 import { visualThemes } from '../theme/visual-presets';
 import { understandName } from './name';
@@ -124,8 +123,7 @@ const Reply = z.object({
   acknowledgement: z.string().trim().min(1).max(160),
   answer: z.string().trim().max(1000).optional(),
   deferAppearance: z.boolean().optional(),
-  voiceStyle: VoiceRequestSchema.shape.tone,
-  voice: VoiceRequestSchema.optional(),
+  voiceStyle: z.enum(['gentle', 'bright', 'calm', 'low']).optional(),
 });
 export class HatchingService {
   constructor(
@@ -371,7 +369,7 @@ export class HatchingService {
                   {
                     role: 'system',
                     content:
-                      '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。只有声音题可以输出voice对象，tone取gentle/bright/calm/low，gender取feminine/masculine，pace取slow/natural/fast。只填用户表达或明显暗示的偏好，静音意图不输出voice。',
+                      '你正在和刚认识的人聊天，你的形象暂时是一颗蛋。根据用户刚刚的回答，用一句自然、具体、简短的话接住，不用向导口吻，不写“已记录”“这会加入设定”，也别反复说“我记住了/记下了”。不要机械复述完整答案，多数用3到20字自然接一句，别重复recentReplies里的表达。不夸张吹捧、不说AI或数字人。只回应当前答案，不另问问题，下一题由应用发送。输出JSON acknowledgement；answer用于提取简洁设定，名字题提取名字，用户请你取名时给一个自然名字；其余不要篡改用户偏好。外貌题用户想晚点再决定时输出deferAppearance=true。声音题只提取音色偏好。voiceStyle仅声音题按gentle/bright/calm/low选一项。',
                   },
                   {
                     role: 'user',
@@ -442,22 +440,16 @@ export class HatchingService {
             await tx.put('characters', { ...character, persona: { ...character.persona, name } });
           if (q.key === 'voice') {
             const settings = await tx.get('settings', cid);
-            if (settings) {
-              const silent = value === q.choices[4];
-              const preference =
-                openingVoiceChoices[q.choices.indexOf(value)] ??
-                reply.voice ??
-                (reply.voiceStyle ? { tone: reply.voiceStyle } : undefined);
+            if (settings)
               await tx.put('settings', {
                 ...settings,
                 voice: {
                   ...voiceOptions(settings.voice),
-                  ...(silent ? { enabled: false, playbackSet: true as const } : {}),
+                  ...voiceProfile(reply.voiceStyle),
+                  enabled: value !== '先静音聊天' && voiceOptions(settings.voice).enabled,
                   description: value,
                 },
-                voiceOffer: !silent && preference ? chooseVoice(preference) : undefined,
               });
-            }
           }
           for (const message of replies) await tx.put('messages', message);
         });

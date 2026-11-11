@@ -1,7 +1,7 @@
 import { it, expect, vi } from 'vitest';
 import { SpeechQueue } from '../src/speech/queue';
 import { voiceOptions, voiceProfile } from '../src/speech/preferences';
-import type { Message } from '../src/domain/models';
+import { defaultSettings, SettingsSchema, type Message } from '../src/domain/models';
 
 const muted = voiceProfile();
 const audible = { ...muted, enabled: true, playbackSet: true } as const;
@@ -26,6 +26,19 @@ it('defaults to mute, including old preferences that could be enabled automatica
     voiceId: 'zh',
   });
   expect(voiceOptions(audible).enabled).toBe(true);
+});
+
+it('uses the system default voice for settings and bundles saved with Kokoro', () => {
+  const settings = SettingsSchema.parse({
+    ...defaultSettings('c'),
+    voice: { ...audible, voiceId: 'kokoro:34' },
+    voiceOffer: { voiceId: 'kokoro:15', label: '轻声', rate: 0.9, requiresPack: true },
+  });
+  expect(voiceOptions(settings.voice)).toMatchObject({
+    enabled: true,
+    voiceId: undefined,
+    rate: audible.rate,
+  });
 });
 
 it('skips history and pagination, then reads each new complete assistant message once', async () => {

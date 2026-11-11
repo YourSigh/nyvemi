@@ -8,7 +8,6 @@ import type { NotificationGateway } from '../proactive/heartbeat/engine';
 export interface LocalSpeechState {
   available: boolean;
   preferred?: string | null;
-  expanded?: boolean;
   voices: { id: string; label: string }[];
 }
 interface AndroidBridge {
@@ -21,7 +20,6 @@ interface AndroidBridge {
     pitch: number,
   ): Promise<boolean>;
   stopSpeech(): Promise<void>;
-  downloadVoicePack(): Promise<void>;
   installSpeechData(): Promise<void>;
   refineCharacterRig(
     uri: string,
