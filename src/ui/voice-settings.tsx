@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { QwenPackCard, useQwenPack } from './qwen-pack';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Switch, View, Text } from 'react-native';
 import Slider from '@react-native-community/slider';
 import {
@@ -46,7 +47,8 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     palette = usePalette(),
     cid = route.params.characterId;
   const [voices, setVoices] = useState<LocalSpeechState>();
-  const [qwen, setQwen] = useState(false);
+  const pack = useQwenPack(cid);
+  const qwen = pack.status?.phase === 'ready';
   const [config, setConfig] = useState<VoiceOptions>(voiceProfile());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,7 +67,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     setDraft(undefined);
     warmLocalSpeech(options);
     const native = bridge();
-    setQwen(await native.qwenVoiceAvailable());
     setVoices(await native.speechState());
   }, [runtime, cid]);
   useFocusEffect(
@@ -76,6 +77,17 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       };
     }, [refresh]),
   );
+  useEffect(() => {
+    if (!qwen) return;
+    void runtime.store
+      .get('settings', cid)
+      .then((settings) => {
+        const options = voiceOptions(settings?.voice);
+        setConfig(options);
+        warmLocalSpeech(options);
+      })
+      .catch(() => {});
+  }, [cid, qwen, runtime]);
   const save = async (patch: Partial<VoiceOptions>) => {
     try {
       const next = await updateVoice(runtime.store, cid, patch);
@@ -136,6 +148,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
           onValueChange={(enabled) => void save({ enabled, playbackSet: true })}
         />
       </View>
+      <QwenPackCard pack={pack} />
       {qwen ? (
         <Details title={qwenVoices.find(({ id }) => id === speaker)?.label ?? 'Qwen 音色'}>
           {qwenVoices.map(({ id, label }) => (

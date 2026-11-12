@@ -1,3 +1,4 @@
+import { voiceSettingsMessage, wantsVoiceSettings } from './voice-settings';
 import { setContactMode } from './contact';
 import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from './delivery';
 import { decideParticipation, type ParticipationDecision } from './participation';
@@ -170,6 +171,19 @@ export class ChatService {
           };
       await this.store.put('messages', user);
       onSaved();
+      if (!attachments.length && wantsVoiceSettings(content)) {
+        const card = voiceSettingsMessage(user);
+        user = { ...user, status: 'complete', replyDisposition: 'reply' };
+        await this.store.atomic(async (tx) => {
+          await tx.put('messages', user!);
+          await tx.put('messages', card);
+        });
+        hasReply = true;
+        this.activities.publish(characterId, { phase: 'complete', hasMessages: true });
+        onPreview('');
+        onSaved();
+        return;
+      }
       this.activities.publish(characterId, { phase: 'thinking' });
       if (this.hooks.agent) {
         const delivered = await this.hooks.agent({

@@ -193,7 +193,9 @@ The release command cleans App outputs to remove obsolete React assets and check
 
 ### Offline Qwen voice
 
-The ARM64 voice build includes Qwen3-TTS 0.6B CustomVoice (Q4_K) and nine preset voices. When message voice is enabled, Nyvemi loads the model as chat opens, starts synthesis during the typing pause, and plays the result when the bubble arrives. Going to the background or muting releases the model. Android system voices are available for lightweight builds, existing system-voice selections, or when the device cannot load Qwen. In Settings → Voice, each Qwen preset can be previewed and saved with its own playback speed, pitch, and volume.
+Nyvemi starts with the Android system voice. Download Qwen3-TTS 0.6B CustomVoice (Q4_K, 761 MB) in Settings → Voice or ask to change the companion’s voice in chat. The app can resume an interrupted download, tries HF-Mirror before Hugging Face, and verifies the model with SHA-256 before using it. You can also import the same GGUF file from Android Files. Each Qwen preset has its own playback speed, pitch, and volume. When message voice is enabled, Nyvemi warms the model as chat opens and starts synthesis during the typing pause. Going to the background or muting releases the model.
+
+For local builds that need a bundled voice pack, use the optional flag below.
 
 Install Android SDK CMake 3.22.1 and the NDK used by the Expo project. Download the model file before running the build command below. [Q4_K GGUF file](https://huggingface.co/sakasegawa/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF/blob/fd9df9364613a92a86b4137074bc281204823033/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf)
 
@@ -202,7 +204,7 @@ npm run android:release -- -PreactNativeArchitectures=arm64-v8a \
   -PnyvemiQwenModel=/absolute/path/to/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf
 ```
 
-The verified 761 MB model is stored uncompressed in the APK and read directly from it. The build pins speech.cpp and ggml and packages their licenses with the Qwen3-TTS model license. Speech synthesis runs offline and uses no provider key. Chat text uses the configured chat model. [Pinned speech.cpp source](https://github.com/nyosegawa/speech.cpp/tree/03555100287c118b41d1b475044e5ab1e07baa8c), [Qwen3-TTS model license](https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE).
+Downloaded models live in the app’s private storage. An optional bundled model is stored uncompressed and read directly from the APK. The build pins speech.cpp and ggml and packages their licenses with the Qwen3-TTS model license. Speech synthesis runs offline and uses no provider key. Chat text uses the configured chat model. [Pinned speech.cpp source](https://github.com/nyosegawa/speech.cpp/tree/03555100287c118b41d1b475044e5ab1e07baa8c), [Qwen3-TTS model license](https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE).
 
 The generated Expo project's release build currently uses the development signing key for sideload testing. It is not a Play Store signing setup. Configure your own release signing before distribution. The standalone release APK embeds JavaScript and does not need Metro. Do not commit APKs, AARs, build caches, keys or credentials. First builds may download large React Native/Gradle artifacts.
 

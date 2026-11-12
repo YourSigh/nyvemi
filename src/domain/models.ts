@@ -113,6 +113,7 @@ export const MessageSchema = z
     groupId: z.string().optional(),
     replyDisposition: z.enum(['reply', 'silence']).optional(),
     attachments: z.array(z.string()).max(3).optional(),
+    voiceSettings: z.literal(true).optional(),
   })
   .strict();
 export type Message = z.infer<typeof MessageSchema>;
@@ -183,6 +184,7 @@ export const SettingsSchema = z
         enabled: z.boolean(),
         playbackSet: z.literal(true).optional(),
         voiceId: z.string().max(200).optional(),
+        fallbackVoiceId: z.string().max(200).optional(),
         rate: z.number().min(0.65).max(1.3),
         pitch: z.number().min(0.7).max(1.4),
         qwenTuning: z.record(QwenSpeakerSchema, QwenTuningSchema).optional(),

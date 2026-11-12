@@ -143,6 +143,12 @@ export const agentTools: AgentTool[] = [
     },
   },
   {
+    name: 'offer_voice_settings',
+    description:
+      '当对方想更换、试用或调节你在 App 里的说话声音时，在聊天中显示语音设置卡。自然表达音色偏好也可以。仅展示入口，用户自己决定下载和选用。不要把对方自己的声音或普通语音话题当成换音色。',
+    parameters: { caption: string('简短接话，可省略', false) },
+  },
+  {
     name: 'change_theme',
     description:
       '根据对方这轮明确表达的配色偏好改变App主题。有喜欢某种颜色的表达也可以，不必固定口令。不要无故替用户换色。',

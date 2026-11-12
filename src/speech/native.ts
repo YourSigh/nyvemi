@@ -16,9 +16,14 @@ export const localSpeechDriver: SpeechDriver = {
         if (epoch !== playbackEpoch) return false;
       }
     }
-    const voiceId =
-      speaker || options.voiceId === 'system:default' ? null : (options.voiceId ?? null);
-    return native.speakLocal(id, text, voiceId, options.rate, options.pitch);
+    const voiceId = speaker ? options.fallbackVoiceId : options.voiceId;
+    return native.speakLocal(
+      id,
+      text,
+      voiceId === 'system:default' ? null : (voiceId ?? null),
+      options.rate,
+      options.pitch,
+    );
   },
   prepare: (id, text, options) => {
     const speaker = qwenSpeaker(options);

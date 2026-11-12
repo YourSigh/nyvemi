@@ -9,7 +9,6 @@ import android.media.PlaybackParams
 import android.os.SystemClock
 import android.util.Log
 import expo.modules.kotlin.Promise
-import java.io.IOException
 import java.util.concurrent.Executors
 
 internal class NyvemiQwenSpeech {
@@ -46,14 +45,8 @@ internal class NyvemiQwenSpeech {
   private var engine = 0L // Owned by worker.
   private var warming = false
 
-  fun available(ctx: Context): Boolean {
-    if (!NyvemiQwenNative.available) return false
-    return try {
-      ctx.assets.openFd(MODEL).use { it.length == MODEL_BYTES }
-    } catch (_: IOException) {
-      false
-    }
-  }
+  fun available(ctx: Context) =
+    NyvemiQwenNative.available && (NyvemiQwenPack.installed(ctx) || NyvemiQwenPack.bundled(ctx))
 
   fun warm(ctx: Context) {
     if (warming || !available(ctx)) return
@@ -141,8 +134,10 @@ internal class NyvemiQwenSpeech {
     ctx.getSystemService(ActivityManager::class.java).getMemoryInfo(memory)
     check(!memory.lowMemory && memory.availMem >= 900L * 1024 * 1024) { "qwen_memory_unavailable" }
     val started = SystemClock.elapsedRealtime()
-    engine = ctx.assets.openFd(MODEL).use {
-      check(it.length == MODEL_BYTES)
+    engine = if (NyvemiQwenPack.installed(ctx)) {
+      NyvemiQwenNative.load(NyvemiQwenPack.model(ctx).absolutePath.toByteArray(), 0, 0)
+    } else ctx.assets.openFd(NyvemiQwenPack.ASSET).use {
+      check(it.length == NyvemiQwenPack.MODEL_BYTES)
       NyvemiQwenNative.load(ctx.applicationInfo.sourceDir.toByteArray(), it.startOffset, it.length)
     }
     check(engine != 0L) { "qwen_load_failed" }
@@ -301,8 +296,6 @@ internal class NyvemiQwenSpeech {
 
   companion object {
     private const val TAG = "NyvemiQwen"
-    private const val MODEL = "qwen/customvoice.gguf"
-    private const val MODEL_BYTES = 760680704L
     private const val SAMPLE_RATE = 24000
   }
 }

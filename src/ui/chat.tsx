@@ -1,3 +1,5 @@
+import { QwenPackCard, useQwenPack } from './qwen-pack';
+import { wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
 import { localSpeechDriver, warmLocalSpeech } from '../speech/native';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
@@ -76,6 +78,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const s = useMemo(() => createStyles(theme), [theme]);
   const runtime = useRuntime();
   const cid = route.params.characterId;
+  const voicePack = useQwenPack(cid);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [developerMode, setDeveloperMode] = useState(false);
   const debug = useCharacterDebug(runtime.characterDebug, cid, developerMode);
@@ -264,6 +267,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       abort.current?.abort();
     };
   }, [cid, speech]);
+  const qwenReady = voicePack.status?.phase === 'ready';
+  const wasQwenReady = useRef(false);
+  useEffect(() => {
+    if (qwenReady && !wasQwenReady.current) {
+      speech.resume();
+      void refresh().catch(() => {});
+    }
+    wasQwenReady.current = qwenReady;
+  }, [qwenReady, refresh, speech]);
   const toggleVoice = async () => {
     const state = voice.current;
     if (state.saving) return;
@@ -322,7 +334,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     abort.current = new AbortController();
     try {
       const opening = await runtime.hatching.load(cid);
-      if (opening?.status === 'asking') {
+      const voiceRequest = !attachments.length && wantsVoiceSettings(text);
+      if (opening?.status === 'asking' && !voiceRequest) {
         const next = await runtime.hatching.answer(
           cid,
           text,
@@ -342,7 +355,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         if (next?.status === 'ready') await finishHatching();
         return;
       }
-      if (opening?.status === 'ready') {
+      if (opening?.status === 'ready' && !voiceRequest) {
         await finishHatching();
         return;
       }
@@ -538,6 +551,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   voiceEnabled &&
                   m.role === 'assistant' &&
                   m.status === 'complete' &&
+                  !m.voiceSettings &&
                   m.content.trim() !== '';
                 const Bubble = canSpeak ? Pressable : View;
                 const toggleBubble = () => {
@@ -581,6 +595,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                             >
                               {m.content}
                             </Text>
+                          ) : null}
+                          {m.voiceSettings ? (
+                            <QwenPackCard
+                              pack={voicePack}
+                              onSettings={() =>
+                                navigation.navigate('VoiceSettings', { characterId: cid })
+                              }
+                            />
                           ) : null}
                         </Bubble>
                         {m.status === 'error' ? (

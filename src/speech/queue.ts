@@ -59,6 +59,7 @@ export class SpeechQueue {
       if (
         message.role !== 'assistant' ||
         message.status !== 'complete' ||
+        message.voiceSettings ||
         this.seen.has(message.id)
       )
         continue;

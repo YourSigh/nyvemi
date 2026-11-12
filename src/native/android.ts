@@ -11,9 +11,26 @@ export interface LocalSpeechState {
   preferred?: string | null;
   voices: { id: string; label: string }[];
 }
+export interface QwenPackState {
+  phase:
+    | 'unsupported'
+    | 'missing'
+    | 'paused'
+    | 'downloading'
+    | 'importing'
+    | 'verifying'
+    | 'ready'
+    | 'error';
+  bytes: number;
+  size: number;
+  error?: 'space' | 'network' | 'checksum' | 'import';
+}
 interface AndroidBridge {
   speechState(): Promise<LocalSpeechState>;
-  qwenVoiceAvailable(): Promise<boolean>;
+  qwenPackState(): Promise<QwenPackState>;
+  downloadQwenPack(): Promise<void>;
+  pauseQwenPack(): Promise<void>;
+  importQwenPack(uri: string): Promise<void>;
   warmQwenVoice(): Promise<void>;
   prepareQwenSpeech(id: string, text: string, speaker: string): Promise<boolean>;
   speakQwen(

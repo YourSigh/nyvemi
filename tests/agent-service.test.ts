@@ -456,3 +456,22 @@ it('reports the actual provider failure, keeps private details redacted and retr
   expect(history.find((m) => m.id === user.id)?.status).toBe('complete');
   expect(history.some((m) => m.content === '现在连上了')).toBe(true);
 });
+
+it('allows the model to offer voice settings for natural requests without starting a download', async () => {
+  const f = await setup(async (request, n) => {
+    if (n === 1) {
+      expect(request.tools?.some(({ name }) => name === 'offer_voice_settings')).toBe(true);
+      return tool('offer_voice_settings', { caption: '试试我别的说话声？' });
+    }
+    return tool('wait', { reason: '等对方挑音色' });
+  });
+  await f.chat.send('c', '听腻你这个调调了，有其他选择嘛？', () => {});
+  const history = await f.chat.history('c');
+  expect(history.filter((m) => m.voiceSettings)).toEqual([
+    expect.objectContaining({
+      role: 'assistant',
+      groupId: history[0].id,
+      content: '试试我别的说话声？',
+    }),
+  ]);
+});

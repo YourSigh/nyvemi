@@ -1,3 +1,4 @@
+import { voiceSettingsMessage } from '../chat/voice-settings';
 import type { MediaService } from '../media/service';
 import { agentFailure } from './errors';
 import type { PluginManager } from '../extensions/manager';
@@ -551,6 +552,19 @@ export class CompanionAgent {
               (item) => item.appraisal!,
             );
             result = { remembered: true, evidenceId: doc.id };
+          } else if (name === 'offer_voice_settings' && input.user && this.host.visible()) {
+            const { caption } = z
+              .object({ caption: z.string().trim().min(1).max(120).optional() })
+              .parse(args);
+            const message = voiceSettingsMessage(input.user, caption);
+            if (!saved.some((item) => item.id === message.id)) {
+              await assertCurrent();
+              await this.store.put('messages', message);
+              saved.push(message);
+              bubbleCount++;
+              input.onSaved?.();
+            }
+            result = { shown: true };
           } else if (name === 'change_theme' && input.onThemeChange) {
             await input.onThemeChange(z.string().min(1).max(500).parse(args.description));
             result = { applied: true };
@@ -600,6 +614,7 @@ export class CompanionAgent {
             ...agentTools.filter(
               (t) =>
                 (t.name !== 'change_theme' || input.onThemeChange) &&
+                (t.name !== 'offer_voice_settings' || (input.user && this.host.visible())) &&
                 (!['inspect_image', 'draw_image', 'send_image'].includes(t.name) ||
                   this.host.media) &&
                 (![

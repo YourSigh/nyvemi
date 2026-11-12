@@ -79,3 +79,10 @@ export function updateQwenTuning(
     qwenTuning: { ...voice.qwenTuning, [speaker]: tuning },
   }));
 }
+
+export function preferQwenVoice(store: Storage, cid: string) {
+  return updateVoice(store, cid, (voice) => {
+    if (qwenSpeaker(voice)) return {};
+    return { voiceId: 'qwen:serena', fallbackVoiceId: voice.voiceId };
+  });
+}
