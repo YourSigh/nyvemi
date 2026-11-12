@@ -5,6 +5,7 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.media.PlaybackParams
 import android.os.SystemClock
 import android.util.Log
 import expo.modules.kotlin.Promise
@@ -12,10 +13,17 @@ import java.io.IOException
 import java.util.concurrent.Executors
 
 internal class NyvemiQwenSpeech {
+  data class Tuning(val rate: Double, val pitch: Double, val volume: Double) {
+    init {
+      require(rate in 0.8..1.2 && pitch in 0.9..1.1 && volume in 0.25..1.0)
+    }
+  }
+
   private class Utterance(val id: String, val text: String, val speaker: String) {
     val lock = Object()
     var preparing: Promise? = null
     var playing: Promise? = null
+    var tuning: Tuning? = null
     var ready = false
     var cancelled = false
     var ended = false
@@ -72,7 +80,7 @@ internal class NyvemiQwenSpeech {
     start(ctx, job)
   }
 
-  fun play(ctx: Context, id: String, text: String, speaker: String, promise: Promise) {
+  fun play(ctx: Context, id: String, text: String, speaker: String, tuning: Tuning, promise: Promise) {
     val job = find(id, text, speaker) ?: Utterance(id, text, speaker)
     synchronized(job.lock) {
       if (job.ended || job.cancelled || job.playing != null) {
@@ -80,6 +88,7 @@ internal class NyvemiQwenSpeech {
         return
       }
       job.playing = promise
+      job.tuning = tuning
       job.lock.notifyAll()
     }
     Log.i(TAG, "Playback requested")
@@ -160,8 +169,8 @@ internal class NyvemiQwenSpeech {
       return synchronized(job.lock) { !job.cancelled }
     }
     fun beginPlayback(): Boolean {
-      if (!awaitPlayback(job, started)) return false
-      val output = newTrack()
+      val tuning = awaitPlayback(job, started) ?: return false
+      val output = newTrack(tuning)
       track = output
       synchronized(job.lock) {
         if (job.cancelled) return false
@@ -173,7 +182,7 @@ internal class NyvemiQwenSpeech {
         if (job.cancelled) return false
         output.play()
       }
-      Log.i(TAG, "Playback started ${SystemClock.elapsedRealtime() - started}ms after synthesis began")
+      Log.i(TAG, "Playback started ${SystemClock.elapsedRealtime() - started}ms after synthesis began (rate=${tuning.rate}, pitch=${tuning.pitch}, volume=${tuning.volume})")
       return preRoll.drop(1).all { write(it) }
     }
     try {
@@ -219,8 +228,8 @@ internal class NyvemiQwenSpeech {
     }
   }
 
-  private fun awaitPlayback(job: Utterance, started: Long): Boolean = synchronized(job.lock) {
-    if (job.cancelled) return false
+  private fun awaitPlayback(job: Utterance, started: Long): Tuning? = synchronized(job.lock) {
+    if (job.cancelled) return null
     job.ready = true
     Log.i(TAG, "Speech ready in ${SystemClock.elapsedRealtime() - started}ms")
     job.preparing?.resolve(true)
@@ -228,10 +237,10 @@ internal class NyvemiQwenSpeech {
     val until = SystemClock.elapsedRealtime() + 15000
     while (job.playing == null && !job.cancelled) {
       val remaining = until - SystemClock.elapsedRealtime()
-      if (remaining <= 0) return false
+      if (remaining <= 0) return null
       job.lock.wait(remaining)
     }
-    !job.cancelled
+    if (job.cancelled) null else job.tuning
   }
 
   private fun language(text: String): String {
@@ -261,23 +270,33 @@ internal class NyvemiQwenSpeech {
     return -1
   }
 
-  private fun newTrack(): AudioTrack {
+  private fun newTrack(tuning: Tuning): AudioTrack {
     val size = AudioTrack.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
     check(size > 0) { "qwen_audio_unavailable" }
+    val tunedBuffer = kotlin.math.ceil(size / 2.0 * maxOf(1.0, tuning.rate)).toInt() * 2 + 2
     val track = AudioTrack.Builder()
       .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
       .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
         .setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
       .setTransferMode(AudioTrack.MODE_STREAM)
-      .setBufferSizeInBytes(maxOf(size, SAMPLE_RATE / 2))
+      .setBufferSizeInBytes(maxOf(tunedBuffer, SAMPLE_RATE / 2))
       .build()
-    if (track.state != AudioTrack.STATE_INITIALIZED) {
+    try {
+      check(track.state == AudioTrack.STATE_INITIALIZED) { "qwen_audio_unavailable" }
+      if (tuning.rate != 1.0 || tuning.pitch != 1.0) {
+        track.playbackParams = PlaybackParams().allowDefaults()
+          .setSpeed(tuning.rate.toFloat()).setPitch(tuning.pitch.toFloat())
+      }
+      if (tuning.volume != 1.0) {
+        check(track.setVolume(tuning.volume.toFloat()) == AudioTrack.SUCCESS) { "qwen_audio_volume_failed" }
+      }
+      if (android.os.Build.VERSION.SDK_INT >= 31) track.startThresholdInFrames = SAMPLE_RATE / 25
+      return track
+    } catch (e: Exception) {
       track.release()
-      error("qwen_audio_unavailable")
+      throw e
     }
-    if (android.os.Build.VERSION.SDK_INT >= 31) track.startThresholdInFrames = SAMPLE_RATE / 25
-    return track
   }
 
   companion object {

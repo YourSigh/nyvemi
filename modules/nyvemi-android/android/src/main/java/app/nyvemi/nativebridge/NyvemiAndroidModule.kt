@@ -86,8 +86,9 @@ class NyvemiAndroidModule : Module() {
       if (qwenSpeech.available(context())) qwenSpeech.prepare(context(), id, text, speaker, promise)
       else promise.resolve(false)
     }.runOnQueue(Queues.MAIN)
-    AsyncFunction("speakQwen") { id: String, text: String, speaker: String, promise: expo.modules.kotlin.Promise ->
-      if (qwenSpeech.available(context())) qwenSpeech.play(context(), id, text, speaker, promise)
+    AsyncFunction("speakQwen") { id: String, text: String, speaker: String, rate: Double, pitch: Double, volume: Double, promise: expo.modules.kotlin.Promise ->
+      val tuning = NyvemiQwenSpeech.Tuning(rate, pitch, volume)
+      if (qwenSpeech.available(context())) qwenSpeech.play(context(), id, text, speaker, tuning, promise)
       else promise.reject("qwen_voice_unavailable", "本机未安装 Qwen 音色", null)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("speakLocal") { id: String, text: String, voiceId: String?, rate: Double, pitch: Double, promise: expo.modules.kotlin.Promise ->

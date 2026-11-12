@@ -1,5 +1,11 @@
 import type { Settings } from '../domain/models';
 import type { Storage } from '../storage/store';
+import {
+  originalQwenSound,
+  QwenSpeakerSchema,
+  type QwenSpeaker,
+  type QwenTuning,
+} from '../domain/qwen-voice';
 
 export type VoiceOptions = NonNullable<Settings['voice']>;
 
@@ -19,31 +25,57 @@ export function voiceOptions(voice: Settings['voice']): VoiceOptions {
   };
 }
 
-export function updateVoice(store: Storage, cid: string, patch: Partial<VoiceOptions>) {
+export function updateVoice(
+  store: Storage,
+  cid: string,
+  patch: Partial<VoiceOptions> | ((voice: VoiceOptions) => Partial<VoiceOptions>),
+) {
   return store.atomic(async (tx) => {
     const settings = await tx.get('settings', cid);
     if (!settings) throw Error('角色不存在');
-    const voice = { ...voiceOptions(settings.voice), ...patch };
+    const current = voiceOptions(settings.voice);
+    const voice = { ...current, ...(typeof patch === 'function' ? patch(current) : patch) };
     await tx.put('settings', { ...settings, voice });
     return voice;
   });
 }
 
-export const qwenVoices = [
-  { id: 'serena', label: 'Serena · 温柔女声' },
-  { id: 'vivian', label: 'Vivian · 清亮女声' },
-  { id: 'uncle_fu', label: 'Uncle Fu · 沉稳男声' },
-  { id: 'dylan', label: 'Dylan · 北京男声' },
-  { id: 'eric', label: 'Eric · 四川男声' },
-  { id: 'ryan', label: 'Ryan · 英语男声' },
-  { id: 'aiden', label: 'Aiden · 英语男声' },
-  { id: 'ono_anna', label: 'Ono Anna · 日语女声' },
-  { id: 'sohee', label: 'Sohee · 韩语女声' },
-] as const;
+const qwenVoiceLabels: Record<QwenSpeaker, string> = {
+  serena: 'Serena · 温柔女声',
+  vivian: 'Vivian · 清亮女声',
+  uncle_fu: 'Uncle Fu · 沉稳男声',
+  dylan: 'Dylan · 北京男声',
+  eric: 'Eric · 四川男声',
+  ryan: 'Ryan · 英语男声',
+  aiden: 'Aiden · 英语男声',
+  ono_anna: 'Ono Anna · 日语女声',
+  sohee: 'Sohee · 韩语女声',
+};
 
-export function qwenSpeaker(options: VoiceOptions): string | undefined {
+export const qwenVoices = QwenSpeakerSchema.options.map((id) => ({
+  id,
+  label: qwenVoiceLabels[id],
+}));
+
+export function qwenSpeaker(options: VoiceOptions): QwenSpeaker | undefined {
   const voice = options.voiceId;
   if (!voice || voice.startsWith('kokoro:')) return 'serena';
   if (!voice.startsWith('qwen:')) return undefined;
-  return qwenVoices.find(({ id }) => voice === `qwen:${id}`)?.id ?? 'serena';
+  const speaker = QwenSpeakerSchema.safeParse(voice.slice('qwen:'.length));
+  return speaker.success ? speaker.data : 'serena';
+}
+
+export function qwenTuning(options: VoiceOptions, speaker: QwenSpeaker): QwenTuning {
+  return options.qwenTuning?.[speaker] ?? originalQwenSound;
+}
+
+export function updateQwenTuning(
+  store: Storage,
+  cid: string,
+  speaker: QwenSpeaker,
+  tuning: QwenTuning,
+) {
+  return updateVoice(store, cid, (voice) => ({
+    qwenTuning: { ...voice.qwenTuning, [speaker]: tuning },
+  }));
 }

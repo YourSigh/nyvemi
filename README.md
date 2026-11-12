@@ -193,7 +193,7 @@ The release command cleans App outputs to remove obsolete React assets and check
 
 ### Offline Qwen voice
 
-The ARM64 voice build includes Qwen3-TTS 0.6B CustomVoice (Q4_K) and nine preset voices. When message voice is enabled, Nyvemi loads the model as chat opens, starts synthesis during the typing pause, and plays the result when the bubble arrives. Going to the background or muting releases the model. Android system voices are available for lightweight builds, existing system-voice selections, or when the device cannot load Qwen.
+The ARM64 voice build includes Qwen3-TTS 0.6B CustomVoice (Q4_K) and nine preset voices. When message voice is enabled, Nyvemi loads the model as chat opens, starts synthesis during the typing pause, and plays the result when the bubble arrives. Going to the background or muting releases the model. Android system voices are available for lightweight builds, existing system-voice selections, or when the device cannot load Qwen. In Settings → Voice, each Qwen preset can be previewed and saved with its own playback speed, pitch, and volume.
 
 Install Android SDK CMake 3.22.1 and the NDK used by the Expo project. Download the model file before running the build command below. [Q4_K GGUF file](https://huggingface.co/sakasegawa/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF/blob/fd9df9364613a92a86b4137074bc281204823033/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf)
 

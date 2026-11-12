@@ -1,5 +1,5 @@
 import { bridge } from '../native/android';
-import { qwenSpeaker, type VoiceOptions } from './preferences';
+import { qwenSpeaker, qwenTuning, type VoiceOptions } from './preferences';
 import type { SpeechDriver } from './queue';
 
 let playbackEpoch = 0;
@@ -10,7 +10,8 @@ export const localSpeechDriver: SpeechDriver = {
     if (speaker) {
       const epoch = playbackEpoch;
       try {
-        return await native.speakQwen(id, text, speaker);
+        const { rate, pitch, volume } = qwenTuning(options, speaker);
+        return await native.speakQwen(id, text, speaker, rate, pitch, volume);
       } catch {
         if (epoch !== playbackEpoch) return false;
       }

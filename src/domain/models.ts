@@ -10,6 +10,7 @@ import {
 } from '../appearance/model';
 import { expressionFields } from '../character/interaction';
 import { z } from 'zod';
+import { QwenSpeakerSchema, QwenTuningSchema } from './qwen-voice';
 import type { ThemeRecord, ThemeOpening } from '../theme/model';
 import type { HatchingDraft } from '../characters/hatching';
 import type { InterviewDraft } from '../characters/interview';
@@ -184,6 +185,7 @@ export const SettingsSchema = z
         voiceId: z.string().max(200).optional(),
         rate: z.number().min(0.65).max(1.3),
         pitch: z.number().min(0.7).max(1.4),
+        qwenTuning: z.record(QwenSpeakerSchema, QwenTuningSchema).optional(),
         description: z.string().max(1000).optional(),
       })
       .strict()

@@ -3,6 +3,7 @@ import type { NativeDeliveryState } from '../proactive/delivery-report';
 import type { PresenceState } from '../presence/loop';
 import { requireNativeModule } from 'expo';
 import * as Notifications from 'expo-notifications';
+import type { QwenSpeaker, QwenTuning } from '../domain/qwen-voice';
 import type { Character, NotificationRecord } from '../domain/models';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 export interface LocalSpeechState {
@@ -15,7 +16,14 @@ interface AndroidBridge {
   qwenVoiceAvailable(): Promise<boolean>;
   warmQwenVoice(): Promise<void>;
   prepareQwenSpeech(id: string, text: string, speaker: string): Promise<boolean>;
-  speakQwen(id: string, text: string, speaker: string): Promise<boolean>;
+  speakQwen(
+    id: string,
+    text: string,
+    speaker: QwenSpeaker,
+    rate: QwenTuning['rate'],
+    pitch: QwenTuning['pitch'],
+    volume: QwenTuning['volume'],
+  ): Promise<boolean>;
   releaseQwenVoice(): Promise<void>;
   speakLocal(
     id: string,
