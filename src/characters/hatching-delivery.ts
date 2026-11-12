@@ -1,6 +1,6 @@
 import type { Storage } from '../storage/store';
 import type { HatchingDraft } from './hatching';
-import { typingDelay } from '../chat/delivery';
+import { typingDelay, waitForBubble, type SpeechDraft } from '../chat/delivery';
 export const waitForTyping = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
@@ -24,6 +24,7 @@ export async function deliverHatching(
   updated: () => void,
   wait = waitForTyping,
   signal?: AbortSignal,
+  onSpeechDraft?: SpeechDraft,
 ) {
   const outbox = draft.outbox;
   if (!outbox) return draft;
@@ -34,7 +35,12 @@ export async function deliverHatching(
     const message = await store.get('messages', outbox.messageIds[n]);
     if (!message) throw Error('开场消息缺失，请重新载入');
     if (message.status !== 'complete') {
-      await wait(typingDelay(message.content, n === 0, Date.now() - outbox.startedAt), signal);
+      await waitForBubble(
+        message.id,
+        message.content,
+        () => wait(typingDelay(message.content, n === 0, Date.now() - outbox.startedAt), signal),
+        onSpeechDraft,
+      );
       if (signal?.aborted) throw Error('开场发送已暂停');
     }
     draft = { ...draft, outbox: { ...outbox, delivered: n + 1 } };

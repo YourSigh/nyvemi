@@ -1,5 +1,5 @@
 import { setContactMode } from './contact';
-import { messageChunks, typingDelay } from './delivery';
+import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from './delivery';
 import { decideParticipation, type ParticipationDecision } from './participation';
 import { ChatActivityBus, type ChatActivity } from '../character/interaction';
 import { planReconnect } from '../proactive/reconnect';
@@ -123,6 +123,7 @@ export class ChatService {
     retryId?: string,
     onThemeChange?: (description: string) => Promise<void>,
     attachments: string[] = [],
+    onSpeechDraft?: SpeechDraft,
   ): Promise<void> {
     const content = text.trim();
     if ((!content && !attachments.length) || content.length > 6000 || attachments.length > 3)
@@ -177,6 +178,7 @@ export class ChatService {
           signal,
           onSaved,
           onThemeChange,
+          onSpeechDraft,
           activity: (value) => this.activities.publish(characterId, value),
         });
         user = {
@@ -341,7 +343,12 @@ export class ChatService {
       onPreview('');
       onSaved();
       for (let n = 0; n < group.length; n++) {
-        await this.pause(typingDelay(group[n].content, n === 0, Date.now() - startedAt));
+        await waitForBubble(
+          group[n].id,
+          group[n].content,
+          () => this.pause(typingDelay(group[n].content, n === 0, Date.now() - startedAt)),
+          onSpeechDraft,
+        );
         if (n === 0) this.activities.publish(characterId, { phase: 'talking' });
         const message: Message = {
           ...group[n],

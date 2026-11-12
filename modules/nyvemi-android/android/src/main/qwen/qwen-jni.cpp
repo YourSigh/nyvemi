@@ -3,9 +3,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 #include "ggml-cpu.h"
 #include "qwen3-tts/synthesizer.h"
@@ -13,11 +15,19 @@
 namespace {
 struct Engine {
     std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> backend{ggml_backend_cpu_init(), ggml_backend_free};
+    std::unique_ptr<ggml_threadpool, decltype(&ggml_threadpool_free)> pool{nullptr, ggml_threadpool_free};
     std::unique_ptr<Synthesizer> model;
 
     Engine(const std::string & path, uint64_t offset, uint64_t length) {
         if (!backend) throw std::runtime_error("CPU backend unavailable");
-        ggml_backend_cpu_set_n_threads(backend.get(), 4);
+        const int cores = static_cast<int>(std::thread::hardware_concurrency());
+        const int threads = std::clamp(cores - 1, 1, 4);
+        auto params = ggml_threadpool_params_default(threads);
+        params.poll = 10;
+        pool.reset(ggml_threadpool_new(&params));
+        if (!pool) throw std::runtime_error("Cannot initialize CPU thread pool");
+        ggml_backend_cpu_set_n_threads(backend.get(), threads);
+        ggml_backend_cpu_set_threadpool(backend.get(), pool.get());
         model = std::make_unique<Synthesizer>(path, backend.get(), offset, length);
         if (model->sample_rate() != 24000 || model->ids().voices.size() != 9)
             throw std::runtime_error("Unexpected voice pack");
@@ -53,7 +63,7 @@ Java_app_nyvemi_nativebridge_NyvemiQwenNative_release(JNIEnv *, jobject, jlong h
 
 extern "C" JNIEXPORT jboolean JNICALL
 Java_app_nyvemi_nativebridge_NyvemiQwenNative_generate(JNIEnv * env, jobject, jlong handle, jbyteArray text,
-                                                       jbyteArray voice, jobject receiver, jlong seed) {
+                                                       jbyteArray voice, jbyteArray language, jobject receiver) {
     try {
         auto & model = *reinterpret_cast<Engine *>(handle)->model;
         const jmethodID pcm = env->GetMethodID(env->GetObjectClass(receiver), "onPcm", "([S)Z");
@@ -61,13 +71,20 @@ Java_app_nyvemi_nativebridge_NyvemiQwenNative_generate(JNIEnv * env, jobject, jl
         SynthesisRequest request;
         request.text = utf8(env, text);
         request.speaker = utf8(env, voice);
-        request.seed = seed;
+        request.language = utf8(env, language);
+        request.seed = 42;
         // A short bubble should not produce minutes of audio if the sampler fails to end.
         request.max_frames = std::clamp<int>(request.text.size() * 3, 150, 800);
         bool sent = false;
         bool keepGoing = true;
         std::vector<jshort> converted;
+        const auto started = std::chrono::steady_clock::now();
         model.synthesize(request, [&](const float * samples, size_t count) {
+            if (!sent) {
+                const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - started).count();
+                __android_log_print(ANDROID_LOG_INFO, "NyvemiQwen", "First PCM in %lldms", static_cast<long long>(elapsed));
+            }
             converted.resize(count);
             for (size_t i = 0; i < count; ++i) {
                 const float sample = std::isfinite(samples[i]) ? samples[i] : 0.0f;

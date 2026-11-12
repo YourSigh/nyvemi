@@ -19,9 +19,12 @@ internal class NyvemiQwenSpeech {
     var ready = false
     var cancelled = false
     var ended = false
+    var output: AudioTrack? = null
 
     fun cancel() = synchronized(lock) {
       cancelled = true
+      output?.pause()
+      output?.flush()
       preparing?.resolve(false)
       preparing = null
       playing?.resolve(false)
@@ -79,6 +82,7 @@ internal class NyvemiQwenSpeech {
       job.playing = promise
       job.lock.notifyAll()
     }
+    Log.i(TAG, "Playback requested")
     start(ctx, job)
   }
 
@@ -90,12 +94,11 @@ internal class NyvemiQwenSpeech {
     synchronized(jobs) {
       if (jobs[job.id] === job) return
       jobs.remove(job.id)?.cancel()
-      // Only the next bubble needs a speculative head start. Keep any audible job.
-      for (pending in jobs.values.toList()) {
-        if (synchronized(pending.lock) { pending.playing == null }) {
-          jobs.remove(pending.id)
-          pending.cancel()
-        }
+      // A second bubble can start preparing before React has observed the first.
+      val pending = jobs.values.filter { synchronized(it.lock) { it.playing == null } }
+      for (stale in pending.take((pending.size - 2).coerceAtLeast(0))) {
+        jobs.remove(stale.id)
+        stale.cancel()
       }
       jobs[job.id] = job
       worker.execute { synthesize(ctx, job) }
@@ -146,10 +149,10 @@ internal class NyvemiQwenSpeech {
     val started = SystemClock.elapsedRealtime()
     val preRoll = ArrayList<ShortArray>()
     var buffered = 0
-    fun write(samples: ShortArray, mode: Int): Boolean {
+    fun write(samples: ShortArray): Boolean {
       var offset = 0
       while (offset < samples.size && synchronized(job.lock) { !job.cancelled }) {
-        val count = track!!.write(samples, offset, samples.size - offset, mode)
+        val count = track!!.write(samples, offset, samples.size - offset, AudioTrack.WRITE_BLOCKING)
         check(count > 0) { "qwen_audio_write_failed" }
         offset += count
         written += count
@@ -160,24 +163,33 @@ internal class NyvemiQwenSpeech {
       if (!awaitPlayback(job, started)) return false
       val output = newTrack()
       track = output
+      synchronized(job.lock) {
+        if (job.cancelled) return false
+        job.output = output
+      }
       // Queue the first audio before starting the sink, even when the player is cold.
-      write(preRoll.first(), AudioTrack.WRITE_BLOCKING)
-      output.play()
+      if (!write(preRoll.first())) return false
+      synchronized(job.lock) {
+        if (job.cancelled) return false
+        output.play()
+      }
       Log.i(TAG, "Playback started ${SystemClock.elapsedRealtime() - started}ms after synthesis began")
-      return preRoll.drop(1).all { write(it, AudioTrack.WRITE_BLOCKING) }
+      return preRoll.drop(1).all { write(it) }
     }
     try {
       if (synchronized(job.lock) { job.cancelled }) return
       val handle = load(ctx)
-      complete = NyvemiQwenNative.generate(handle, job.text.toByteArray(), job.speaker.toByteArray(), { samples ->
+      complete = NyvemiQwenNative.generate(
+        handle, job.text.toByteArray(), job.speaker.toByteArray(), language(job.text).toByteArray(),
+      ) { samples ->
         if (synchronized(job.lock) { job.cancelled }) return@generate false
-        if (track != null) return@generate write(samples, AudioTrack.WRITE_BLOCKING)
+        if (track != null) return@generate write(samples)
         val offset = if (preRoll.isEmpty()) firstAudible(samples) else 0
         if (offset < 0) return@generate true
         preRoll.add(if (offset == 0) samples else samples.copyOfRange(offset, samples.size))
         buffered += samples.size - offset
         buffered < SAMPLE_RATE / 7 || beginPlayback()
-      }, job.id.hashCode().toLong())
+      }
       if (track == null && complete && preRoll.isNotEmpty()) complete = beginPlayback()
       if (track == null && synchronized(job.lock) { !job.cancelled }) {
         error = IllegalStateException("qwen_no_audible_audio")
@@ -190,8 +202,9 @@ internal class NyvemiQwenSpeech {
     } catch (e: Exception) {
       error = e
     } finally {
-      track?.release()
       synchronized(job.lock) {
+        job.output = null
+        track?.release()
         job.ended = true
         job.preparing?.resolve(false)
         job.preparing = null
@@ -219,6 +232,20 @@ internal class NyvemiQwenSpeech {
       job.lock.wait(remaining)
     }
     !job.cancelled
+  }
+
+  private fun language(text: String): String {
+    // Kana and Hangul disambiguate mixed text that also contains Han characters.
+    var han = false
+    for (codePoint in text.codePoints().toArray()) {
+      when (Character.UnicodeScript.of(codePoint)) {
+        Character.UnicodeScript.HAN -> han = true
+        Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA -> return "ja"
+        Character.UnicodeScript.HANGUL -> return "ko"
+        else -> Unit
+      }
+    }
+    return if (han) "zh" else "auto"
   }
 
   private fun firstAudible(samples: ShortArray): Int {

@@ -1,6 +1,6 @@
 import { demoPersona } from './persona-fixture';
 import { it, expect, vi } from 'vitest';
-import { messageChunks, typingDelay } from '../src/chat/delivery';
+import { messageChunks, typingDelay, waitForBubble } from '../src/chat/delivery';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
@@ -89,4 +89,44 @@ it('waits for full output and per-message typing time before revealing separate 
   expect(
     (await chat.history('c')).filter((m) => m.role === 'assistant').map((m) => m.content),
   ).toEqual(['诶', '我想了想，还是想把这件事告诉你']);
+});
+
+it('overlaps speech preparation with typing and bounds its effect on text delivery', async () => {
+  vi.useFakeTimers();
+  try {
+    let shown = false;
+    const wait = vi.fn(() => new Promise<void>((resolve) => setTimeout(resolve, 350)));
+    const prepare = vi.fn(() => new Promise<boolean>(() => {}));
+    const delivery = waitForBubble('bubble', '我在', wait, prepare).then(() => {
+      shown = true;
+    });
+    expect(prepare).toHaveBeenCalledWith('bubble', '我在');
+    expect(wait).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(999);
+    expect(shown).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await delivery;
+    expect(shown).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('delivers at the original typing pace when speech is ready or fails early', async () => {
+  vi.useFakeTimers();
+  try {
+    for (const ready of [true, false]) {
+      const start = Date.now();
+      const pending = waitForBubble(
+        'bubble',
+        '我在',
+        () => new Promise<void>((resolve) => setTimeout(resolve, 350)),
+        () => (ready ? Promise.resolve(true) : Promise.reject(Error('voice unavailable'))),
+      ).then(() => Date.now() - start);
+      await vi.advanceTimersByTimeAsync(350);
+      expect(await pending).toBe(350);
+    }
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -1,3 +1,4 @@
+import type { SpeechDraft } from '../chat/delivery';
 import { voiceOptions, voiceProfile } from '../speech/preferences';
 import { visualThemes } from '../theme/visual-presets';
 import { understandName } from './name';
@@ -227,12 +228,19 @@ export class HatchingService {
     }
     return draft;
   }
-  async resume(cid: string, updated: () => void = () => {}, signal?: AbortSignal) {
+  async resume(
+    cid: string,
+    updated: () => void = () => {},
+    signal?: AbortSignal,
+    onSpeechDraft?: SpeechDraft,
+  ) {
     const lock = `hatching:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 120000))) return this.load(cid);
     try {
       const d = await this.load(cid);
-      return d ? await deliverHatching(this.store, d, updated, this.wait, signal) : d;
+      return d
+        ? await deliverHatching(this.store, d, updated, this.wait, signal, onSpeechDraft)
+        : d;
     } finally {
       await this.store.release(lock);
     }
@@ -292,13 +300,21 @@ export class HatchingService {
     applyColor?: (description: string) => Promise<void>,
     updated?: () => void,
     signal?: AbortSignal,
+    onSpeechDraft?: SpeechDraft,
   ) {
     const lock = `hatching:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 120000))) throw Error('等我接上这一句');
     try {
       let draft = await this.load(cid);
       if (draft?.outbox)
-        draft = await deliverHatching(this.store, draft, updated ?? (() => {}), this.wait, signal);
+        draft = await deliverHatching(
+          this.store,
+          draft,
+          updated ?? (() => {}),
+          this.wait,
+          signal,
+          onSpeechDraft,
+        );
       if (!draft || draft.status !== 'asking') return draft;
       const startedAt = Date.now();
       const q = hatchQuestions[draft.step];
@@ -354,6 +370,7 @@ export class HatchingService {
                 updated ?? (() => {}),
                 this.wait,
                 signal,
+                onSpeechDraft,
               );
             }
             normalizedName = named.name;
@@ -460,6 +477,7 @@ export class HatchingService {
           updated ?? (() => {}),
           this.wait,
           signal,
+          onSpeechDraft,
         );
       } catch (e) {
         const old = await this.store.get('messages', user.id);
@@ -472,12 +490,18 @@ export class HatchingService {
       await this.store.release(lock);
     }
   }
-  async finish(cid: string, updated: () => void = () => {}, signal?: AbortSignal) {
+  async finish(
+    cid: string,
+    updated: () => void = () => {},
+    signal?: AbortSignal,
+    onSpeechDraft?: SpeechDraft,
+  ) {
     const lock = `hatching:${cid}`;
     if (!(await this.store.lease(lock, Date.now(), 120000))) throw Error('正在整理最后一点');
     try {
       let d = await this.load(cid);
-      if (d?.outbox) d = await deliverHatching(this.store, d, updated, this.wait, signal);
+      if (d?.outbox)
+        d = await deliverHatching(this.store, d, updated, this.wait, signal, onSpeechDraft);
       const c = await this.store.get('characters', cid);
       if (!c || !d) throw Error('找不到这次相遇');
       if (d.status === 'complete') return c;
@@ -523,7 +547,7 @@ export class HatchingService {
         return complete;
       });
       updated();
-      await deliverHatching(this.store, finalDraft, updated, this.wait, signal);
+      await deliverHatching(this.store, finalDraft, updated, this.wait, signal, onSpeechDraft);
       return character;
     } finally {
       await this.store.release(lock);

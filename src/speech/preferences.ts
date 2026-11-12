@@ -28,3 +28,22 @@ export function updateVoice(store: Storage, cid: string, patch: Partial<VoiceOpt
     return voice;
   });
 }
+
+export const qwenVoices = [
+  { id: 'serena', label: 'Serena · 温柔女声' },
+  { id: 'vivian', label: 'Vivian · 清亮女声' },
+  { id: 'uncle_fu', label: 'Uncle Fu · 沉稳男声' },
+  { id: 'dylan', label: 'Dylan · 北京男声' },
+  { id: 'eric', label: 'Eric · 四川男声' },
+  { id: 'ryan', label: 'Ryan · 英语男声' },
+  { id: 'aiden', label: 'Aiden · 英语男声' },
+  { id: 'ono_anna', label: 'Ono Anna · 日语女声' },
+  { id: 'sohee', label: 'Sohee · 韩语女声' },
+] as const;
+
+export function qwenSpeaker(options: VoiceOptions): string | undefined {
+  const voice = options.voiceId;
+  if (!voice || voice.startsWith('kokoro:')) return 'serena';
+  if (!voice.startsWith('qwen:')) return undefined;
+  return qwenVoices.find(({ id }) => voice === `qwen:${id}`)?.id ?? 'serena';
+}

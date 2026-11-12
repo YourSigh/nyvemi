@@ -20,3 +20,30 @@ export function typingDelay(text: string, first: boolean, elapsed = 0): number {
   const target = Math.min(12000, 650 + units * 105);
   return Math.round(Math.max(first ? 350 : 650, target - (first ? Math.max(0, elapsed) : 0)));
 }
+
+export type SpeechDraft = (id: string, text: string) => Promise<boolean> | undefined;
+
+/** Let local synthesis use the composing pause, with a short deadline for cold or busy devices. */
+export async function waitForBubble(
+  id: string,
+  content: string,
+  wait: () => Promise<void>,
+  prepare?: SpeechDraft,
+): Promise<void> {
+  let audio: Promise<boolean> | undefined;
+  try {
+    audio = prepare?.(id, content);
+  } catch {
+    // Optional audio cannot block text delivery.
+  }
+  if (!audio) return wait();
+  const ready = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 1000);
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    void audio.then(finish, finish);
+  });
+  await Promise.all([wait(), ready]);
+}

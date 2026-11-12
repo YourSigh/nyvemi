@@ -1,6 +1,6 @@
 import { executeIntentionWork } from '../src/proactive/requested-delivery';
 import { HeartbeatEngine } from '../src/proactive/heartbeat/engine';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { CompanionAgent, type AgentHost } from '../src/agent/service';
 import type { AgentModelRequest, AgentModelResult } from '../src/agent/core';
 import { ChatService } from '../src/chat/service';
@@ -105,13 +105,32 @@ it('the real DSH action loop reads evidence, remembers an experience and emits s
       return tool('send_message', { messages: ['诶', '这个机器人学动作的办法还挺有意思'] });
     return tool('wait', { reason: '先等对方' });
   });
-  await f.chat.send('c', '找个你喜欢的东西看看', () => {});
+  const draftsAlreadyVisible: boolean[] = [];
+  const prepareSpeech = vi.fn(async (id: string) => {
+    draftsAlreadyVisible.push(Boolean(await f.store.get('messages', id)));
+    return true;
+  });
+  await f.chat.send(
+    'c',
+    '找个你喜欢的东西看看',
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [],
+    prepareSpeech,
+  );
   const messages = await f.chat.history('c');
   expect(messages.map((m) => m.content)).toEqual([
     '找个你喜欢的东西看看',
     '诶',
     '这个机器人学动作的办法还挺有意思',
   ]);
+  expect(draftsAlreadyVisible).toEqual([false, false]);
+  expect(prepareSpeech.mock.calls.map(([id]) => id)).toEqual(
+    messages.filter((m) => m.role === 'assistant').map((m) => m.id),
+  );
   expect(f.delays).toHaveLength(2);
   expect(f.delays[1]).toBeGreaterThan(f.delays[0]);
   const experiences = await f.store.list('experiences', 'c');

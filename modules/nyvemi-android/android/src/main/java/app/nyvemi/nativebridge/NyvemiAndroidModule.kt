@@ -94,7 +94,7 @@ class NyvemiAndroidModule : Module() {
       speechOutput.speak(context(), id, text, voiceId, rate, pitch, promise)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("stopSpeech") { speechOutput.stop(); qwenSpeech.stop() }.runOnQueue(Queues.MAIN)
-    AsyncFunction("releaseQwenVoice") { qwenSpeech.release() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("releaseQwenVoice") { speechOutput.stop(); qwenSpeech.release() }.runOnQueue(Queues.MAIN)
     AsyncFunction("installSpeechData") { speechOutput.install(context()) }.runOnQueue(Queues.MAIN)
     AsyncFunction("refineCharacterRig") { uri: String, spec: String -> NyvemiRigRefinement.refine(context(), uri, spec) }
     AsyncFunction("prepareCharacterImage") { uri: String -> NyvemiCharacterRaster.prepare(context(), uri) }

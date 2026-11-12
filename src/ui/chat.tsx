@@ -1,5 +1,5 @@
 import { SpeechQueue } from '../speech/queue';
-import { localSpeechDriver } from '../speech/native';
+import { localSpeechDriver, warmLocalSpeech } from '../speech/native';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
@@ -108,6 +108,13 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       }),
     [],
   );
+  const prepareVoice = useCallback(
+    (id: string, content: string) => {
+      if (voiceFocused.current && AppState.currentState === 'active')
+        return speech.prepare(id, content, voice.current.options);
+    },
+    [speech],
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const times = useMemo(() => timeMarkers(messages), [messages]);
   const [dictating, setDictating] = useState(false);
@@ -163,12 +170,22 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     if (voice.current !== voiceSnapshot) return;
     if (!voiceSnapshot.saving && voiceSnapshot.revision === revision) {
       const options = voiceOptions(settings?.voice);
+      if (voiceSnapshot.options.enabled && !options.enabled) speech.stop(true);
       voiceSnapshot.options = options;
       setVoiceEnabled(options.enabled);
     }
     setDeveloperMode(settings?.developerMode ?? false);
-    if (voiceFocused.current && AppState.currentState === 'active')
-      speech.observe(page.messages, voiceSnapshot.options);
+    if (voiceFocused.current && AppState.currentState === 'active') {
+      warmLocalSpeech(voiceSnapshot.options);
+      requestAnimationFrame(() => {
+        if (
+          voice.current === voiceSnapshot &&
+          voiceFocused.current &&
+          AppState.currentState === 'active'
+        )
+          speech.observe(page.messages, voiceSnapshot.options);
+      });
+    }
     setNeedsSetup(!settings?.proactiveEnabled || !bridge().canNotify());
     setRequested(
       (await runtime.store.list('intentions', cid, 10000))
@@ -204,6 +221,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             void refresh().catch(() => {});
           },
           openingController.signal,
+          prepareVoice,
         );
         await runtime.hatching.repairLegacyName(cid, openingController.signal);
         if (!openingController.signal.aborted) await refresh();
@@ -230,7 +248,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         clearInterval(incoming);
         subscription.remove();
       };
-    }, [runtime, cid, refresh, route.params.notificationId]),
+    }, [runtime, cid, refresh, route.params.notificationId, prepareVoice]),
   );
   useEffect(() => {
     speech.reset();
@@ -255,8 +273,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     state.revision++;
     state.options = { ...previous, enabled, playbackSet: true };
     setVoiceEnabled(enabled);
-    if (enabled) speech.resume();
-    else speech.stop();
+    if (enabled) {
+      speech.resume();
+      warmLocalSpeech(state.options);
+    } else speech.stop(true);
     try {
       const saved = await updateVoice(runtime.store, cid, { enabled, playbackSet: true });
       if (voice.current === state) state.options = saved;
@@ -264,8 +284,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       if (voice.current !== state) return;
       state.options = previous;
       setVoiceEnabled(previous.enabled);
-      if (previous.enabled) speech.resume();
-      else speech.stop();
+      if (previous.enabled) {
+        speech.resume();
+        warmLocalSpeech(previous);
+      } else speech.stop(true);
       setError('声音设置未保存，请重试');
     } finally {
       state.revision++;
@@ -279,6 +301,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         void refresh().catch(() => {});
       },
       abort.current?.signal,
+      prepareVoice,
     );
     await refresh();
     const state = await runtime.hatching.load(cid);
@@ -313,6 +336,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             void refresh().catch(() => {});
           },
           abort.current.signal,
+          prepareVoice,
         );
         await refresh();
         if (next?.status === 'ready') await finishHatching();
@@ -338,6 +362,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
           await apply(next, (signal) => runtime.themes.save(next, signal));
         },
         attachments,
+        prepareVoice,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : '发送失败，消息已保留');

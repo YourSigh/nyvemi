@@ -12,6 +12,11 @@ export interface LocalSpeechState {
 }
 interface AndroidBridge {
   speechState(): Promise<LocalSpeechState>;
+  qwenVoiceAvailable(): Promise<boolean>;
+  warmQwenVoice(): Promise<void>;
+  prepareQwenSpeech(id: string, text: string, speaker: string): Promise<boolean>;
+  speakQwen(id: string, text: string, speaker: string): Promise<boolean>;
+  releaseQwenVoice(): Promise<void>;
   speakLocal(
     id: string,
     text: string,

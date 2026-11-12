@@ -24,7 +24,7 @@ import type { NotificationGateway } from '../proactive/heartbeat/engine';
 import { MemoryRecall } from '../memory/recall';
 import { conversationContext } from '../conversation/context';
 import { setContactMode } from '../chat/contact';
-import { messageChunks, typingDelay } from '../chat/delivery';
+import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from '../chat/delivery';
 import { ExperienceEngine } from '../experience/engine';
 import { agentSystem } from './prompt';
 import { agentTools } from './tools';
@@ -50,6 +50,7 @@ export interface AgentInput {
   task?: Intention;
   signal?: AbortSignal;
   onSaved?: () => void;
+  onSpeechDraft?: SpeechDraft;
   activity?: (value: ChatActivity) => void;
   onThemeChange?: (description: string) => Promise<void>;
 }
@@ -373,10 +374,17 @@ export class CompanionAgent {
                 messages.push(old);
                 continue;
               }
-              if (this.host.visible())
-                await (
-                  this.host.pause ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)))
-                )(typingDelay(content, bubbleCount === 0, Date.now() - now));
+              if (this.host.visible()) {
+                const pause =
+                  this.host.pause ??
+                  ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+                await waitForBubble(
+                  mid,
+                  content,
+                  () => pause(typingDelay(content, bubbleCount === 0, Date.now() - now)),
+                  input.onSpeechDraft,
+                );
+              }
               await assertCurrent();
               const message: Message = {
                 id: mid,

@@ -38,12 +38,12 @@ if (includesQwenAbi) {
     dependsOn prepareQwen
     inputs.dir qwenSource
     inputs.dir new File(qwenWork, 'speech')
-    def lib = new File(qwenWork, "jni/${qwenAbi}/libnyvemi_qwen.so")
-    outputs.file lib
+    def libs = new File(qwenWork, "jni/${qwenAbi}")
+    outputs.dir libs
     doFirst {
       def ndk = new File(android.sdkDirectory, "ndk/${rootProject.ext.ndkVersion}")
       def cmake = new File(android.sdkDirectory, 'cmake/3.22.1')
-      commandLine 'bash', new File(qwenSource, 'build.sh'), qwenWork, ndk, cmake, qwenAbi, lib
+      commandLine 'bash', new File(qwenSource, 'build.sh'), qwenWork, ndk, cmake, qwenAbi, libs
     }
   }
 

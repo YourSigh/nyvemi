@@ -1,6 +1,6 @@
 import { it, expect, vi } from 'vitest';
 import { SpeechQueue } from '../src/speech/queue';
-import { voiceOptions, voiceProfile } from '../src/speech/preferences';
+import { qwenSpeaker, qwenVoices, voiceOptions, voiceProfile } from '../src/speech/preferences';
 import { defaultSettings, SettingsSchema, type Message } from '../src/domain/models';
 
 const muted = voiceProfile();
@@ -28,7 +28,7 @@ it('defaults to mute, including old preferences that could be enabled automatica
   expect(voiceOptions(audible).enabled).toBe(true);
 });
 
-it('uses the system default voice for settings and bundles saved with Kokoro', () => {
+it('migrates old Kokoro choices to the default voice', () => {
   const settings = SettingsSchema.parse({
     ...defaultSettings('c'),
     voice: { ...audible, voiceId: 'kokoro:34' },
@@ -137,4 +137,32 @@ it('reports unavailable local voices once without retrying every queued bubble',
   await vi.waitFor(() => expect(state).toHaveBeenLastCalledWith({ error: '本机声音尚未就绪' }));
   queue.observe([msg('3')], audible);
   expect(driver.play).toHaveBeenCalledOnce();
+});
+
+it('starts preparing the same normalized content and key without playing any audio until arrival', async () => {
+  const driver = {
+    ...makeDriver(),
+    prepare: vi.fn(async (_id: string, _text: string, _options: unknown) => true),
+    release: vi.fn(async () => {}),
+  };
+  const queue = new SpeechQueue(driver, undefined, () => 100);
+  queue.observe([], audible);
+  const bubble = msg('draft', '**嗨** [小舟](https://example.test)！');
+  expect(queue.prepare(bubble.id, bubble.content, muted)).toBeUndefined();
+  expect(driver.prepare).not.toHaveBeenCalled();
+  await queue.prepare(bubble.id, bubble.content, audible);
+  expect(driver.prepare).toHaveBeenCalledWith('draft:0', '嗨 小舟！', audible);
+  expect(driver.play).not.toHaveBeenCalled();
+  queue.observe([bubble], audible);
+  await vi.waitFor(() => expect(driver.play).toHaveBeenCalledWith('draft:0', '嗨 小舟！', audible));
+  queue.stop(true);
+  expect(driver.release).toHaveBeenCalledOnce();
+});
+
+it('selects the built-in Serena voice and keeps explicit Android selections', () => {
+  expect(qwenVoices).toHaveLength(9);
+  expect(qwenSpeaker(audible)).toBe('serena');
+  expect(qwenSpeaker({ ...audible, voiceId: 'qwen:vivian' })).toBe('vivian');
+  expect(qwenSpeaker({ ...audible, voiceId: 'system:default' })).toBeUndefined();
+  expect(qwenSpeaker({ ...audible, voiceId: 'zh-CN-local' })).toBeUndefined();
 });

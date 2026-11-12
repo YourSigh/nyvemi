@@ -1,9 +1,33 @@
 import type { Message } from '../domain/models';
-import type { VoiceOptions } from './preferences';
+import { qwenSpeaker, type VoiceOptions } from './preferences';
 export interface SpeechDriver {
   play(id: string, text: string, options: VoiceOptions): Promise<boolean>;
   stop(): Promise<void>;
+  prepare?(id: string, text: string, options: VoiceOptions): Promise<boolean> | undefined;
+  release?(): Promise<void>;
 }
+function speechParts(content: string, options: VoiceOptions): string[] {
+  const text = content
+    .replace(/```[\s\S]*?```/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[*#_`]/g, '')
+    .trim();
+  const limit = qwenSpeaker(options) ? 180 : 1000;
+  const characters = Array.from(text);
+  const parts: string[] = [];
+  for (let start = 0; start < characters.length; ) {
+    const cap = Math.min(start + limit, characters.length);
+    let end = cap;
+    if (cap < characters.length) {
+      while (end > start + limit / 2 && !/[。！？；.!?;\s]/u.test(characters[end - 1])) end--;
+      if (end <= start + limit / 2) end = cap;
+    }
+    parts.push(characters.slice(start, end).join('').trim());
+    start = end;
+  }
+  return parts;
+}
+
 export class SpeechQueue {
   private seen = new Set<string>();
   private primed = false;
@@ -24,7 +48,7 @@ export class SpeechQueue {
   observe(messages: Message[], options: VoiceOptions) {
     const signature = JSON.stringify(options);
     if (signature !== this.signature) {
-      if (!options.enabled && (this.draining || this.pending.length)) this.stop();
+      if (!options.enabled && (this.draining || this.pending.length)) this.stop(true);
       this.blocked = false;
       this.signature = signature;
       this.state({});
@@ -52,6 +76,11 @@ export class SpeechQueue {
     }
     void this.drain();
   }
+  prepare(id: string, content: string, options: VoiceOptions) {
+    if (!options.enabled || this.blocked || !this.driver.prepare) return undefined;
+    const [text] = speechParts(content, options);
+    return text ? this.driver.prepare(`${id}:0`, text, options) : undefined;
+  }
   replay(message: Message, options: VoiceOptions) {
     if (
       !options.enabled ||
@@ -76,10 +105,12 @@ export class SpeechQueue {
     this.receivedSince = this.now();
     this.blocked = false;
   }
-  stop() {
+  stop(release = false) {
     this.epoch++;
     this.pending = [];
-    this.stopping = this.driver.stop().catch(() => {});
+    this.stopping = (
+      release && this.driver.release ? this.driver.release() : this.driver.stop()
+    ).catch(() => {});
     this.state(this.blocked ? { error: '本机声音尚未就绪' } : {});
   }
   private async drain() {
@@ -93,16 +124,11 @@ export class SpeechQueue {
         if (epoch !== this.epoch) continue;
         this.state({ messageId: item.message.id });
         try {
-          const text = item.message.content
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/[*#_`]/g, '')
-            .trim();
-          for (let offset = 0; offset < text.length; offset += 1000) {
+          for (const [index, text] of speechParts(item.message.content, item.options).entries()) {
             if (epoch !== this.epoch) break;
             const completed = await this.driver.play(
-              `${item.message.id}:${offset}`,
-              text.slice(offset, offset + 1000),
+              `${item.message.id}:${index}`,
+              text,
               item.options,
             );
             if (!completed) break;

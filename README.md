@@ -191,6 +191,19 @@ npm run android:release -- -PreactNativeArchitectures=arm64-v8a --console=plain
 
 The release command cleans App outputs to remove obsolete React assets and checks the APK for developer-only character assets and local credentials.
 
+### Offline Qwen voice
+
+The ARM64 voice build includes Qwen3-TTS 0.6B CustomVoice (Q4_K) and nine preset voices. When message voice is enabled, Nyvemi loads the model as chat opens, starts synthesis during the typing pause, and plays the result when the bubble arrives. Going to the background or muting releases the model. Android system voices are available for lightweight builds, existing system-voice selections, or when the device cannot load Qwen.
+
+Install Android SDK CMake 3.22.1 and the NDK used by the Expo project. Download the model file before running the build command below. [Q4_K GGUF file](https://huggingface.co/sakasegawa/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF/blob/fd9df9364613a92a86b4137074bc281204823033/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf)
+
+```bash
+npm run android:release -- -PreactNativeArchitectures=arm64-v8a \
+  -PnyvemiQwenModel=/absolute/path/to/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf
+```
+
+The verified 761 MB model is stored uncompressed in the APK and read directly from it. The build pins speech.cpp and ggml and packages their licenses with the Qwen3-TTS model license. Speech synthesis runs offline and uses no provider key. Chat text uses the configured chat model. [Pinned speech.cpp source](https://github.com/nyosegawa/speech.cpp/tree/03555100287c118b41d1b475044e5ab1e07baa8c), [Qwen3-TTS model license](https://github.com/QwenLM/Qwen3-TTS/blob/main/LICENSE).
+
 The generated Expo project's release build currently uses the development signing key for sideload testing. It is not a Play Store signing setup. Configure your own release signing before distribution. The standalone release APK embeds JavaScript and does not need Metro. Do not commit APKs, AARs, build caches, keys or credentials. First builds may download large React Native/Gradle artifacts.
 
 ## Privacy and limitations
