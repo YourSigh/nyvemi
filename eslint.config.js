@@ -2,7 +2,17 @@ const { defineConfig } = require('eslint/config');
 const expo = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expo,
-  { ignores: ['android/**', 'ios/**', 'artifacts/**', 'coverage/**', 'vendor/**', 'scripts/dsh/**'] },
+  {
+    ignores: [
+      'android/**',
+      'ios/**',
+      'artifacts/**',
+      'coverage/**',
+      'vendor/**',
+      'scripts/dsh/**',
+      'modules/*/android/build/**',
+    ],
+  },
   {
     files: ['**/*.ts', '**/*.tsx'],
     rules: {

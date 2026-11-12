@@ -1,4 +1,8 @@
-const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
+const {
+  withAndroidManifest,
+  withAppBuildGradle,
+  withDangerousMod,
+} = require('expo/config-plugins');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 module.exports = function withNyvemiAndroid(config) {
@@ -14,6 +18,17 @@ module.exports = function withNyvemiAndroid(config) {
     ];
     const app = manifest.application[0];
     app.$['android:usesCleartextTraffic'] = 'true';
+    return c;
+  });
+  config = withAppBuildGradle(config, (c) => {
+    const noCompress = 'androidResources { noCompress += ["gguf"] }';
+    if (c.modResults.language === 'groovy' && !c.modResults.contents.includes(noCompress)) {
+      c.modResults.contents = c.modResults.contents.replace(
+        /^android\s*\{/m,
+        `android {
+    ${noCompress}`,
+      );
+    }
     return c;
   });
   return withDangerousMod(config, [

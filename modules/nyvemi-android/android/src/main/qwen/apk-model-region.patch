@@ -1,0 +1,115 @@
+diff --git a/src/common/model-file.cpp b/src/common/model-file.cpp
+index 565d0bf..2ec2948 100644
+--- a/src/common/model-file.cpp
++++ b/src/common/model-file.cpp
+@@ -35,13 +35,25 @@ Error file_error(const std::string & message) {
+  * The file's metadata. gguf_init_from_file() answers a file it cannot open and one that is not GGUF alike, so the
+  * file is opened first to tell the two apart.
+  */
+-Gguf open_gguf(const std::string & path, ggml_context ** ctx) {
++struct FileRegion {
++    FILE * file;
++    uint64_t start, length;
++};
++
++size_t read_region(void * data, void * output, uint64_t offset, size_t len) {
++    const auto & region = *static_cast<FileRegion *>(data);
++    if (offset >= region.length || !seek_file(region.file, region.start + offset)) return 0;
++    return std::fread(output, 1, std::min<uint64_t>(len, region.length - offset), region.file);
++}
++
++Gguf open_gguf(const std::string & path, ggml_context ** ctx, uint64_t offset = 0, uint64_t length = 0) {
+     route_ggml_log();
+     std::unique_ptr<FILE, decltype(&std::fclose)> f(ggml_fopen(path.c_str(), "rb"), &std::fclose);
+     if (!f) throw Error(Fault::Io, "cannot open " + path + "; check the path and that the file can be read");
+-    f.reset();
+     gguf_init_params params = {/*no_alloc =*/true, /*ctx =*/ctx};
+-    Gguf gguf(gguf_init_from_file(path.c_str(), params), gguf_free);
++    FileRegion region{f.get(), offset, length};
++    Gguf gguf(length ? gguf_init_from_callback(read_region, &region, 0, length, params)
++                     : gguf_init_from_file_ptr(f.get(), params), gguf_free);
+     if (!gguf) throw file_error("cannot read " + path + " as a GGUF file; check that it is a model file and that the download is complete");
+     return gguf;
+ }
+@@ -148,8 +160,9 @@ std::string gguf_architecture(const std::string & path) {
+ }
+
+ ModelFile::ModelFile(const std::string & path, ggml_backend_t backend, const Layout & layout,
+-                     const std::function<bool(const std::string & name)> & keep)
+-    : path_(path), architecture_(layout.architecture), remedy_(layout.remedy) {
++                     const std::function<bool(const std::string & name)> & keep, uint64_t file_offset, uint64_t file_length)
++    : path_(path), architecture_(layout.architecture), remedy_(layout.remedy),
++      file_offset_(file_offset), file_length_(file_length) {
+     open(layout);
+     allocate([&](const std::string & name) { return !keep || keep(name) ? backend : nullptr; });
+     load();
+@@ -176,7 +189,7 @@ ModelFile::ModelFile(const ModelFile & source, ggml_backend_t backend, const std
+
+ void ModelFile::open(const Layout & layout) {
+     ggml_context * ctx = nullptr;
+-    gguf_ = open_gguf(path_, &ctx);
++    gguf_ = open_gguf(path_, &ctx, file_offset_, file_length_);
+     ctx_.reset(ctx, ggml_free);
+     require_layout_key(gguf_.get(), path_, remedy_);
+     const int64_t id = gguf_find_key(gguf_.get(), "general.architecture");
+@@ -272,7 +285,9 @@ void ModelFile::load() {
+         if (it == by_name_.end()) continue;
+         ggml_tensor * t = it->second;
+         const size_t size = ggml_nbytes(t);
+-        bool read = seek_file(f.get(), data_offset + gguf_get_tensor_offset(gguf_.get(), i));
++        const uint64_t tensor_offset = data_offset + gguf_get_tensor_offset(gguf_.get(), i);
++        const bool in_region = !file_length_ || (tensor_offset <= file_length_ && size <= file_length_ - tensor_offset);
++        bool read = in_region && seek_file(f.get(), file_offset_ + tensor_offset);
+         for (size_t done = 0; read && done < size;) {
+             const size_t n = std::min(kReadPiece, size - done);
+             piece.resize(std::max(piece.size(), n));
+diff --git a/src/common/model-file.h b/src/common/model-file.h
+index 0446c9f..df031c7 100644
+--- a/src/common/model-file.h
++++ b/src/common/model-file.h
+@@ -65,7 +65,8 @@ public:
+      * the tensors onto `backend`: every tensor, or those whose names `keep` accepts.
+      */
+     ModelFile(const std::string & path, ggml_backend_t backend, const Layout & layout,
+-              const std::function<bool(const std::string & name)> & keep = {});
++              const std::function<bool(const std::string & name)> & keep = {},
++              uint64_t file_offset = 0, uint64_t file_length = 0);
+     /**
+      * Opens and checks the file as above, and loads each tensor onto the backend that `place` gives its name, or none
+      * where it gives null: a model whose weights a GPU holds in part and the CPU's memory in the rest.
+@@ -170,6 +171,7 @@ private:
+     void load();
+
+     std::string path_, architecture_, remedy_;
++    uint64_t file_offset_ = 0, file_length_ = 0;
+     uint32_t version_ = 0;
+     std::shared_ptr<gguf_context> gguf_;
+     /** The shapes and types of every tensor of the file, which ggml reads with its metadata. */
+diff --git a/src/families/qwen3-tts/synthesizer.cpp b/src/families/qwen3-tts/synthesizer.cpp
+index bdce107..5198505 100644
+--- a/src/families/qwen3-tts/synthesizer.cpp
++++ b/src/families/qwen3-tts/synthesizer.cpp
+@@ -16,8 +16,8 @@ int text_token_limit(const ModelFile & m) {
+     return (int) m.u32("qwen3-tts.talker.max_position_embeddings") - (int) m.u32("qwen3-tts.generation.max_frames") - kPromptRows;
+ }
+
+-Synthesizer::Synthesizer(const std::string & path, ggml_backend_t backend)
+-    : model_(path, backend, qwen3_tts_layout),
++Synthesizer::Synthesizer(const std::string & path, ggml_backend_t backend, uint64_t offset, uint64_t length)
++    : model_(path, backend, qwen3_tts_layout, {}, offset, length),
+       talker_(model_, backend),
+       codec_(model_, backend),
+       tokenizer_(model_, kTextTokenizer),
+diff --git a/src/families/qwen3-tts/synthesizer.h b/src/families/qwen3-tts/synthesizer.h
+index 908a1f9..cb0369c 100644
+--- a/src/families/qwen3-tts/synthesizer.h
++++ b/src/families/qwen3-tts/synthesizer.h
+@@ -69,7 +69,7 @@ int chunk_frames(int sent);
+ /** Text in, audio out: the tokenizer, the talker, the code predictor and the codec decoder of one model file together. */
+ class Synthesizer {
+ public:
+-    Synthesizer(const std::string & path, ggml_backend_t backend);
++    Synthesizer(const std::string & path, ggml_backend_t backend, uint64_t offset = 0, uint64_t length = 0);
+
+     /**
+      * Speaks `r.text`, passing the audio to the sink in chunks of chunk_frames() frames, until the talker ends the

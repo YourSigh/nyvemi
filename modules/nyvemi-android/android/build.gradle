@@ -14,3 +14,48 @@ dependencies {
   implementation 'com.facebook.react:react-android'
   implementation 'androidx.work:work-runtime-ktx:2.9.1'
 }
+
+def qwenSource = file('src/main/qwen')
+def qwenWork = layout.buildDirectory.dir('qwen').get().asFile
+def qwenAssets = new File(qwenWork, 'assets')
+def qwenModel = providers.gradleProperty('nyvemiQwenModel').map { rootProject.file(it) }
+def qwenAbi = 'arm64-v8a'
+def includesQwenAbi = providers.gradleProperty('reactNativeArchitectures')
+  .map { it.split(',').collect { abi -> abi.trim() }.contains(qwenAbi) }.getOrElse(true)
+
+if (qwenModel.isPresent() && !includesQwenAbi) {
+  throw new GradleException('The bundled Qwen voice pack requires arm64-v8a.')
+}
+
+if (includesQwenAbi) {
+  def prepareQwen = tasks.register('prepareQwen', Exec) {
+    inputs.files(fileTree(qwenSource) { include 'prepare.sh', '*.patch' })
+    outputs.dirs(new File(qwenWork, 'speech'), new File(qwenAssets, 'licenses'))
+    commandLine 'bash', new File(qwenSource, 'prepare.sh'), qwenWork
+  }
+
+  def buildQwen = tasks.register('buildQwen', Exec) {
+    dependsOn prepareQwen
+    inputs.dir qwenSource
+    inputs.dir new File(qwenWork, 'speech')
+    def lib = new File(qwenWork, "jni/${qwenAbi}/libnyvemi_qwen.so")
+    outputs.file lib
+    doFirst {
+      def ndk = new File(android.sdkDirectory, "ndk/${rootProject.ext.ndkVersion}")
+      def cmake = new File(android.sdkDirectory, 'cmake/3.22.1')
+      commandLine 'bash', new File(qwenSource, 'build.sh'), qwenWork, ndk, cmake, qwenAbi, lib
+    }
+  }
+
+  def stageQwenModel = tasks.register('stageQwenModel', Exec) {
+    inputs.files(new File(qwenSource, 'stage-model.sh'), new File(qwenSource, 'model-license.txt'))
+    if (qwenModel.isPresent()) inputs.file qwenModel
+    outputs.dir new File(qwenAssets, 'qwen')
+    commandLine 'bash', new File(qwenSource, 'stage-model.sh'), qwenAssets,
+      qwenModel.map { it.absolutePath }.getOrElse('')
+  }
+
+  android.sourceSets.main.jniLibs.srcDir new File(qwenWork, 'jni')
+  android.sourceSets.main.assets.srcDir qwenAssets
+  tasks.named('preBuild').configure { dependsOn buildQwen, stageQwenModel }
+}
