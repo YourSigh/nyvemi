@@ -271,7 +271,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const wasQwenReady = useRef(false);
   useEffect(() => {
     if (qwenReady && !wasQwenReady.current) {
-      speech.resume();
+      speech.unblock();
       void refresh().catch(() => {});
     }
     wasQwenReady.current = qwenReady;

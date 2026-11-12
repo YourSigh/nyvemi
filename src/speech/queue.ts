@@ -67,9 +67,9 @@ export class SpeechQueue {
       if (
         !options.enabled ||
         this.blocked ||
-        initial ||
-        message.createdAt < this.receivedSince ||
-        this.now() - message.createdAt > 30000 ||
+        (initial
+          ? message.createdAt <= this.receivedSince
+          : message.createdAt < this.receivedSince) ||
         !message.content.trim()
       )
         continue;
@@ -104,7 +104,13 @@ export class SpeechQueue {
   }
   resume() {
     this.receivedSince = this.now();
-    this.blocked = false;
+    this.unblock();
+  }
+  unblock() {
+    if (this.blocked) {
+      this.blocked = false;
+      this.state({});
+    }
   }
   stop(release = false) {
     this.epoch++;

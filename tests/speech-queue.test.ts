@@ -166,3 +166,40 @@ it('selects the built-in Serena voice and keeps explicit Android selections', ()
   expect(qwenSpeaker({ ...audible, voiceId: 'system:default' })).toBeUndefined();
   expect(qwenSpeaker({ ...audible, voiceId: 'zh-CN-local' })).toBeUndefined();
 });
+
+it('keeps unseen messages that arrived before model readiness was refreshed', async () => {
+  let now = 100;
+  const driver = makeDriver();
+  const queue = new SpeechQueue(driver, undefined, () => now);
+  queue.observe([], audible);
+  const first = msg('first', '第一句', 101);
+  const second = msg('second', '第二句', 102);
+  now = 103;
+  queue.observe([first], audible);
+  now = 104;
+  queue.unblock();
+  queue.observe([first, second], audible);
+  await vi.waitFor(() =>
+    expect(driver.play.mock.calls.map(([id]) => id)).toEqual(['first:0', 'second:0']),
+  );
+});
+
+it('reads a live arrival even if a busy device delays the history refresh', async () => {
+  let now = 100;
+  const driver = makeDriver();
+  const queue = new SpeechQueue(driver, undefined, () => now);
+  queue.observe([], audible);
+  const message = msg('delayed', '下一句', 101);
+  now = 45_000;
+  queue.observe([message], audible);
+  await vi.waitFor(() => expect(driver.play).toHaveBeenCalledOnce());
+});
+
+it('reads a new arrival even when it appears before the first history snapshot', async () => {
+  let now = 100;
+  const driver = makeDriver();
+  const queue = new SpeechQueue(driver, undefined, () => now);
+  now = 102;
+  queue.observe([msg('old', '旧消息', 99), msg('live', '刚到的消息', 101)], audible);
+  await vi.waitFor(() => expect(driver.play.mock.calls.map(([id]) => id)).toEqual(['live:0']));
+});

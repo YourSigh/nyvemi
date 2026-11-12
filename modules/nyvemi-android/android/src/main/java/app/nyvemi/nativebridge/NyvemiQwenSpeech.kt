@@ -41,6 +41,7 @@ internal class NyvemiQwenSpeech {
   }
 
   private val worker = Executors.newSingleThreadExecutor()
+  private val player = Executors.newSingleThreadExecutor()
   private val jobs = LinkedHashMap<String, Utterance>()
   private var engine = 0L // Owned by worker.
   private var warming = false
@@ -96,12 +97,6 @@ internal class NyvemiQwenSpeech {
     synchronized(jobs) {
       if (jobs[job.id] === job) return
       jobs.remove(job.id)?.cancel()
-      // A second bubble can start preparing before React has observed the first.
-      val pending = jobs.values.filter { synchronized(it.lock) { it.playing == null } }
-      for (stale in pending.take((pending.size - 2).coerceAtLeast(0))) {
-        jobs.remove(stale.id)
-        stale.cancel()
-      }
       jobs[job.id] = job
       worker.execute { synthesize(ctx, job) }
     }
@@ -121,6 +116,7 @@ internal class NyvemiQwenSpeech {
   fun shutdown() {
     release()
     worker.shutdown()
+    player.shutdown()
   }
 
   private fun closeEngine() {
@@ -146,89 +142,139 @@ internal class NyvemiQwenSpeech {
   }
 
   private fun synthesize(ctx: Context, job: Utterance) {
-    var track: AudioTrack? = null
-    var written = 0
-    var error: Exception? = null
-    var complete = false
     val started = SystemClock.elapsedRealtime()
-    val preRoll = ArrayList<ShortArray>()
-    var buffered = 0
-    fun write(samples: ShortArray): Boolean {
-      var offset = 0
-      while (offset < samples.size && synchronized(job.lock) { !job.cancelled }) {
-        val count = track!!.write(samples, offset, samples.size - offset, AudioTrack.WRITE_BLOCKING)
-        check(count > 0) { "qwen_audio_write_failed" }
-        offset += count
-        written += count
-      }
-      return synchronized(job.lock) { !job.cancelled }
-    }
-    fun beginPlayback(): Boolean {
-      val tuning = awaitPlayback(job, started) ?: return false
-      val output = newTrack(tuning)
-      track = output
-      synchronized(job.lock) {
-        if (job.cancelled) return false
-        job.output = output
-      }
-      // Queue the first audio before starting the sink, even when the player is cold.
-      if (!write(preRoll.first())) return false
-      synchronized(job.lock) {
-        if (job.cancelled) return false
-        output.play()
-      }
-      Log.i(TAG, "Playback started ${SystemClock.elapsedRealtime() - started}ms after synthesis began (rate=${tuning.rate}, pitch=${tuning.pitch}, volume=${tuning.volume})")
-      return preRoll.drop(1).all { write(it) }
-    }
+    val audio = ArrayList<ShortArray>()
+    var sampleCount = 0
     try {
-      if (synchronized(job.lock) { job.cancelled }) return
+      if (synchronized(job.lock) { job.cancelled }) {
+        finish(job)
+        return
+      }
       val handle = load(ctx)
-      complete = NyvemiQwenNative.generate(
+      val complete = NyvemiQwenNative.generate(
         handle, job.text.toByteArray(), job.speaker.toByteArray(), language(job.text).toByteArray(),
       ) { samples ->
         if (synchronized(job.lock) { job.cancelled }) return@generate false
-        if (track != null) return@generate write(samples)
-        val offset = if (preRoll.isEmpty()) firstAudible(samples) else 0
-        if (offset < 0) return@generate true
-        preRoll.add(if (offset == 0) samples else samples.copyOfRange(offset, samples.size))
-        buffered += samples.size - offset
-        buffered < SAMPLE_RATE / 7 || beginPlayback()
+        val offset = if (audio.isEmpty()) firstAudible(samples) else 0
+        if (offset >= 0) {
+          val chunk = if (offset == 0) samples else samples.copyOfRange(offset, samples.size)
+          audio.add(chunk)
+          sampleCount += chunk.size
+        }
+        true
       }
-      if (track == null && complete && preRoll.isNotEmpty()) complete = beginPlayback()
-      if (track == null && synchronized(job.lock) { !job.cancelled }) {
-        error = IllegalStateException("qwen_no_audible_audio")
+      if (!complete || audio.isEmpty()) {
+        if (synchronized(job.lock) { job.cancelled }) finish(job)
+        else finish(job, IllegalStateException("qwen_synthesis_failed"))
+        return
       }
-      val drainUntil = SystemClock.elapsedRealtime() + 2000
-      while (track != null && track!!.playbackHeadPosition < written &&
+      val cancelled = synchronized(job.lock) {
+        if (!job.cancelled) {
+          job.ready = true
+          job.preparing?.resolve(true)
+          job.preparing = null
+        }
+        job.cancelled
+      }
+      if (cancelled) {
+        finish(job)
+        return
+      }
+      Log.i(TAG, "Speech synthesized in ${SystemClock.elapsedRealtime() - started}ms, audio ${sampleCount * 1000L / SAMPLE_RATE}ms")
+      player.execute { playBuffered(job, audio, started) }
+    } catch (e: Exception) {
+      finish(job, e)
+    }
+  }
+
+  private fun playBuffered(job: Utterance, audio: List<ShortArray>, started: Long) {
+    var track: AudioTrack? = null
+    var error: Exception? = null
+    var completed = false
+    var startedPlaying = false
+    try {
+      val tuning = awaitPlayback(job) ?: return
+      val output = newTrack(tuning)
+      track = output
+      synchronized(job.lock) {
+        if (job.cancelled) return
+        job.output = output
+      }
+      var written = 0
+      fun write(samples: ShortArray, start: Int = 0, end: Int = samples.size): Boolean {
+        var offset = start
+        while (offset < end && synchronized(job.lock) { !job.cancelled }) {
+          val count = output.write(samples, offset, end - offset, AudioTrack.WRITE_BLOCKING)
+          check(count > 0) { "qwen_audio_write_failed" }
+          offset += count
+          written += count
+        }
+        return synchronized(job.lock) { !job.cancelled }
+      }
+      // Keep the first 160 ms ready without filling the smallest track buffer.
+      var chunkIndex = 0
+      var chunkOffset = 0
+      var prefillRemaining = SAMPLE_RATE * 160 / 1000
+      while (chunkIndex < audio.size && prefillRemaining > 0) {
+        val chunk = audio[chunkIndex]
+        val count = minOf(chunk.size - chunkOffset, prefillRemaining)
+        if (!write(chunk, chunkOffset, chunkOffset + count)) return
+        prefillRemaining -= count
+        chunkOffset += count
+        if (chunkOffset == chunk.size) {
+          chunkIndex++
+          chunkOffset = 0
+        }
+      }
+      synchronized(job.lock) {
+        if (job.cancelled) return
+        output.play()
+        startedPlaying = true
+      }
+      Log.i(TAG, "Playback started ${SystemClock.elapsedRealtime() - started}ms after synthesis began (rate=${tuning.rate}, pitch=${tuning.pitch}, volume=${tuning.volume})")
+      while (chunkIndex < audio.size) {
+        if (!write(audio[chunkIndex], chunkOffset)) return
+        chunkIndex++
+        chunkOffset = 0
+      }
+      Log.i(TAG, "All audio queued with ${output.underrunCount} underruns")
+      val remainingFrames = (written - output.playbackHeadPosition).coerceAtLeast(0)
+      val drainTime = (remainingFrames * 1000.0 / (SAMPLE_RATE * tuning.rate)).toLong() + 2000
+      val drainUntil = SystemClock.elapsedRealtime() + drainTime
+      while (output.playbackHeadPosition < written &&
         synchronized(job.lock) { !job.cancelled } && SystemClock.elapsedRealtime() < drainUntil) {
         SystemClock.sleep(15)
       }
+      completed = synchronized(job.lock) { !job.cancelled } && output.playbackHeadPosition >= written
+      Log.i(TAG, "Playback ${if (completed) "finished" else "stopped"} with ${output.underrunCount} underruns")
     } catch (e: Exception) {
-      error = e
+      if (!startedPlaying) error = e
     } finally {
       synchronized(job.lock) {
         job.output = null
         track?.release()
-        job.ended = true
-        job.preparing?.resolve(false)
-        job.preparing = null
-        if (error != null && written == 0 && !job.cancelled) {
-          job.playing?.reject("qwen_voice_failed", error.message, null)
-        } else {
-          job.playing?.resolve(!job.cancelled && (complete || written > 0))
-        }
-        job.playing = null
       }
-      synchronized(jobs) { if (jobs[job.id] === job) jobs.remove(job.id) }
+      finish(job, error, completed)
     }
   }
 
-  private fun awaitPlayback(job: Utterance, started: Long): Tuning? = synchronized(job.lock) {
+  private fun finish(job: Utterance, error: Exception? = null, completed: Boolean = false) {
+    synchronized(job.lock) {
+      job.ended = true
+      job.preparing?.resolve(false)
+      job.preparing = null
+      if (error != null && !job.cancelled) {
+        job.playing?.reject("qwen_voice_failed", error.message, null)
+      } else {
+        job.playing?.resolve(!job.cancelled && completed)
+      }
+      job.playing = null
+    }
+    synchronized(jobs) { if (jobs[job.id] === job) jobs.remove(job.id) }
+  }
+
+  private fun awaitPlayback(job: Utterance): Tuning? = synchronized(job.lock) {
     if (job.cancelled) return null
-    job.ready = true
-    Log.i(TAG, "Speech ready in ${SystemClock.elapsedRealtime() - started}ms")
-    job.preparing?.resolve(true)
-    job.preparing = null
     val until = SystemClock.elapsedRealtime() + 15000
     while (job.playing == null && !job.cancelled) {
       val remaining = until - SystemClock.elapsedRealtime()
