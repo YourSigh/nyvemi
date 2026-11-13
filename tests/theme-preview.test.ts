@@ -3,6 +3,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ThemePreviewScreen } from '../src/ui/theme-preview';
 import { visualThemePalette } from '../src/theme/visual-presets';
+vi.mock('react-native-svg', () => ({ default: 'Svg', Path: 'Path', Circle: 'Circle' }));
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   Text: 'Text',

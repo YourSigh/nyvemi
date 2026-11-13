@@ -1,3 +1,4 @@
+import { Icon } from './icons';
 import { QwenPackCard, useQwenPack } from './qwen-pack';
 import { wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
@@ -402,7 +403,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
               onPress={() => navigation.navigate('Settings', { characterId: cid })}
               style={s.settingsButton}
             >
-              <Text style={{ color: theme.primary, fontSize: 15 }}>设置</Text>
+              <Icon name="settings" color={theme.primary} size={22} />
               {needsSetup ? (
                 <View
                   style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: theme.primary }}
@@ -740,16 +741,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                   opacity: busy || picking ? 0.4 : 1,
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: 28,
-                    color: theme.primary,
-                    includeFontPadding: false,
-                    textAlignVertical: 'center',
-                  }}
-                >
-                  ＋
-                </Text>
+                <Icon name="plus" color={theme.primary} size={24} />
               </Pressable>
 
               <Pressable

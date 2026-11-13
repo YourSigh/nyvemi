@@ -203,3 +203,23 @@ it('reads a new arrival even when it appears before the first history snapshot',
   queue.observe([msg('old', '旧消息', 99), msg('live', '刚到的消息', 101)], audible);
   await vi.waitFor(() => expect(driver.play.mock.calls.map(([id]) => id)).toEqual(['live:0']));
 });
+
+it('prepares the next bubble while keeping its reveal paired with the previous playback', async () => {
+  let finishFirst!: (value: boolean) => void;
+  const firstPlaying = new Promise<boolean>((resolve) => {
+    finishFirst = resolve;
+  });
+  const driver = { ...makeDriver(), prepare: vi.fn(async () => true) };
+  driver.play.mockReturnValueOnce(firstPlaying);
+  const queue = new SpeechQueue(driver, undefined, () => 100);
+  queue.observe([], audible);
+  queue.observe([msg('first', '第一句', 101)], audible);
+  const ready = vi.fn();
+  const prepared = queue.prepare('second', '第二句', audible)?.then(ready);
+  await Promise.resolve();
+  expect(driver.prepare).toHaveBeenCalledWith('second:0', '第二句', audible);
+  expect(ready).not.toHaveBeenCalled();
+  finishFirst(true);
+  await prepared;
+  expect(ready).toHaveBeenCalledWith(true);
+});

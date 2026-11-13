@@ -1,3 +1,4 @@
+import { Icon } from './icons';
 import { backgroundSummary } from '../proactive/background-health';
 import { registerHeartbeat } from '../native/background';
 import { resumeCompanionPresence } from '../native/presence';
@@ -97,7 +98,7 @@ export function NotificationSetup({ characterId }: { characterId: string }) {
           style={{ paddingVertical: 8, flexDirection: 'row', justifyContent: 'space-between' }}
         >
           <Text style={{ color: palette.ink, fontSize: 16 }}>来信故障排查</Text>
-          <Text style={{ color: palette.muted }}>{expanded ? '收起' : '展开'}</Text>
+          <Icon name={expanded ? 'chevron-up' : 'chevron-down'} color={palette.muted} size={20} />
         </Pressable>
         {expanded ? (
           <View style={{ gap: 12 }}>

@@ -1,3 +1,4 @@
+import { Icon } from './icons';
 import { designTokens } from '../theme/design-tokens';
 import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 import { NavigationContext } from '@react-navigation/native';
@@ -224,7 +225,7 @@ export function Details({
         }}
       >
         <Text style={{ color: palette.accent, fontSize: 14, flex: 1 }}>{title}</Text>
-        <Text style={{ color: palette.muted }}>{open ? '收起 −' : '展开 ＋'}</Text>
+        <Icon name={open ? 'chevron-up' : 'chevron-down'} color={palette.muted} size={20} />
       </Pressable>
       {open ? children : null}
     </View>

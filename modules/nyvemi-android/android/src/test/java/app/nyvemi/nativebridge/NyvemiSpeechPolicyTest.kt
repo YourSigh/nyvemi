@@ -12,4 +12,16 @@ class NyvemiSpeechPolicyTest {
     assertEquals("female-local",NyvemiSpeechPolicy.choose(voices,null,"default"))
     assertEquals("default",NyvemiSpeechPolicy.choose(listOf(v("default"),v("other")),null,"default"))
   }
+
+  @Test fun startsEarlierWhenSynthesisKeepsUpWithPlayback() {
+    assertTrue(shouldStartSpeech(900, 650, 7000, 1.0))
+    assertFalse(shouldStartSpeech(900, 1800, 7000, 1.0))
+  }
+
+  @Test fun accountsForPlaybackRateAndBoundsTheStartupWait() {
+    assertTrue(shouldStartSpeech(1000, 1000, 7000, 0.8))
+    assertFalse(shouldStartSpeech(1000, 1000, 7000, 1.2))
+    assertTrue(shouldStartSpeech(1600, 4800, 10000, 1.2))
+    assertFalse(shouldStartSpeech(350, 5000, 10000, 1.2))
+  }
 }

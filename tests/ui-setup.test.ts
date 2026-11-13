@@ -39,6 +39,7 @@ vi.mock('../src/theme/context', () => ({
   usePalette: () => defaultPalette,
   useTheme: () => ({ palette: defaultPalette, transitioning: false }),
 }));
+vi.mock('react-native-svg', () => ({ default: 'Svg', Path: 'Path', Circle: 'Circle' }));
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
   Image: 'Image',

@@ -32,7 +32,7 @@ interface AndroidBridge {
   pauseQwenPack(): Promise<void>;
   importQwenPack(uri: string): Promise<void>;
   warmQwenVoice(): Promise<void>;
-  prepareQwenSpeech(id: string, text: string, speaker: string): Promise<boolean>;
+  prepareQwenSpeech(id: string, text: string, speaker: string, rate: number): Promise<boolean>;
   speakQwen(
     id: string,
     text: string,

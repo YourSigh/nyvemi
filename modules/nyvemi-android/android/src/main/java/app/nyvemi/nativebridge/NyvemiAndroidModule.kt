@@ -85,8 +85,8 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("pauseQwenPack") { NyvemiQwenPack.pause() }
     AsyncFunction("importQwenPack") { uri: String -> NyvemiQwenPack.start(context(), Uri.parse(uri)) }
     AsyncFunction("warmQwenVoice") { qwenSpeech.warm(context()) }.runOnQueue(Queues.MAIN)
-    AsyncFunction("prepareQwenSpeech") { id: String, text: String, speaker: String, promise: expo.modules.kotlin.Promise ->
-      if (qwenSpeech.available(context())) qwenSpeech.prepare(context(), id, text, speaker, promise)
+    AsyncFunction("prepareQwenSpeech") { id: String, text: String, speaker: String, rate: Double, promise: expo.modules.kotlin.Promise ->
+      if (qwenSpeech.available(context())) qwenSpeech.prepare(context(), id, text, speaker, rate.coerceIn(0.8, 1.2), promise)
       else promise.resolve(false)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("speakQwen") { id: String, text: String, speaker: String, rate: Double, pitch: Double, volume: Double, promise: expo.modules.kotlin.Promise ->

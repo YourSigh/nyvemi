@@ -21,6 +21,7 @@ const native = vi.hoisted(() => ({
 const secrets = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn(), remove: vi.fn() }));
 vi.mock('../src/native/android', () => ({ bridge: () => native }));
 vi.mock('../src/storage/native', () => ({ secretStore: secrets }));
+vi.mock('react-native-svg', () => ({ default: 'Svg', Path: 'Path', Circle: 'Circle' }));
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
   Image: 'Image',

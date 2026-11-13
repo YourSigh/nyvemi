@@ -33,6 +33,7 @@ export class SpeechQueue {
   private primed = false;
   private pending: { message: Message; options: VoiceOptions }[] = [];
   private draining = false;
+  private drained?: Promise<void>;
   private epoch = 0;
   private blocked = false;
   private signature = '';
@@ -75,12 +76,19 @@ export class SpeechQueue {
         continue;
       this.pending.push({ message, options });
     }
-    void this.drain();
+    this.startDrain();
   }
   prepare(id: string, content: string, options: VoiceOptions) {
     if (!options.enabled || this.blocked || !this.driver.prepare) return undefined;
     const [text] = speechParts(content, options);
-    return text ? this.driver.prepare(`${id}:0`, text, options) : undefined;
+    const prepared = text ? this.driver.prepare(`${id}:0`, text, options) : undefined;
+    const previous = this.drained;
+    return prepared && previous
+      ? prepared.then(async (ready) => {
+          if (ready) await previous;
+          return ready;
+        })
+      : prepared;
   }
   replay(message: Message, options: VoiceOptions) {
     if (
@@ -94,7 +102,7 @@ export class SpeechQueue {
     this.stop();
     this.blocked = false;
     this.pending.push({ message, options });
-    void this.drain();
+    this.startDrain();
   }
   reset() {
     this.stop();
@@ -120,8 +128,11 @@ export class SpeechQueue {
     ).catch(() => {});
     this.state(this.blocked ? { error: '本机声音尚未就绪' } : {});
   }
+  private startDrain() {
+    if (this.draining || this.blocked || !this.pending.length) return;
+    this.drained = this.drain();
+  }
   private async drain() {
-    if (this.draining || this.blocked) return;
     this.draining = true;
     try {
       while (this.pending.length && !this.blocked) {

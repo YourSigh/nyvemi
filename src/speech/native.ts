@@ -27,7 +27,9 @@ export const localSpeechDriver: SpeechDriver = {
   },
   prepare: (id, text, options) => {
     const speaker = qwenSpeaker(options);
-    return speaker ? bridge().prepareQwenSpeech(id, text, speaker) : undefined;
+    return speaker
+      ? bridge().prepareQwenSpeech(id, text, speaker, qwenTuning(options, speaker).rate)
+      : undefined;
   },
   stop() {
     playbackEpoch++;

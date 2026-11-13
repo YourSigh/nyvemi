@@ -1,3 +1,4 @@
+import { Icon } from './icons';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useMemo, useState } from 'react';
 import { Keyboard, Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
@@ -45,7 +46,7 @@ export function ThemePreviewScreen({ navigation, route }: ScreenProps<'ThemePrev
               hitSlop={8}
               style={{ minHeight: 44, justifyContent: 'center' }}
             >
-              <Text style={{ color: t.secondaryText, fontSize: 14 }}>‹ 返回</Text>
+              <Icon name="arrow-left" color={t.secondaryText} />
             </Pressable>
             <Text style={{ color: t.text, fontSize: 19, letterSpacing: 1, fontWeight: '600' }}>
               主题预览

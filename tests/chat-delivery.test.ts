@@ -102,7 +102,7 @@ it('overlaps speech preparation with typing and bounds its effect on text delive
     });
     expect(prepare).toHaveBeenCalledWith('bubble', '我在');
     expect(wait).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(999);
+    await vi.advanceTimersByTimeAsync(6199);
     expect(shown).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await delivery;
@@ -126,6 +126,28 @@ it('delivers at the original typing pace when speech is ready or fails early', a
       await vi.advanceTimersByTimeAsync(350);
       expect(await pending).toBe(350);
     }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('holds a ready-to-send bubble briefly for the buffered start of speech', async () => {
+  vi.useFakeTimers();
+  try {
+    let shown = false;
+    const delivery = waitForBubble(
+      'bubble',
+      '我在',
+      () => Promise.resolve(),
+      () => new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 2200)),
+    ).then(() => {
+      shown = true;
+    });
+    await vi.advanceTimersByTimeAsync(2199);
+    expect(shown).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await delivery;
+    expect(shown).toBe(true);
   } finally {
     vi.useRealTimers();
   }

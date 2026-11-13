@@ -1,3 +1,4 @@
+import { Icon } from './icons';
 import { cleanupVisualAssets } from '../appearance/native';
 import { usePalette } from '../theme/context';
 import { NotificationSetup } from './notification-setup';
@@ -31,7 +32,7 @@ function Row({ title, value, onPress }: { title: string; value?: string; onPress
           {value}
         </Text>
       ) : null}
-      <Text style={{ color: palette.muted, fontSize: 20, includeFontPadding: false }}>›</Text>
+      <Icon name="chevron-right" color={palette.muted} size={20} />
     </Pressable>
   );
 }

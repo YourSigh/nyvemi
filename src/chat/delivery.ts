@@ -38,7 +38,7 @@ export async function waitForBubble(
   }
   if (!audio) return wait();
   const ready = new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, 1000);
+    const timer = setTimeout(resolve, 6200);
     const finish = () => {
       clearTimeout(timer);
       resolve();
