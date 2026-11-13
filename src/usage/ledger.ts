@@ -96,20 +96,24 @@ export class UsageLedger {
     );
   }
   async record(metric: ApiMetric, price?: TokenPrice): Promise<void> {
-    const cost = estimateCost(metric, price);
-    const record: UsageRecord = {
+    await this.persist({
       ...metric,
       price,
-      estimatedCost: cost,
+      estimatedCost: estimateCost(metric, price),
       currency: price?.currency,
-    };
+    });
+  }
+  async recordFlatRate(metric: ApiMetric, cost: number, currency: TokenPrice['currency']) {
+    await this.persist({ ...metric, estimatedCost: cost, currency });
+  }
+  private async persist(record: UsageRecord): Promise<void> {
     await this.db.run(
       'INSERT OR IGNORE INTO api_usage(id,created_at,endpoint,model,purpose,payload) VALUES(?,?,?,?,?,?)',
-      metric.requestId,
-      metric.startedAt,
-      metric.endpoint,
-      metric.model,
-      metric.purpose,
+      record.requestId,
+      record.startedAt,
+      record.endpoint,
+      record.model,
+      record.purpose,
       JSON.stringify(record),
     );
   }
@@ -124,7 +128,7 @@ export class UsageLedger {
     return this.db.all<UsageSummary>(
       `SELECT endpoint, model, COALESCE(json_extract(payload,'$.currency'),'未计价') AS currency,
       COUNT(*) AS requests, SUM(CASE WHEN json_extract(payload,'$.success')=0 THEN 1 ELSE 0 END) AS failures,
-      SUM(CASE WHEN json_extract(payload,'$.inputTokens') IS NULL OR json_extract(payload,'$.outputTokens') IS NULL THEN 1 ELSE 0 END) AS unknownUsage,
+      SUM(CASE WHEN json_extract(payload,'$.purpose') <> 'bilibili_discovery' AND (json_extract(payload,'$.inputTokens') IS NULL OR json_extract(payload,'$.outputTokens') IS NULL) THEN 1 ELSE 0 END) AS unknownUsage,
       SUM(CASE WHEN json_extract(payload,'$.estimatedCost') IS NULL THEN 1 ELSE 0 END) AS unpriced,
       COALESCE(SUM(json_extract(payload,'$.inputTokens')),0) AS inputTokens,
       COALESCE(SUM(json_extract(payload,'$.outputTokens')),0) AS outputTokens,

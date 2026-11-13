@@ -10,6 +10,7 @@ export type EditableSettings = Pick<
   | 'recentActiveMinutes'
   | 'proactiveEnabled'
   | 'explorationEnabled'
+  | 'deepSeekBilibiliSearch'
   | 'rssUrls'
   | 'developerMode'
 >;

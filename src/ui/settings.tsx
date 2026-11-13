@@ -14,6 +14,7 @@ import type { PresenceState } from '../presence/loop';
 import { useRuntime } from './context';
 import type { ScreenProps } from './navigation';
 import { updateSettings } from '../application/settings';
+import { supportsDeepSeekSearch } from '../exploration/deepseek-search';
 import { bridge, pinCharacter, requestNotifications } from '../native/android';
 import { resetCharacter } from '../characters/reset';
 import { personalityEditable } from '../characters/personality';
@@ -306,6 +307,25 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
             </Toggle>
           </Card>
           <BilibiliLogin characterId={cid} />
+          <Card>
+            <Toggle
+              title="用 DeepSeek 找 B 站视频"
+              value={settings?.deepSeekBilibiliSearch ?? false}
+              disabled={busy || !settings || settings.explorationEnabled === false}
+              onChange={(v) =>
+                void act(async () => {
+                  if (v && !supportsDeepSeekSearch(await runtime.store.get('provider', 'provider')))
+                    throw new Error('请先配置官方 DeepSeek API');
+                  setSettings(
+                    await updateSettings(runtime.store, cid, { deepSeekBilibiliSearch: v }),
+                  );
+                  if (v) await runtime.prepareBilibiliExploration(cid);
+                })
+              }
+            >
+              <Note>使用她感兴趣的话题搜索。每次有结果的搜索约 $0.00075。</Note>
+            </Toggle>
+          </Card>
           <NotificationSetup characterId={cid} />
         </>
       ) : section === 'preferences' ? (

@@ -10,6 +10,7 @@ import * as Crypto from 'expo-crypto';
 import { CompanionAgent } from '../agent/service';
 import { PublicAgentWeb } from '../agent/web';
 import { BilibiliContentProvider } from '../exploration/content';
+import { DeepSeekBilibiliSearch } from '../exploration/deepseek-search';
 import { ExplorationEngine } from '../exploration/engine';
 import { BilibiliCaptionProvider } from '../exploration/bilibili-captions';
 import { createBilibiliSessionManager } from '../exploration/bilibili-session-native';
@@ -164,20 +165,29 @@ async function createRuntime() {
   });
   const bilibiliSession = createBilibiliSessionManager();
   const request = nativeFetch as unknown as typeof fetch;
-  const bilibili = new BilibiliContentProvider(request, bilibiliSession);
+  const bilibiliSearch = new DeepSeekBilibiliSearch(
+    async () => ({ config: await store.get('provider', 'provider'), key: await secretStore.get() }),
+    request,
+    async (metric, billed) => {
+      await usage.recordFlatRate(metric, billed ? 0.00075 : 0, 'USD');
+      await diagnostics.record('api', '', { ...metric });
+    },
+  );
+  const bilibili = new BilibiliContentProvider(request, bilibiliSession, bilibiliSearch);
   const captions = new BilibiliCaptionProvider(
     (url, signal) => bilibiliSession.readAuthorized(url, signal),
     request,
   );
-  const exploration = new ExplorationEngine(store, bilibili, {
+  const authorizedCaptions = {
     read: (bvid, signal) => captions.read(bvid, signal),
     available: () => bilibiliSession.getStatus().then((status) => status === 'signed_in'),
-  });
+  } satisfies ConstructorParameters<typeof ExplorationEngine>[2];
+  const exploration = new ExplorationEngine(store, bilibili, authorizedCaptions);
   const prepareBilibiliExploration = async (characterId: string) => {
     await exploration.prepareAfterLogin(characterId);
     await bridge().enqueueMaintenanceCheck(20_000);
   };
-  const agentWeb = new PublicAgentWeb(bilibili, nativeFetch as unknown as typeof fetch);
+  const agentWeb = new PublicAgentWeb(bilibili, request, authorizedCaptions);
   const plugins = new PluginManager(store, {
     load: (url) => agentWeb.pluginSource(url),
     hash: imageHash,

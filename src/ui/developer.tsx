@@ -82,6 +82,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       未来意图: await runtime.store.list('intentions', cid, 100),
       自主探索: {
         enabled: settings.explorationEnabled !== false,
+        deepSeekSearch: settings.deepSeekBilibiliSearch ?? false,
         lastCompletedAt: settings.lastExplorationAt,
         records: (await runtime.store.list('diagnostics', cid, 10000)).filter(
           (d) => d.data.event === 'exploration',

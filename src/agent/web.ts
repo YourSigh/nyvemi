@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import type { ContentItem, ContentProvider } from '../exploration/content';
+import type { BilibiliCaptionReader } from '../exploration/bilibili-captions';
 import { overlap } from '../memory/retrieval';
 export interface WebDocument {
   url: string;
@@ -17,7 +18,8 @@ export interface AgentWeb {
   search(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
   read(url: string, signal?: AbortSignal): Promise<WebDocument>;
   imageSearch?(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
-  bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]>;
+  bilibili(query: string, signal?: AbortSignal, indexedSearch?: boolean): Promise<WebDocument[]>;
+  bilibiliCaptions?(url: string, signal?: AbortSignal): Promise<WebDocument>;
 }
 export function publicUrl(input: string): URL {
   const url = new URL(input);
@@ -121,6 +123,7 @@ export class PublicAgentWeb implements AgentWeb {
   constructor(
     private content: ContentProvider,
     private request: typeof fetch = fetch,
+    private captions?: BilibiliCaptionReader & { available(): Promise<boolean> },
   ) {}
   private async text(input: string, parent?: AbortSignal): Promise<{ url: string; text: string }> {
     const controller = new AbortController(),
@@ -229,15 +232,22 @@ export class PublicAgentWeb implements AgentWeb {
     );
     return imageSearchDocuments(response.text);
   }
-  async bilibili(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
+  async bilibili(
+    query: string,
+    signal?: AbortSignal,
+    indexedSearch = false,
+  ): Promise<WebDocument[]> {
     if (signal?.aborted) throw new Error('已取消');
-    // Public guest recommendations. Selection is the agent's own, not a user-profile ranking.
     let items: ContentItem[];
     try {
-      items = await this.content.candidates({ topics: query.trim() ? [query] : [], signal });
+      items = await this.content.candidates({
+        topics: query.trim() ? [query] : [],
+        signal,
+        ...(indexedSearch ? { indexedSearch: true } : {}),
+      });
     } catch {
       if (signal?.aborted) throw new Error('已取消');
-      throw new Error('B站游客接口暂不可用，没有读取到视频内容');
+      throw new Error('暂时没有拿到 B 站候选，未读取视频内容');
     }
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const ranked = items
@@ -262,8 +272,31 @@ export class PublicAgentWeb implements AgentWeb {
     return ranked.map(({ item }) => ({
       url: item.url,
       title: item.title,
-      text: `仅标题与简介，未播放视频。UP主：${item.author}；分区：${item.category}。${item.description}`,
+      text:
+        item.discovery === 'deepseek_search'
+          ? `只找到视频标题和搜索片段，未播放视频。${item.description}`
+          : `仅标题与简介，未播放视频。UP主：${item.author}；分区：${item.category}。${item.description}`,
       source: this.content.id === 'bilibili' ? 'bilibili-metadata' : 'mock-bilibili-metadata',
     }));
+  }
+  async bilibiliCaptions(input: string, signal?: AbortSignal): Promise<WebDocument> {
+    const url = publicUrl(input);
+    const bvid = /^\/video\/(BV[A-Za-z0-9]{10})\/?$/.exec(url.pathname)?.[1];
+    if (url.hostname !== 'www.bilibili.com' || !bvid)
+      throw new Error('只能读取完整的 B 站视频链接');
+    if (!(await this.captions?.available()) || !this.captions)
+      throw new Error('请先在设置里扫码连接 B 站');
+    const result = await this.captions.read(bvid, signal);
+    if (result.status !== 'available' || !(await this.captions.available()))
+      throw new Error('这个视频暂时没有可核验的字幕');
+    return {
+      url: `https://www.bilibili.com/video/${bvid}`,
+      title: `B 站视频 ${bvid}`,
+      text: `只读了字幕片段，没有播放视频。\n${result.cues
+        .map((cue) => cue.text)
+        .join('\n')
+        .slice(0, 1500)}`,
+      source: 'bilibili-subtitle',
+    };
   }
 }

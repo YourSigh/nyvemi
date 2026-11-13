@@ -225,7 +225,9 @@ export class CompanionAgent {
               ? 'writing'
               : name === 'recall_memory'
                 ? 'remembering'
-                : ['web_fetch', 'web_search', 'browse_bilibili'].includes(name)
+                : ['web_fetch', 'web_search', 'browse_bilibili', 'read_bilibili_captions'].includes(
+                      name,
+                    )
                   ? 'experiencing'
                   : 'considering',
             cid,
@@ -512,8 +514,15 @@ export class CompanionAgent {
               await this.host.web.bilibili(
                 z.string().min(1).max(200).parse(args.query),
                 execution.signal,
+                Boolean(
+                  input.user && (await this.store.get('settings', cid))?.deepSeekBilibiliSearch,
+                ),
               ),
             );
+          } else if (name === 'read_bilibili_captions' && this.host.web.bilibiliCaptions) {
+            const url = z.string().url().max(2000).parse(args.url);
+            if (!input.user) throw new Error('后台通过探索任务核验视频字幕');
+            result = await evidence([await this.host.web.bilibiliCaptions(url, execution.signal)]);
           } else if (name === 'remember_experience') {
             const parsed = z
               .object({
@@ -541,11 +550,20 @@ export class CompanionAgent {
                       id: `agent-exp:${doc.id}`,
                       characterId: cid,
                       source,
-                      externalId: doc.url,
+                      externalId:
+                        /^https:\/\/www\.bilibili\.com\/video\/(BV[A-Za-z0-9]{10})$/.exec(
+                          doc.url,
+                        )?.[1] ?? doc.url,
                       title: doc.title,
                       content: `来源范围：${doc.source}。${doc.text.slice(0, 2500)}\n自己的反应：${parsed.impression}`,
                       url: doc.url,
                       topics: parsed.topics,
+                      contentEvidence:
+                        source === 'bilibili'
+                          ? doc.source === 'bilibili-subtitle'
+                            ? 'subtitle'
+                            : 'metadata'
+                          : undefined,
                       appraisal: parsed.appraisal,
                       createdAt: Date.now(),
                     },
@@ -621,6 +639,8 @@ export class CompanionAgent {
               (t) =>
                 (t.name !== 'change_theme' || input.onThemeChange) &&
                 (t.name !== 'remember_conversation_preference' || input.user) &&
+                (t.name !== 'read_bilibili_captions' ||
+                  (input.user && this.host.web.bilibiliCaptions)) &&
                 (t.name !== 'offer_voice_settings' || (input.user && this.host.visible())) &&
                 (!['inspect_image', 'draw_image', 'send_image'].includes(t.name) ||
                   this.host.media) &&

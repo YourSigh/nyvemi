@@ -119,3 +119,25 @@ it('does not turn a successful paid response into a retry if accounting storage 
   );
   expect((await provider.chat([], 'test')).content).toBe('OK');
 });
+
+it('records Bilibili search fees per request without marking missing tokens as incomplete', async () => {
+  const db = new TestDatabase();
+  await migrate(db);
+  const ledger = new UsageLedger(db);
+  const search = {
+    ...metric,
+    model: 'DeepSeek 搜索',
+    purpose: 'bilibili_discovery',
+    inputTokens: undefined,
+    outputTokens: undefined,
+    cachedInputTokens: undefined,
+  };
+  await ledger.recordFlatRate(search, 0.00075, 'USD');
+  await ledger.recordFlatRate({ ...search, requestId: 'empty' }, 0, 'USD');
+  expect((await ledger.summary())[0]).toMatchObject({
+    estimatedCost: 0.00075,
+    unknownUsage: 0,
+    unpriced: 0,
+    requests: 2,
+  });
+});

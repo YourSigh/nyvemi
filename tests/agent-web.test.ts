@@ -74,3 +74,24 @@ it('extracts actual image-search metadata and rejects invented/private/malformed
     source: 'web-image-search',
   });
 });
+
+it('reads and labels only verified subtitles for canonical Bilibili video links', async () => {
+  const read = vi.fn().mockResolvedValue({ status: 'available', cues: [{ text: '真实字幕' }] });
+  const available = vi.fn().mockResolvedValue(true);
+  const web = new PublicAgentWeb(new MockContentProvider([]), fetch, { read, available });
+  await expect(
+    web.bilibiliCaptions('https://www.bilibili.com.evil.org/video/BV1234567890'),
+  ).rejects.toThrow();
+  await expect(
+    web.bilibiliCaptions('https://www.bilibili.com/video/BV1234567890/?from=track'),
+  ).resolves.toMatchObject({
+    url: 'https://www.bilibili.com/video/BV1234567890',
+    source: 'bilibili-subtitle',
+    text: '只读了字幕片段，没有播放视频。\n真实字幕',
+  });
+  expect(read).toHaveBeenCalledExactlyOnceWith('BV1234567890', undefined);
+  available.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+  await expect(
+    web.bilibiliCaptions('https://www.bilibili.com/video/BV1234567890'),
+  ).rejects.toThrow();
+});

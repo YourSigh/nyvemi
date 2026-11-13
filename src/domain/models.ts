@@ -217,6 +217,7 @@ export const SettingsSchema = z
       .strict()
       .optional(),
     explorationEnabled: z.boolean().optional(),
+    deepSeekBilibiliSearch: z.boolean().optional(),
   })
   .strict();
 export type Settings = z.infer<typeof SettingsSchema>;

@@ -115,12 +115,17 @@ export function UsageScreen() {
               ? '待配置单价'
               : `${s.currency === 'CNY' ? '¥' : '$'}${s.estimatedCost.toFixed(6)}`}
           </Text>
-          <Text style={{ color: palette.ink }}>
-            已知输入 {s.inputTokens.toLocaleString()} · 输出 {s.outputTokens.toLocaleString()} token
-          </Text>
+          {s.model !== 'DeepSeek 搜索' ? (
+            <Text style={{ color: palette.ink }}>
+              已知输入 {s.inputTokens.toLocaleString()} · 输出 {s.outputTokens.toLocaleString()}{' '}
+              token
+            </Text>
+          ) : null}
           <Note>
-            其中缓存命中 {s.cachedInputTokens.toLocaleString()} token · {s.requests} 次请求 ·{' '}
-            {s.failures} 次失败
+            {s.model !== 'DeepSeek 搜索'
+              ? `缓存命中 ${s.cachedInputTokens.toLocaleString()} token · `
+              : ''}
+            {s.requests} 次请求 · {s.failures} 次失败
           </Note>
           {s.unpriced ? <Note>{s.unpriced} 次费用未计入</Note> : null}
           {s.unknownUsage ? <Note>{s.unknownUsage} 次用量不完整</Note> : null}
@@ -195,9 +200,13 @@ export function UsageScreen() {
               {new Date(r.startedAt).toLocaleString()} · {(r.duration / 1000).toFixed(1)}s ·{' '}
               {r.success ? '完成' : '失败 / 中断'}
             </Note>
-            <Text style={{ color: palette.ink }}>
-              输入 {r.inputTokens ?? '未知'} / 输出 {r.outputTokens ?? '未知'} token
-            </Text>
+            {r.purpose === 'bilibili_discovery' ? (
+              <Note>按次计费</Note>
+            ) : (
+              <Text style={{ color: palette.ink }}>
+                输入 {r.inputTokens ?? '未知'} / 输出 {r.outputTokens ?? '未知'} token
+              </Text>
+            )}
             <Note>
               {r.estimatedCost === undefined
                 ? '费用未知 / 未计价'
@@ -215,6 +224,7 @@ function purposeLabel(purpose: string): string {
       {
         chat: '聊天',
         agent_step: '角色思考与工具',
+        bilibili_discovery: 'B 站视频探索',
         image_understanding: '看图',
         visual_identity_planning: '角色外观理解',
         visual_prompt_composition: '绘图描述整理',

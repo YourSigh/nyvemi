@@ -130,8 +130,14 @@ export const agentTools: AgentTool[] = [
   {
     name: 'browse_bilibili',
     description:
-      '获取B站游客态候选标题和简介，再根据你自己的兴趣决定看哪项。不会播放视频或拿到字幕；接口受限时返回失败，不伪造观看。',
+      '查找 B 站视频，返回候选标题、简介或搜索片段。不会播放视频或拿到字幕；没拿到结果就如实说。',
     parameters: { query: string('你自己想逛的方向，可用自己的兴趣') },
+  },
+  {
+    name: 'read_bilibili_captions',
+    description:
+      '用完整 B 站视频链接读取实际字幕片段。拿到结果前不要描述视频内容。无字幕时告诉对方实际读到了什么。',
+    parameters: { url: string('完整的 https://www.bilibili.com/video/BV… 链接') },
   },
   {
     name: 'remember_experience',

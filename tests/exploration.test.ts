@@ -285,3 +285,36 @@ it('cancels an interrupted fetch without setting a retry delay', async () => {
   expect(await store.list('experiences', 'c')).toEqual([]);
   expect(await engine.run('c', now + 60000)).toBe('explored');
 });
+
+it('prefers a relevant candidate with corroborated captions within a bounded shortlist', async () => {
+  const store = await setup();
+  await store.put('settings', { ...defaultSettings('c'), deepSeekBilibiliSearch: true });
+  const alternate = {
+    ...robot,
+    id: 'BV2222222222',
+    title: '机器人实地观察',
+    discovery: 'deepseek_search' as const,
+  };
+  const candidates = vi.fn().mockResolvedValue([robot, alternate]);
+  const read = vi
+    .fn()
+    .mockResolvedValueOnce({ status: 'unavailable', reason: 'no_tracks' })
+    .mockResolvedValueOnce({ status: 'available', cues: [{ text: '机器人用脚尖调整重心' }] });
+  const engine = new ExplorationEngine(
+    store,
+    { id: 'bilibili', candidates },
+    { read, available: async () => true },
+  );
+  expect(await engine.run('c', now, { trigger: 'periodic_worker' })).toBe('explored');
+  expect(candidates).toHaveBeenCalledWith({ topics: ['机器人'], indexedSearch: true });
+  expect(read).toHaveBeenNthCalledWith(1, robot.id, undefined);
+  expect(read).toHaveBeenNthCalledWith(2, alternate.id, undefined);
+  const [experience] = await store.list('experiences', 'c');
+  expect(experience).toMatchObject({ externalId: alternate.id, contentEvidence: 'subtitle' });
+  expect(experience.content).toContain('机器人用脚尖调整重心');
+  expect((await store.list('diagnostics', 'c'))[0].data).toMatchObject({
+    discovery: 'deepseek_search',
+    captionStatus: 'read',
+    evidence: 'subtitle',
+  });
+});

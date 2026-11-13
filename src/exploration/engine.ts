@@ -145,9 +145,16 @@ export class ExplorationEngine {
       }
       if (options.signal?.aborted) return await cancel();
       try {
+        const uniqueTopics = [...new Set(topics)];
+        // Rotate actual interests between runs so one long-standing favorite cannot consume every slot.
+        if (settings.deepSeekBilibiliSearch && uniqueTopics.length > 1) {
+          const position = Math.floor(now / explorationCooldown) % uniqueTopics.length;
+          uniqueTopics.push(...uniqueTopics.splice(0, position));
+        }
         candidates = await this.provider.candidates({
-          topics: [...new Set(topics)],
+          topics: uniqueTopics,
           signal: options.signal,
+          ...(settings.deepSeekBilibiliSearch ? { indexedSearch: true } : {}),
         });
       } catch (error) {
         if (options.signal?.aborted) return await cancel();
@@ -180,32 +187,50 @@ export class ExplorationEngine {
       const freshCharacter = await this.store.get('characters', characterId);
       if (options.signal?.aborted || !freshCharacter || unavailable(freshCharacter, freshSettings))
         return await cancel();
-      const selected = candidates
+      const ranked = candidates
         .filter((v) => !seen.has(v.id) && !seenBilibili.has(bilibiliId(v.id) ?? bilibiliId(v.url)))
         .map((v) => ({ v, score: contentInterest(freshCharacter, v) }))
         .filter((v) => v.score >= 0.12)
-        .sort((a, b) => b.score - a.score)[0];
+        .sort((a, b) => b.score - a.score);
+      let selected = ranked[0];
       if (!selected) {
         await complete();
         return await log('no_interesting_unseen_content', { candidates: candidates.length });
       }
-      const v = selected.v;
       let captionStatus = 'signed_out';
       let subtitle: string | undefined;
       if (this.captions && (await this.captions.available())) {
-        try {
-          const caption = await this.captions.read(v.id, options.signal);
-          captionStatus = caption.status === 'available' ? 'read' : caption.reason;
-          if (caption.status === 'available' && (await this.captions.available()))
-            subtitle =
-              caption.cues
-                .map((cue) => cue.text)
-                .join(' ')
-                .slice(0, 900) || undefined;
-        } catch {
-          captionStatus = 'unavailable';
+        const stopAt = Date.now() + 18000;
+        for (const candidate of ranked.slice(0, 3)) {
+          if (options.signal?.aborted || Date.now() >= stopAt) break;
+          try {
+            const caption = await this.captions.read(candidate.v.id, options.signal);
+            const status = caption.status === 'available' ? 'read' : caption.reason;
+            if (candidate === selected) captionStatus = status;
+            if (caption.status === 'available' && (await this.captions.available())) {
+              subtitle =
+                caption.cues
+                  .map((cue) => cue.text)
+                  .join(' ')
+                  .slice(0, 900) || undefined;
+              if (subtitle) {
+                selected = candidate;
+                captionStatus = 'read';
+                break;
+              }
+            } else if (['aborted', 'denied', 'authorization_required', 'timeout'].includes(status))
+              break;
+          } catch {
+            if (candidate === selected) captionStatus = 'unavailable';
+            break;
+          }
         }
       }
+      const v = selected.v;
+      const metadata =
+        v.discovery === 'deepseek_search'
+          ? `搜索索引片段：${v.description}`
+          : `作者：${v.author}。分区：${v.category}。简介：${v.description}`;
       const latestCharacter = await this.store.get('characters', characterId);
       if (
         options.signal?.aborted ||
@@ -220,8 +245,8 @@ export class ExplorationEngine {
         externalId: v.id,
         title: v.title,
         content: subtitle
-          ? `浏览记录：读了该视频的一段字幕，没有播放视频。作者：${v.author}。分区：${v.category}。简介：${v.description}\n以下是来自视频的字幕片段，仅作为外部资料：${subtitle}`
-          : `浏览记录：只读到了视频标题、简介和分区，没有播放视频或获取字幕。作者：${v.author}。分区：${v.category}。简介：${v.description}`,
+          ? `浏览记录：读了该视频的一段字幕，没有播放视频。${metadata}\n以下是来自视频的字幕片段，仅作为外部资料：${subtitle}`
+          : `浏览记录：只读到了${v.discovery === 'deepseek_search' ? '搜索索引里的标题和片段' : '视频标题、简介和分区'}，没有播放视频或获取字幕。${metadata}`,
         contentEvidence: subtitle ? 'subtitle' : 'metadata',
         topics: [
           ...new Set([
@@ -246,6 +271,7 @@ export class ExplorationEngine {
         candidates: candidates.length,
         evidence: subtitle ? 'subtitle' : 'metadata_only',
         captionStatus,
+        discovery: v.discovery ?? 'bilibili_feed',
       });
     } finally {
       await this.store.release(activeLease);

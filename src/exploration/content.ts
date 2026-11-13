@@ -6,6 +6,7 @@ export interface ContentItem {
   category: string;
   author: string;
   url: string;
+  discovery?: 'deepseek_search';
 }
 export interface ContentProvider {
   readonly id: string;
@@ -14,6 +15,7 @@ export interface ContentProvider {
 export interface ContentQuery {
   topics?: readonly string[];
   signal?: AbortSignal;
+  indexedSearch?: boolean;
 }
 type SourceFailure = 'http' | 'api' | 'invalid_response' | 'too_large' | 'timeout' | 'network';
 export class BilibiliSourceError extends Error {
@@ -95,14 +97,25 @@ export class BilibiliContentProvider implements ContentProvider {
       getStatus(): Promise<'signed_in' | 'signed_out'>;
       readAuthorized(url: URL, signal: AbortSignal): Promise<Response>;
     },
+    private search?: {
+      candidates(topic: string, signal: AbortSignal): Promise<ContentItem[] | undefined>;
+    },
   ) {}
-  async candidates({ topics = [], signal }: ContentQuery = {}): Promise<ContentItem[]> {
+  async candidates({ topics = [], signal, indexedSearch }: ContentQuery = {}): Promise<
+    ContentItem[]
+  > {
     const controller = new AbortController();
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
     const timer = setTimeout(abort, 12000);
     try {
+      const topic = topics.find((value) => /[\p{L}\p{N}]/u.test(value));
+      if (indexedSearch && topic && this.search && !controller.signal.aborted) {
+        const indexed = await this.search.candidates(topic, controller.signal);
+        if (controller.signal.aborted) throw new BilibiliSourceError('timeout');
+        if (indexed) return indexed;
+      }
       const ranked = categoryUrl(topics);
       if (ranked && !controller.signal.aborted) {
         try {
