@@ -780,7 +780,10 @@ export class CompanionAgent {
     if (blocked) return blocked;
     return policyBlock(settings, records, now);
   }
-  async due(kind?: 'requested' | 'continuation' | 'reconnect', targetId?: string): Promise<void> {
+  async due(
+    kind?: 'requested' | 'continuation' | 'reconnect' | 'share',
+    targetId?: string,
+  ): Promise<void> {
     for (const character of await this.store.list('characters'))
       await this.flushOutbox(character.id);
     const tasks = (await this.store.list('intentions', undefined, 10000))

@@ -3,6 +3,7 @@ export interface MaintenancePorts {
   requested(): Promise<void>;
   continuations(): Promise<void>;
   reconnects(): Promise<void>;
+  shares(): Promise<void>;
   cycle(): Promise<void>;
   sync(): Promise<void>;
   idle(): Promise<void>;
@@ -22,6 +23,7 @@ export async function runMaintenance(ports: MaintenancePorts, full: boolean): Pr
   await attempt('maintenance_requested', ports.requested);
   await attempt('maintenance_continuations', ports.continuations);
   await attempt('maintenance_reconnects', ports.reconnects);
+  await attempt('maintenance_shares', ports.shares);
   if (full) await attempt('maintenance_cycle', ports.cycle);
   await attempt('maintenance_sync', ports.sync);
   await attempt('maintenance_idle', ports.idle);

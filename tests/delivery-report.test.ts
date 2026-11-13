@@ -4,6 +4,42 @@ import { defaultSettings } from '../src/domain/models';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 const environment = { notifications: true, online: true, presenceRunning: false };
+it('includes the durable notification receipt for a DSH share', async () => {
+  const db = new TestDatabase();
+  await migrate(db);
+  const store = new SQLiteStore(db);
+  await store.put('intentions', {
+    id: 'share',
+    characterId: 'c',
+    type: 'share',
+    topic: 'video',
+    reason: 'curiosity',
+    earliestAt: 50,
+    latestAt: 5000,
+    importance: 0.8,
+    status: 'completed',
+    createdAt: 1,
+  });
+  await store.put('notifications', {
+    id: 'agent:share',
+    characterId: 'c',
+    messageId: 'assistant',
+    title: 'fixture',
+    body: 'fixture',
+    createdAt: 60,
+    status: 'delivered',
+  });
+  const report = await deliveryReport(
+    store,
+    'c',
+    async () => {
+      throw new Error('fixture');
+    },
+    environment,
+    100,
+  );
+  expect(report.tasks[0].notificationStatus).toBe('delivered');
+});
 it('distinguishes no thought, missing registration and native startup failures without exposing private content', async () => {
   const db = new TestDatabase();
   await migrate(db);

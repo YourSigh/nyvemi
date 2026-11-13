@@ -43,24 +43,35 @@ it('does not write an activity timestamp if app backgrounds while waiting for SQ
 });
 function ports(log: string[]): MaintenancePorts {
   return Object.fromEntries(
-    ['requested', 'continuations', 'reconnects', 'cycle', 'sync', 'idle', 'error'].map((name) => [
-      name,
-      async () => {
-        log.push(name);
-      },
-    ]),
+    ['requested', 'continuations', 'reconnects', 'shares', 'cycle', 'sync', 'idle', 'error'].map(
+      (name) => [
+        name,
+        async () => {
+          log.push(name);
+        },
+      ],
+    ),
   ) as unknown as MaintenancePorts;
 }
 it('delivers due conversation intentions before slow experience/extraction, without a foreground dependency', async () => {
   const log: string[] = [];
   expect(await runMaintenance(ports(log), true)).toBe(true);
-  expect(log).toEqual(['requested', 'continuations', 'reconnects', 'cycle', 'sync', 'idle']);
+  expect(log).toEqual([
+    'requested',
+    'continuations',
+    'reconnects',
+    'shares',
+    'cycle',
+    'sync',
+    'idle',
+  ]);
 });
 it('runs a finite fast tick without RSS or extraction and can run repeatedly', async () => {
   const log: string[] = [];
   for (let n = 0; n < 3; n++) expect(await runMaintenance(ports(log), false)).toBe(true);
   expect(log).not.toContain('cycle');
   expect(log.filter((n) => n === 'requested')).toHaveLength(3);
+  expect(log.filter((n) => n === 'shares')).toHaveLength(3);
 });
 it('a failed delivery lane does not starve other lanes; failed ticks request a retry', async () => {
   const log: string[] = [];
@@ -72,7 +83,7 @@ it('a failed delivery lane does not starve other lanes; failed ticks request a r
     throw new Error('diagnostic storage unavailable');
   };
   expect(await runMaintenance(deps, true)).toBe(false);
-  expect(log).toEqual(['continuations', 'reconnects', 'cycle', 'sync', 'idle']);
+  expect(log).toEqual(['continuations', 'reconnects', 'shares', 'cycle', 'sync', 'idle']);
 });
 it('acknowledges maintenance failure if scheduling or status update fails', async () => {
   for (const lane of ['sync', 'idle'] as const) {

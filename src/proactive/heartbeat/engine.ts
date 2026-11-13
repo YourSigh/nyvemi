@@ -28,7 +28,10 @@ export class HeartbeatEngine {
     private clock: () => number = Date.now,
     private activity: (stage: CompanionActivity, characterId: string) => void = () => {},
     private agent?: {
-      due(kind?: 'requested' | 'continuation' | 'reconnect', targetId?: string): Promise<void>;
+      due(
+        kind?: 'requested' | 'continuation' | 'reconnect' | 'share',
+        targetId?: string,
+      ): Promise<void>;
       heartbeat(): Promise<void>;
     },
   ) {}
@@ -47,6 +50,9 @@ export class HeartbeatEngine {
     return this.agent
       ? this.agent.due('reconnect', targetId)
       : this.runConversationIntention('reconnect', targetId);
+  }
+  async runShares(): Promise<void> {
+    await this.agent?.due('share');
   }
   async runIntention(id: string): Promise<void> {
     if (this.agent) return this.agent.due(undefined, id);

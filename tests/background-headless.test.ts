@@ -35,7 +35,12 @@ vi.mock('../src/application/runtime', () => ({ getRuntime: mocks.getRuntime }));
 vi.mock('../src/proactive/heartbeat/driver', () => ({ runBackgroundCycle: mocks.cycle }));
 function runtime() {
   return {
-    heartbeat: { runRequested: vi.fn(), runContinuations: vi.fn(), runReconnects: vi.fn() },
+    heartbeat: {
+      runRequested: vi.fn(),
+      runContinuations: vi.fn(),
+      runReconnects: vi.fn(),
+      runShares: vi.fn(),
+    },
     syncIntentionWork: vi.fn(),
     diagnostics: {
       record: vi.fn().mockResolvedValue(undefined),
@@ -75,13 +80,15 @@ it('returns a failure receipt when cold runtime initialization fails instead of 
   expect(mocks.complete).toHaveBeenCalledWith('failed', false);
 });
 it('keeps a native fast tick independent of the full extraction/experience cycle', async () => {
-  mocks.getRuntime.mockResolvedValue(runtime());
+  const r = runtime();
+  mocks.getRuntime.mockResolvedValue(r);
   await mocks.tasks.get('NyvemiMaintenance')!()({
     runId: 'fast',
     full: false,
     source: 'presence_service',
   });
   expect(mocks.cycle).not.toHaveBeenCalled();
+  expect(r.heartbeat.runShares).toHaveBeenCalledOnce();
   expect(mocks.complete).toHaveBeenCalledWith('fast', true);
 });
 it('registers native durable recovery before removing the old hourly job', async () => {

@@ -38,7 +38,10 @@ export async function deliveryReport(
     const state = await native(task.id).catch(() => undefined);
     const log = logs.find((l) => l.kind === 'heartbeat' && l.data.intentionId === task.id);
     const sent = notifications.find(
-      (n) => n.id === `${task.type}:${task.id}` || n.id === log?.data.notificationId,
+      (n) =>
+        n.id === `agent:${task.id}` ||
+        n.id === `${task.type}:${task.id}` ||
+        n.id === log?.data.notificationId,
     );
     states.push({
       type: task.type,

@@ -37,6 +37,7 @@ async function executeMaintenance(full: boolean, source: string): Promise<boolea
         requested: () => runtime.heartbeat.runRequested(),
         continuations: () => runtime.heartbeat.runContinuations(),
         reconnects: () => runtime.heartbeat.runReconnects(),
+        shares: () => runtime.heartbeat.runShares(),
         cycle: () => runBackgroundCycle(runtime, source),
         sync: () => runtime.syncIntentionWork(),
         idle: async () => {
