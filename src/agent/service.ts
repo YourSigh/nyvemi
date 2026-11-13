@@ -26,6 +26,7 @@ import { MemoryRecall } from '../memory/recall';
 import { dialoguePreferences, saveDialoguePreference } from '../memory/dialogue-preference';
 import { conversationContext } from '../conversation/context';
 import { setContactMode } from '../chat/contact';
+import { needsClosureReview, reviewClosure } from '../chat/closure-review';
 import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from '../chat/delivery';
 import { ExperienceEngine } from '../experience/engine';
 import { agentSystem } from './prompt';
@@ -132,6 +133,26 @@ export class CompanionAgent {
       const history = (await this.store.list('messages', cid, 20))
         .filter((m) => m.status === 'complete' && m.id !== input.user?.id)
         .reverse();
+      let closure: Awaited<ReturnType<typeof reviewClosure>> | undefined;
+      const canDeliver = async (
+        candidate: string[],
+        signal: AbortSignal,
+        markedClosure = false,
+      ) => {
+        const { user } = input;
+        if (!user) return true;
+        if (!closure && needsClosureReview(user, history, markedClosure)) {
+          closure = await reviewClosure(provider, history, user, candidate, signal);
+          await this.diagnostics.record('heartbeat', cid, {
+            event: 'conversation_delivery',
+            source: 'dsh',
+            action: closure,
+            messageId: user.id,
+          });
+        }
+        if (signal.aborted) throw new Error('已取消');
+        return closure !== 'closed';
+      };
       const memories = await new MemoryRecall(this.store, this.diagnostics).retrieve(
         cid,
         input.user?.content ??
@@ -207,6 +228,7 @@ export class CompanionAgent {
       ) => {
         if (execution.signal.aborted) throw Error('已取消');
         await assertCurrent();
+        if (closure === 'closed') return { performed: false, reason: 'conversation_closed' };
         const args = z.record(z.unknown()).parse(raw);
         const log = async (success: boolean) =>
           this.diagnostics.record('heartbeat', cid, {
@@ -259,9 +281,11 @@ export class CompanionAgent {
           } else if (this.host.media && name === 'send_image') {
             if (bubbleCount >= 6) throw Error('这一轮已经发了几条，先停一停');
             const parsed = z
-                .object({ imageId: z.string(), caption: z.string().max(800).optional() })
-                .parse(args),
-              asset = await this.host.media.asset(cid, parsed.imageId);
+              .object({ imageId: z.string(), caption: z.string().max(800).optional() })
+              .parse(args);
+            if (!(await canDeliver([parsed.caption || '（一张图片）'], execution.signal)))
+              return { sent: [], reason: 'conversation_closed' };
+            const asset = await this.host.media.asset(cid, parsed.imageId);
             const message: Message = {
               id: `${cid}:${session!.sessionId}:${execution.sequence}:image`,
               characterId: cid,
@@ -365,9 +389,14 @@ export class CompanionAgent {
                     'tired',
                   ])
                   .optional(),
+                deliveryContext: z.literal('closure').optional(),
               })
               .parse(args);
             const contents = messageChunks(parsed.messages);
+            if (
+              !(await canDeliver(contents, execution.signal, parsed.deliveryContext === 'closure'))
+            )
+              return { sent: [], reason: 'conversation_closed' };
             if (bubbleCount + contents.length > 6) throw new Error('这一轮已经发了几条，先停一停');
             const messages: Message[] = [];
             for (const [n, content] of contents.entries()) {
@@ -661,6 +690,7 @@ export class CompanionAgent {
           checkpoint,
           generate: async (request, signal) => {
             await assertCurrent();
+            if (closure === 'closed') return { content: '', toolCalls: [], usage: {} };
             return provider.toolChat!(request, signal);
           },
           execute: executeOperation,

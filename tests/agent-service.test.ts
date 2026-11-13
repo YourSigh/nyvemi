@@ -11,7 +11,7 @@ import { dialoguePreferences } from '../src/memory/dialogue-preference';
 import { MemoryRecall } from '../src/memory/recall';
 import { defaultAnswers, CharacterService } from '../src/characters/service';
 import type { LLMProvider } from '../src/providers/provider';
-import type { Intention } from '../src/domain/models';
+import type { Intention, Message } from '../src/domain/models';
 import { TestDatabase } from './database';
 const tool = (name: string, args: unknown): AgentModelResult => ({
   content: '内部文字不自动发出',
@@ -85,6 +85,128 @@ async function setup(script: (request: AgentModelRequest, n: number) => Promise<
   });
   return { store, character, host, agent, chat, scheduled, delays, notifications, provider };
 }
+
+async function priorAssistant(store: SQLiteStore, content: string, age = 1000) {
+  const prior: Message = {
+    id: 'earlier-chat',
+    characterId: 'c',
+    role: 'assistant',
+    content,
+    createdAt: Date.now() - age,
+    origin: 'chat',
+    status: 'complete',
+  };
+  await store.put('messages', prior);
+}
+
+it('blocks every proposed bubble and does not reopen the model loop after confirmed closure', async () => {
+  const generate = vi.fn(
+    async (): Promise<AgentModelResult> => ({
+      content: '',
+      toolCalls: [
+        {
+          id: 'send-first',
+          name: 'send_message',
+          arguments: JSON.stringify({ messages: ['回头把计时器给我看看', '我还好奇那块'] }),
+        },
+        {
+          id: 'send-second',
+          name: 'send_message',
+          arguments: JSON.stringify({ messages: ['明天再和我说一下吧'] }),
+        },
+      ],
+      usage: {},
+    }),
+  );
+  const f = await setup(generate);
+  await priorAssistant(f.store, '所以你那个计时器是自己做的？');
+  const semantic = vi.fn(async () => ({ action: 'closed' as const }));
+  f.provider.structuredOutput = semantic as LLMProvider['structuredOutput'];
+  const prepare = vi.fn();
+  await f.chat.send(
+    'c',
+    '嗯，那今天先聊到这儿。',
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    [],
+    prepare,
+  );
+
+  const transcript = await f.chat.history('c');
+  expect(transcript.filter((m) => m.role === 'assistant').map((m) => m.content)).toEqual([
+    '所以你那个计时器是自己做的？',
+  ]);
+  expect(transcript.at(-1)?.replyDisposition).toBe('silence');
+  expect((await f.store.get('characters', 'c'))?.state.contactMode).not.toBe('quiet');
+  expect(await f.store.list('notifications', 'c')).toEqual([]);
+  expect(prepare).not.toHaveBeenCalled();
+  expect(generate).toHaveBeenCalledTimes(1);
+  expect(semantic).toHaveBeenCalledTimes(1);
+  expect(semantic).toHaveBeenCalledWith(
+    expect.arrayContaining([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('所以你那个计时器是自己做的？'),
+      }),
+    ]),
+    expect.anything(),
+    'conversation_delivery_review',
+    expect.anything(),
+  );
+});
+
+it('allows a substantive new question at the end of a topic and reviews later bubbles only once', async () => {
+  const f = await setup(async (_, n) => {
+    if (n === 1) return tool('send_message', { messages: ['十七乘二十三等于 391'] });
+    if (n === 2)
+      return {
+        ...tool('send_message', { messages: ['拆成二十和三来算就行'] }),
+        toolCalls: [
+          {
+            id: 'explain',
+            name: 'send_message',
+            arguments: '{"messages":["拆成二十和三来算就行"]}',
+          },
+        ],
+      };
+    return tool('wait', { reason: '答完了' });
+  });
+  await priorAssistant(f.store, '计时器的事聊完啦。');
+  const semantic = vi.fn(async () => ({ action: 'allow' as const }));
+  f.provider.structuredOutput = semantic as LLMProvider['structuredOutput'];
+  await f.chat.send('c', '这事先放放，另外 17 乘 23 等于多少？', () => {});
+
+  expect(semantic).toHaveBeenCalledTimes(1);
+  expect((await f.chat.history('c')).filter((m) => m.role === 'assistant')).toHaveLength(3);
+});
+
+it('can review a model-marked long closure and allows sending if review fails', async () => {
+  const f = await setup(async (_, n) =>
+    n === 1
+      ? tool('send_message', { messages: ['好，歇会吧'], deliveryContext: 'closure' })
+      : tool('wait', { reason: '等下一轮' }),
+  );
+  const semantic = vi.fn(async () => {
+    throw new Error('review temporarily unavailable');
+  });
+  f.provider.structuredOutput = semantic;
+  await f.chat.send(
+    'c',
+    '我把前面说的那些事先整理一下，剩下的部分还得看看明天是什么情况。' +
+      '今天没法继续聊这件事了，我接下来会关掉手机去忙，其他的之后再说。'.repeat(2),
+    () => {},
+  );
+  expect(semantic).toHaveBeenCalledTimes(1);
+  expect((await f.chat.history('c')).at(-1)?.content).toBe('好，歇会吧');
+  expect(
+    (await f.store.list('diagnostics', 'c')).some(
+      (d) => d.data.event === 'conversation_delivery' && d.data.action === 'unavailable',
+    ),
+  ).toBe(true);
+});
 it('the real DSH action loop reads evidence, remembers an experience and emits separate paced bubbles', async () => {
   let evidenceId = '';
   const f = await setup(async (request, n) => {

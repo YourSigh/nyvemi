@@ -70,6 +70,10 @@ export const agentTools: AgentTool[] = [
         items: { type: 'string' },
       },
       emotion: string('amused/curious/excited/annoyed/embarrassed/sad/calm/tired，可省略', false),
+      deliveryContext: string(
+        '如果主要在回应对方结束当前聊天，标记 closure；普通对话省略。',
+        false,
+      ),
     },
   },
   {
