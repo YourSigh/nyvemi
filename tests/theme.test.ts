@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { contrast, defaultPalette, generatePalette } from '../src/theme/generator';
+import { designTokens, mix } from '../src/theme/design-tokens';
 import { defaultPreference, ThemePreferenceSchema, ThemeRecordSchema } from '../src/theme/model';
 import { ThemeService, localPreference } from '../src/theme/service';
 import { migrate, SQLiteStore } from '../src/storage/store';
@@ -53,6 +54,115 @@ it('respects basic color, softness and negation when a provider is unavailable',
   });
   expect(localPreference('深夜蓝，暗一点')).toMatchObject({ base: 'blue', brightness: 'dark' });
   expect(localPreference('随便聊聊')).toBeUndefined();
+});
+
+it('keeps gradient text and controls readable across the ramp and their own surfaces', () => {
+  for (const base of ThemePreferenceSchema.shape.base.options)
+    for (const secondary of ThemePreferenceSchema.shape.base.options)
+      for (const brightness of ['light', 'dark'] as const)
+        for (const saturation of ['low', 'medium'] as const) {
+          const palette = generatePalette({
+            ...defaultPreference,
+            base,
+            secondary,
+            brightness,
+            saturation,
+            gradient: true,
+          });
+          const stops = palette.backgroundGradient!;
+          const tokens = designTokens(palette);
+          expect(stops[0]).toBe(palette.background);
+          expect(stops[0]).not.toBe(stops[1]);
+          for (let step = 0; step <= 10; step++) {
+            const surface = mix(stops[0], stops[1], step / 10);
+            for (const color of [palette.ink, palette.muted, palette.accent, palette.error])
+              expect(contrast(color, surface)).toBeGreaterThanOrEqual(4.5);
+          }
+          for (const token of [
+            tokens.ai,
+            tokens.user,
+            tokens.recommendation,
+            tokens.input,
+            tokens.disabled,
+          ])
+            expect(contrast(token.text, token.background)).toBeGreaterThanOrEqual(4.5);
+          expect(
+            contrast(tokens.input.placeholder, tokens.input.background),
+          ).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(tokens.onPrimary, tokens.action)).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(tokens.onPrimary, tokens.interaction.pressed)).toBeGreaterThanOrEqual(
+            4.5,
+          );
+        }
+});
+
+it('interprets a gradient with the model and keeps the explicitly ordered endpoints offline', async () => {
+  const { service, calls, store } = await fixture({ ...defaultPreference, base: 'purple' });
+  const description = '蓝色到淡紫色渐变';
+  expect(await service.interpret(description)).toMatchObject({
+    source: 'model',
+    preference: { base: 'blue', secondary: 'purple', gradient: true },
+  });
+  expect(calls).toEqual(['theme_interpretation']);
+  const offline = new ThemeService(store, async () => {
+    throw new Error('offline');
+  });
+  const theme = await offline.interpret('白色过渡到薄荷绿渐变');
+  expect(theme).toMatchObject({
+    source: 'local',
+    preference: { base: 'neutral', secondary: 'mint', gradient: true },
+  });
+  expect((await offline.interpret('不要渐变', theme.preference)).preference.gradient).toBe(false);
+});
+
+it('uses only public role evidence to resolve a named theme and saves its generated colors', async () => {
+  const { store } = await fixture({});
+  const name = '流萤';
+  const work = '崩坏：星穹铁道';
+  const title = '崩坏：星穹铁道 流萤 官方角色介绍';
+  const url = 'https://sr.mihoyo.com/news/124154';
+  const search = vi.fn(async () => [
+    { url, title, text: '流萤角色介绍', source: 'web-search-snippet' },
+  ]);
+  const read = vi.fn(async () => ({
+    url,
+    title,
+    text: '流萤身着白色和青绿色服装，带金色领结。',
+    source: 'web-page',
+  }));
+  const purposes: string[] = [];
+  const provider: LLMProvider = {
+    chat: vi.fn(),
+    streamChat: vi.fn(),
+    structuredOutput: async (messages, schema, purpose) => {
+      purposes.push(purpose);
+      if (purpose === 'theme_interpretation')
+        return schema.parse({ ...defaultPreference, reference: { name, work } });
+      const data = JSON.parse(messages[1].content);
+      expect(data.evidence[0]).toMatchObject({ url, text: expect.stringContaining('青绿色') });
+      return schema.parse({
+        ...defaultPreference,
+        base: 'mint',
+        hue: 158,
+        secondary: 'blue',
+        secondaryHue: 188,
+        gradient: true,
+      });
+    },
+  };
+  const service = new ThemeService(store, async () => provider, { search, read });
+  const description = '我要流萤的颜色';
+  const selected = await service.interpret(description);
+  expect(selected.preference).toMatchObject({ referenceName: name, base: 'mint', gradient: true });
+  expect(generatePalette(selected.preference).backgroundGradient).toHaveLength(2);
+  expect(search.mock.calls.length).toBeGreaterThan(0);
+  await service.save(selected);
+  expect((await service.load())?.preference).toEqual(selected.preference);
+  expect(await service.interpret(description, selected.preference)).toEqual(selected);
+  expect(purposes).toEqual(['theme_interpretation', 'theme_reference_palette']);
+  search.mockResolvedValue([]);
+  await expect(service.interpret('换个流萤的配色')).rejects.toThrow('没找到');
+  expect(await service.load()).toEqual(selected);
 });
 async function fixture(output: unknown) {
   const db = new TestDatabase();

@@ -22,8 +22,19 @@ it('accepts personal color preferences and interface requests while excluding qu
     'I prefer soft pink',
     '淡紫色也挺好看',
     '喜欢薄荷绿色',
+    '换成淡蓝到浅紫的渐变吧',
+    '还是把渐变关掉吧',
+    '换回纯色',
+    '我喜欢青绿到金色的渐变',
+    '我想要流萤的颜色',
+    '我想要流萤那种颜色',
+    '我喜欢流萤的配色',
+    '我希望主题像流萤一点',
+    '我想要崩铁流萤的配色渐变',
+    '能用原神纳西妲的配色吗？',
+    'Can you make the app a teal and gold gradient?',
   ])
-    expect(isThemeChangeRequest(input)).toBe(true);
+    expect(isThemeChangeRequest(input), input).toBe(true);
   for (const input of [
     '我喜欢红烧肉',
     '我喜欢蓝色吗？',
@@ -36,8 +47,16 @@ it('accepts personal color preferences and interface requests while excluding qu
     '如果换成蓝色会怎么样',
     '换成蓝色的裙子',
     '他说“换成蓝色”是什么意思',
+    '流萤是什么颜色？',
+    '我喜欢流萤',
+    '我想要流萤裙子的颜色',
+    '帮我看看这件裙子的配色',
+    '给我解释一下什么是渐变',
+    '帮我分析一下流萤的配色',
+    '你觉得渐变色好看吗？',
+    'What makes a good gradient?',
   ])
-    expect(isThemeChangeRequest(input)).toBe(false);
+    expect(isThemeChangeRequest(input), input).toBe(false);
 });
 async function fixture() {
   const db = new TestDatabase();
@@ -95,13 +114,31 @@ it('applies a semantic theme action during chat without opening another question
       applied.push(description);
     },
   );
-  expect(applied).toEqual(['淡紫色，柔和一点']);
+  expect(applied).toEqual(['把这里换成淡紫色吧']);
   expect(prompts[0]).toContain('这轮允许响应界面');
   expect((await chat.history('c')).map((m) => m.content)).toEqual([
     '把这里换成淡紫色吧',
     '好，淡一点的紫。',
   ]);
   expect(await store.list('intentions', 'c')).toHaveLength(0);
+});
+
+it('passes the original character name and gradient through to theme interpretation', async () => {
+  const { chat } = await fixture();
+  const applied: string[] = [];
+  const request = '把 App 换成崩铁流萤的配色，青绿渐变到奶白';
+  await chat.send(
+    'c',
+    request,
+    () => {},
+    undefined,
+    undefined,
+    undefined,
+    async (description) => {
+      applied.push(description);
+    },
+  );
+  expect(applied).toEqual([request]);
 });
 it('rejects unsolicited theme actions on questions about someone else', async () => {
   const { chat, disableAction } = await fixture();

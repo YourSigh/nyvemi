@@ -237,6 +237,7 @@ function purposeLabel(purpose: string): string {
         persona_generation: '人格生成',
         persona_interview: '角色访谈',
         theme_interpretation: '颜色偏好理解',
+        theme_reference_palette: '角色配色整理',
         memory_extraction: '记忆整理',
         proactive_generation: '主动来信',
         connection_test: '连接测试',

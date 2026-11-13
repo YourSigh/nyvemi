@@ -172,7 +172,7 @@ export const agentTools: AgentTool[] = [
   {
     name: 'change_theme',
     description:
-      '根据对方这轮明确表达的配色偏好改变App主题。有喜欢某种颜色的表达也可以，不必固定口令。不要无故替用户换色。',
-    parameters: { description: string('对方希望的颜色和氛围') },
+      '应用对方这轮提出的 App 配色，包括纯色、渐变和角色主题。主题系统直接理解这轮原话，需要角色资料时会自行查找。',
+    parameters: { description: string('对方的配色偏好，包括提到的颜色、渐变和角色') },
   },
 ];

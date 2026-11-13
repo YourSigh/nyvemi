@@ -69,6 +69,7 @@ export function brandPalette(id: BrandThemeId): Palette {
   };
 }
 export function brandForPreference(p: ThemePreference): BrandThemeId | undefined {
+  if (p.gradient || p.hue !== undefined || p.referenceName) return;
   if (p.brightness === 'dark')
     return p.base === 'blue' || p.base === 'purple' ? 'nebula' : undefined;
   return p.base === 'pink'
@@ -79,28 +80,63 @@ export function brandForPreference(p: ThemePreference): BrandThemeId | undefined
         ? 'mint'
         : undefined;
 }
+const hues = {
+  pink: 337,
+  blue: 215,
+  purple: 273,
+  peach: 19,
+  mint: 158,
+  red: 358,
+  amber: 39,
+  neutral: 240,
+};
 export function generatePalette(input: ThemePreference): Palette {
   const p = ThemePreferenceSchema.parse(input);
   const brand = brandForPreference(p);
   if (brand) return brandPalette(brand);
   const dark = p.brightness === 'dark';
-  const hues = {
-    pink: 337,
-    blue: 215,
-    purple: 273,
-    peach: 19,
-    mint: 158,
-    red: 358,
-    amber: 39,
-    neutral: 240,
-  };
   const hue =
+    p.hue ??
     (hues[p.base] + (p.temperature === 'warm' ? 4 : p.temperature === 'cool' ? -4 : 0) + 360) % 360;
   const saturation = p.base === 'neutral' ? 0.035 : p.saturation === 'low' ? 0.3 : 0.55;
-  const background = hsl(hue, saturation * 0.5, dark ? 0.075 : 0.98);
+  const nextHue = p.secondaryHue ?? (p.secondary ? hues[p.secondary] : (hue + 34) % 360);
+  const secondarySaturation =
+    p.secondary === 'neutral' ||
+    (p.base === 'neutral' && !p.secondary && p.secondaryHue === undefined)
+      ? 0.045
+      : p.saturation === 'low'
+        ? 0.3
+        : 0.55;
+  const gradient = p.gradient
+    ? ([
+        hsl(hue, saturation * (dark ? 0.82 : 1.3), dark ? 0.085 : 0.978),
+        hsl(nextHue, secondarySaturation * (dark ? 0.92 : 1.4), dark ? 0.168 : 0.924),
+      ] as const)
+    : undefined;
+  const background = gradient?.[0] ?? hsl(hue, saturation * 0.5, dark ? 0.075 : 0.98);
   const paper = dark ? hsl(hue, saturation * 0.4, 0.12) : '#FFFFFF';
   const tint = hsl(hue, saturation * 0.8, dark ? 0.2 : 0.92);
-  const surfaces = [background, paper, tint];
+  const userBubble = gradient ? hsl(hue, saturation * 0.94, dark ? 0.23 : 0.9) : tint;
+  const line = hsl(hue, saturation * 0.5, dark ? 0.29 : 0.85);
+  const surfaces = [background, paper, tint, userBubble, blend(paper, line, 0.55)];
+  if (gradient) {
+    // Bound every interpolated RGB channel, including cross-hue gradients with
+    // an interior darker/lighter than either end.
+    const channelLimit = dark ? Math.max : Math.min;
+    surfaces.push(
+      '#' +
+        [1, 3, 5]
+          .map((n) =>
+            channelLimit(
+              parseInt(gradient[0].slice(n, n + 2), 16),
+              parseInt(gradient[1].slice(n, n + 2), 16),
+            )
+              .toString(16)
+              .padStart(2, '0'),
+          )
+          .join(''),
+    );
+  }
   const readable = (h: number, s: number, initial: number) => {
     for (let n = 0; n <= 100; n++) {
       const lightness = dark ? Math.min(1, initial + n * 0.01) : Math.max(0, initial - n * 0.01);
@@ -110,15 +146,26 @@ export function generatePalette(input: ThemePreference): Palette {
     return dark ? '#FFFFFF' : '#000000';
   };
   const accent = readable(hue, saturation, dark ? 0.72 : 0.44);
+  const onAccent = contrast(accent, '#FFFFFF') >= 4.5 ? '#FFFFFF' : '#000000';
   return {
     background,
+    ...(gradient ? { backgroundGradient: gradient } : {}),
     paper,
     tint,
     accent,
+    ...(gradient || p.referenceName || p.hue !== undefined
+      ? {
+          brandPrimary: hsl(hue, Math.min(saturation + 0.1, 0.7), dark ? 0.73 : 0.7),
+          action: accent,
+          onAction: onAccent,
+          userBubble,
+          support: hsl(nextHue, secondarySaturation, dark ? 0.68 : 0.77),
+        }
+      : {}),
     ink: readable(hue, saturation * 0.3, dark ? 0.94 : 0.18),
     muted: readable(hue, saturation * 0.3, dark ? 0.7 : 0.4),
-    onAccent: contrast(accent, '#FFFFFF') >= 4.5 ? '#FFFFFF' : '#101014',
-    line: hsl(hue, saturation * 0.5, dark ? 0.29 : 0.85),
+    onAccent,
+    line,
     error: readable(348, 0.55, dark ? 0.77 : 0.38),
   };
 }
@@ -133,6 +180,9 @@ const names = {
   neutral: '素白',
 };
 export function themeName(p: ThemePreference): string {
+  if (p.referenceName) return `${p.referenceName} · ${p.gradient ? '渐变' : '配色'}`;
+  if (p.gradient)
+    return `${p.brightness === 'dark' ? '夜色 · ' : ''}${names[p.base]}${p.secondary && p.secondary !== p.base ? `到${names[p.secondary]}` : ''}渐变`;
   const brand = brandForPreference(p);
   if (brand)
     return {

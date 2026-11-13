@@ -7,6 +7,7 @@ import { AppearanceScreen } from './src/ui/appearance';
 import { reconcileIntentionWork } from './src/proactive/requested-delivery';
 import { ThemeProvider, useTheme } from './src/theme/context';
 import { ThemeScreen } from './src/ui/theme';
+import { ThemeGradient } from './src/ui/theme-gradient';
 import { ThemePreviewScreen } from './src/ui/theme-preview';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { useEffect, useState } from 'react';
@@ -112,6 +113,9 @@ function Application() {
       <StatusBar style={record?.preference.brightness === 'dark' ? 'light' : 'dark'} />
       <KeyboardProvider>
         <View style={{ flex: 1, backgroundColor: palette.background }}>
+          {error || !runtime || !ready ? (
+            <ThemeGradient stops={palette.backgroundGradient} />
+          ) : null}
           {error ? (
             <Page>
               <ErrorText text={error} />
@@ -139,7 +143,7 @@ function Application() {
                     colors: {
                       ...DefaultTheme.colors,
                       background: palette.background,
-                      card: palette.background,
+                      card: palette.backgroundGradient?.[0] ?? palette.background,
                       text: palette.ink,
                       primary: palette.accent,
                       border: palette.line,
@@ -157,6 +161,12 @@ function Application() {
                 >
                   <Stack.Navigator
                     initialRouteName={initial && configured ? 'Chat' : 'Provider'}
+                    screenLayout={({ children }) => (
+                      <View style={{ flex: 1 }}>
+                        <ThemeGradient stops={palette.backgroundGradient} />
+                        {children}
+                      </View>
+                    )}
                     screenOptions={{
                       headerShadowVisible: false,
                       headerBackTitle: '返回',

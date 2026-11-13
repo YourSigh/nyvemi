@@ -56,7 +56,7 @@ export function Page({ children }: PropsWithChildren) {
     ripple: palette.tint,
   };
   return (
-    <View style={{ flex: 1, backgroundColor: palette.background }}>
+    <View style={{ flex: 1 }}>
       <KeyboardAwareScrollView
         style={{ flex: 1 }}
         enabled={focused && !transitioning}
@@ -313,7 +313,6 @@ const createStyles = (palette: Palette) =>
       padding: 16,
       gap: 12,
       paddingBottom: 16,
-      backgroundColor: palette.background,
       flexGrow: 1,
     },
     heading: { fontSize: 24, fontWeight: '700', color: palette.ink },

@@ -332,7 +332,22 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     setError('');
     if (!retry && !spoken) setDraft('');
     if (!retry) setPictures([]);
-    abort.current = new AbortController();
+    const controller = new AbortController();
+    abort.current = controller;
+    const { signal } = controller;
+    const changeTheme = async (description: string, opening: boolean) => {
+      await closeKeyboard();
+      const current = await runtime.themes.load();
+      const next = await runtime.themes.interpret(description, current?.preference, signal);
+      await apply(
+        next,
+        (applySignal) =>
+          opening
+            ? runtime.themes.completeOpening(next, applySignal)
+            : runtime.themes.save(next, applySignal),
+        signal,
+      );
+    };
     try {
       const opening = await runtime.hatching.load(cid);
       const voiceRequest = !attachments.length && wantsVoiceSettings(text);
@@ -340,16 +355,11 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         const next = await runtime.hatching.answer(
           cid,
           text,
-          async (description) => {
-            await closeKeyboard();
-            const current = await runtime.themes.load();
-            const nextTheme = await runtime.themes.interpret(description, current?.preference);
-            await apply(nextTheme, (signal) => runtime.themes.completeOpening(nextTheme, signal));
-          },
+          (description) => changeTheme(description, true),
           () => {
             void refresh().catch(() => {});
           },
-          abort.current.signal,
+          signal,
           prepareVoice,
         );
         await refresh();
@@ -367,14 +377,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
         () => {
           void refresh().catch(() => setError('读取消息失败'));
         },
-        abort.current.signal,
+        signal,
         retry?.id,
-        async (description) => {
-          await closeKeyboard();
-          const current = await runtime.themes.load();
-          const next = await runtime.themes.interpret(description, current?.preference);
-          await apply(next, (signal) => runtime.themes.save(next, signal));
-        },
+        (description) => changeTheme(description, false),
         attachments,
         prepareVoice,
       );
@@ -840,7 +845,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
 }
 const createStyles = (theme: CharacterTheme) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: theme.background },
+    root: { flex: 1 },
     header: {
       paddingHorizontal: 16,
       gap: 8,

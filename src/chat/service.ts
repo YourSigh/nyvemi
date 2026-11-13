@@ -141,6 +141,17 @@ export class ChatService {
     const startedAt = Date.now();
     let user: Message | undefined;
     let hasReply = false;
+    let themeChange: Promise<void> | undefined;
+    // A model may call the tool twice, omit it, or shorten a character name or gradient.
+    // Use the original request and share its result across all paths in this turn.
+    const applyRequestedTheme =
+      onThemeChange && isThemeChangeRequest(content)
+        ? () =>
+            (themeChange ??= Promise.resolve().then(() => {
+              if (signal?.aborted) throw new Error('换色已取消');
+              return onThemeChange(content.slice(0, 500));
+            }))
+        : undefined;
     try {
       const character = await this.store.get('characters', characterId);
       if (!character) throw new Error('角色不存在');
@@ -186,15 +197,24 @@ export class ChatService {
       }
       this.activities.publish(characterId, { phase: 'thinking' });
       if (this.hooks.agent) {
-        const delivered = await this.hooks.agent({
-          characterId,
-          user,
-          signal,
-          onSaved,
-          onThemeChange,
-          onSpeechDraft,
-          activity: (value) => this.activities.publish(characterId, value),
-        });
+        let delivered: Message[];
+        try {
+          delivered = await this.hooks.agent({
+            characterId,
+            user,
+            signal,
+            onSaved,
+            onThemeChange: applyRequestedTheme,
+            onSpeechDraft,
+            activity: (value) => this.activities.publish(characterId, value),
+          });
+        } catch (error) {
+          if (!applyRequestedTheme || signal?.aborted) throw error;
+          // A chat-provider error does not prevent a locally understood appearance change.
+          await applyRequestedTheme();
+          this.activities.publish(characterId, { phase: 'complete', hasMessages: false });
+          delivered = [];
+        }
         user = {
           ...user,
           status: 'complete',
@@ -209,6 +229,7 @@ export class ChatService {
         } catch {
           await this.diagnostics.error(characterId, 'post_round');
         }
+        await applyRequestedTheme?.();
         return;
       }
       const acknowledge = async (delay: number) => {
@@ -251,7 +272,7 @@ export class ChatService {
         this.hooks.clock?.(),
       );
       prompt[0].content += `\n当前界面配色：${JSON.stringify((await this.store.get('themes', 'app'))?.preference ?? '柔和粉白')}`;
-      const canChangeTheme = Boolean(onThemeChange) && isThemeChangeRequest(content);
+      const canChangeTheme = Boolean(applyRequestedTheme);
       prompt[0].content += `\n${conversationActions(settings?.proactiveEnabled ?? false, Boolean(this.hooks.scheduleRequested), canChangeTheme)}\n${await conversationContext(this.store, characterId, Date.now())}`;
       const decisionContext = `${characterVoice(character.persona)}\n${this.hooks.clock?.() ?? localTimeContext()}\n状态：${JSON.stringify(character.state)}\n相关记忆（资料）：${JSON.stringify(memories.slice(0, 8).map((m) => m.content))}\n自主来信：${settings?.proactiveEnabled ?? false}\n${await conversationContext(this.store, characterId, Date.now())}`;
       // Decision failure is a failed turn, never permission to force an unsolicited response.
@@ -279,7 +300,7 @@ export class ChatService {
         onPreview('');
         this.activities.publish(characterId, { phase: 'complete', hasMessages: false });
         onSaved();
-        if (canChangeTheme && onThemeChange) await onThemeChange(content.slice(0, 500));
+        await applyRequestedTheme?.();
         try {
           await this.hooks.afterRound(characterId, silentUser, []);
         } catch {
@@ -304,10 +325,6 @@ export class ChatService {
         await acknowledge(outcome.schedule.afterSeconds * 1000);
         return;
       }
-      // Explicit UI requests still execute if a provider omits the optional action field.
-      const themeDescription = canChangeTheme
-        ? (outcome.theme?.description ?? content.slice(0, 500))
-        : undefined;
       let delivery: ParticipationDecision = participation;
       if (outcome.messages.length)
         delivery = await decideParticipation(
@@ -347,11 +364,11 @@ export class ChatService {
         if (delivery.action === 'pause') await setContactMode(tx, characterId, true);
         else if (replies.length) await setContactMode(tx, characterId, false);
         for (const message of group) await tx.put('messages', message);
-        if (delivery.action === 'defer' && !themeDescription)
+        if (delivery.action === 'defer' && !canChangeTheme)
           await saveContinuation(tx, user!, delivery.thought, base);
-        if (outcome.continuation && replies.length && !themeDescription)
+        if (outcome.continuation && replies.length && !canChangeTheme)
           await saveContinuation(tx, user!, outcome.continuation, base);
-        if (replies.length && !themeDescription) await planReconnect(tx, user!, base);
+        if (replies.length && !canChangeTheme) await planReconnect(tx, user!, base);
       });
       hasReply = true;
       onPreview('');
@@ -380,7 +397,7 @@ export class ChatService {
         emotion: outcome.emotion,
         intensity: outcome.intensity,
       });
-      if (themeDescription && onThemeChange) await onThemeChange(themeDescription);
+      await applyRequestedTheme?.();
       // Hooks persist their durable work before returning; actual extraction does not block the composer.
       try {
         await this.hooks.afterRound(characterId, user, saved);

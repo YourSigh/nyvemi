@@ -78,7 +78,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                     ? 1400
                     : purpose === 'visual_identity_planning'
                       ? 600
-                      : purpose === 'theme_interpretation'
+                      : purpose.startsWith('theme_')
                         ? 400
                         : purpose === 'proactive_generation'
                           ? 350
@@ -86,7 +86,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
                             ? 1536
                             : 2500,
           ...(stream ? { stream_options: { include_usage: true } } : {}),
-          ...(((jsonOutput && purpose.startsWith('visual_')) ||
+          ...(((jsonOutput && (purpose.startsWith('visual_') || purpose.startsWith('theme_'))) ||
             purpose === 'conversation_participation' ||
             purpose === 'conversation_delivery_review' ||
             purpose === 'bilibili_candidate_selection') &&

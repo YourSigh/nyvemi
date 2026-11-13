@@ -7,6 +7,13 @@ export const ThemePreferenceSchema = z
     brightness: z.enum(['light', 'dark']),
     temperature: z.enum(['warm', 'cool', 'neutral']),
     confidence: z.number().min(0).max(1),
+    secondary: z
+      .enum(['pink', 'blue', 'purple', 'peach', 'mint', 'red', 'amber', 'neutral'])
+      .optional(),
+    hue: z.number().int().min(0).max(359).optional(),
+    secondaryHue: z.number().int().min(0).max(359).optional(),
+    gradient: z.boolean().optional(),
+    referenceName: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
 export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
@@ -28,6 +35,7 @@ export interface Palette {
   userBubble?: string;
   support?: string;
   background: string;
+  backgroundGradient?: readonly [string, string];
   paper: string;
   ink: string;
   muted: string;

@@ -279,7 +279,7 @@ async function createRuntime() {
     usage,
     provider,
     saveProvider,
-    themes: new ThemeService(store, provider),
+    themes: new ThemeService(store, provider, agentWeb),
     memories,
     retriever,
     extraction,

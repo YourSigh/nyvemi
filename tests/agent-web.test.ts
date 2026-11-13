@@ -29,14 +29,19 @@ it('passes Bilibili interests to the provider and returns no unrelated results f
   expect(await web.bilibili('')).toHaveLength(2);
 });
 it('reads real-shaped search RSS and pages with bounded public HTTPS redirects', async () => {
-  const request = (async (url) =>
-    new Response(
-      String(url).includes('bing.com')
-        ? '<rss><channel><item><title>机器人</title><link>https://example.com/a</link><description>简介</description></item></channel></rss>'
-        : '<title>文章</title><script>bad()</script><p>正文</p>',
-    )) as typeof fetch;
+  const request = vi.fn(
+    async (url) =>
+      new Response(
+        String(url).includes('bing.com')
+          ? '<rss><channel><item><title>机器人</title><link>https://example.com/a</link><description>简介</description></item></channel></rss>'
+          : '<title>文章</title><script>bad()</script><p>正文</p>',
+      ),
+  );
   const web = new PublicAgentWeb(new MockContentProvider([]), request);
-  const hits = await web.search('机器人');
+  const hits = await web.search('机器人 实验');
+  expect(request.mock.calls[0][0]).toBe(
+    'https://www.bing.com/search?format=rss&q=%E6%9C%BA%E5%99%A8%E4%BA%BA+%E5%AE%9E%E9%AA%8C',
+  );
   expect(hits[0].source).toBe('web-search-snippet');
   const doc = await web.read(hits[0].url);
   expect(doc.text).not.toContain('bad()');
@@ -73,6 +78,24 @@ it('extracts actual image-search metadata and rejects invented/private/malformed
     images: [{ url: 'https://cdn.example.org/full.png' }],
     source: 'web-image-search',
   });
+});
+
+it('uses the public Baidu search host for the same encyclopedia entry on a 403', async () => {
+  const entry = 'https://baike.baidu.com/item/role/1234?tracking=1';
+  const alternate = 'https://bkso.baidu.com/item/role/1234';
+  const body = `<title>角色</title><p>她有银色的头发</p><!--${'x'.repeat(525_000)}-->`;
+  const request = vi.fn(async (url) =>
+    String(url) === entry
+      ? new Response('', { status: 403 })
+      : new Response(body, { headers: { 'content-length': String(body.length) } }),
+  );
+  const web = new PublicAgentWeb(new MockContentProvider([]), request);
+  await expect(web.read(entry)).resolves.toMatchObject({
+    url: alternate,
+    text: '角色 她有银色的头发',
+  });
+  expect(request.mock.calls.map(([url]) => url)).toEqual([entry, alternate]);
+  await expect(web.read('https://other.example.com/role')).rejects.toThrow('过大');
 });
 
 it('reads and labels only verified subtitles for canonical Bilibili video links', async () => {

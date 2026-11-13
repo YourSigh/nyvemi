@@ -150,8 +150,11 @@ export class PublicAgentWeb implements AgentWeb {
         // Reject an implementation that silently followed redirects despite manual mode.
         if (response.redirected || (response.url && publicUrl(response.url).href !== url.href))
           throw new Error('网页发生了未受控跳转');
-        if (Number(response.headers.get('content-length')) > 524288)
-          throw new Error('网页内容过大');
+        const limit =
+          url.hostname === 'bkso.baidu.com' && /^\/item\/[^/]+\/\d+\/?$/.test(url.pathname)
+            ? 640 * 1024
+            : 512 * 1024;
+        if (Number(response.headers.get('content-length')) > limit) throw new Error('网页内容过大');
         let text = '';
         if (response.body?.getReader) {
           const reader = response.body.getReader(),
@@ -162,7 +165,7 @@ export class PublicAgentWeb implements AgentWeb {
               const chunk = await reader.read();
               if (chunk.done) break;
               bytes += chunk.value.byteLength;
-              if (bytes > 524288) {
+              if (bytes > limit) {
                 await reader.cancel();
                 throw new Error('网页内容过大');
               }
@@ -173,7 +176,7 @@ export class PublicAgentWeb implements AgentWeb {
             reader.releaseLock();
           }
         } else text = await response.text();
-        if (text.length > 524288) throw new Error('网页内容过大');
+        if (text.length > limit) throw new Error('网页内容过大');
         return { url: url.href, text };
       }
       throw new Error('网页跳转次数过多');
@@ -186,10 +189,8 @@ export class PublicAgentWeb implements AgentWeb {
     return (await this.text(url)).text;
   }
   async search(query: string, signal?: AbortSignal): Promise<WebDocument[]> {
-    const response = await this.text(
-      `https://www.bing.com/search?format=rss&q=${encodeURIComponent(query)}`,
-      signal,
-    );
+    const params = new URLSearchParams({ format: 'rss', q: query });
+    const response = await this.text(`https://www.bing.com/search?${params}`, signal);
     const parsed = new XMLParser({ ignoreAttributes: true, processEntities: false }).parse(
       response.text,
     ) as { rss?: { channel?: { item?: unknown } } };
@@ -215,7 +216,19 @@ export class PublicAgentWeb implements AgentWeb {
     });
   }
   async read(url: string, signal?: AbortSignal): Promise<WebDocument> {
-    const response = await this.text(url, signal),
+    const response = await this.text(url, signal).catch((error: unknown) => {
+        const entry = publicUrl(url);
+        if (
+          signal?.aborted ||
+          !(error instanceof Error) ||
+          error.message !== '网页暂不可用（HTTP 403）' ||
+          entry.hostname !== 'baike.baidu.com' ||
+          !/^\/item\/[^/]+\/\d+\/?$/.test(entry.pathname)
+        )
+          throw error;
+        // Baidu's search result host serves the same public encyclopedia item.
+        return this.text(`https://bkso.baidu.com${entry.pathname}`, signal);
+      }),
       title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(response.text)?.[1];
     return {
       url: response.url,

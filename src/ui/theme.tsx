@@ -6,6 +6,7 @@ import { closeKeyboard } from './keyboard';
 import { themeName } from '../theme/generator';
 import { useRuntime } from './context';
 import { Avatar, Button, Card, ErrorText, Field, Note, Page, TextButton } from './components';
+import { ThemeGradient } from './theme-gradient';
 import type { ScreenProps } from './navigation';
 /** Settings edits never consume the opening draft or restart character creation. */
 export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
@@ -90,6 +91,22 @@ export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
           </Text>
         </Card>
         <View style={{ flexDirection: 'row', gap: 12 }}>
+          {palette.backgroundGradient ? (
+            <View
+              accessible
+              accessibilityLabel="当前背景渐变"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: palette.line,
+                overflow: 'hidden',
+              }}
+            >
+              <ThemeGradient stops={palette.backgroundGradient} />
+            </View>
+          ) : null}
           {[palette.accent, palette.tint, palette.paper].map((color, n) => (
             <View
               key={n}
@@ -108,7 +125,7 @@ export function ThemeScreen({ navigation, route }: ScreenProps<'Theme'>) {
           <>
             <Field
               label="颜色和感觉"
-              placeholder="比如：淡蓝色，安静一点"
+              placeholder="比如：淡蓝到淡紫渐变，或流萤的配色"
               value={description}
               onChangeText={setDescription}
               multiline

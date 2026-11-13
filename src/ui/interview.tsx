@@ -251,7 +251,7 @@ export function InterviewScreen({ navigation }: ScreenProps<'Create'>) {
 }
 const createStyles = (palette: Palette) =>
   StyleSheet.create({
-    root: { flex: 1, backgroundColor: palette.background },
+    root: { flex: 1 },
     header: { padding: 14, gap: 6, borderBottomWidth: 1, borderColor: palette.line },
     title: { fontSize: 22, fontWeight: '600', color: palette.ink },
     track: { height: 5, borderRadius: 3, backgroundColor: palette.line, overflow: 'hidden' },

@@ -100,6 +100,48 @@ async function priorAssistant(store: SQLiteStore, content: string, age = 1000) {
   await store.put('messages', prior);
 }
 
+it('applies the original theme request only once even if DSH repeats the tool', async () => {
+  const request = '我想要流萤的颜色，做成青绿到奶白的渐变';
+  const f = await setup(async (input, n) => {
+    expect(input.tools?.some((item) => item.name === 'change_theme')).toBe(true);
+    if (n <= 2)
+      return {
+        content: '',
+        usage: {},
+        toolCalls: [
+          { id: `theme-${n}`, name: 'change_theme', arguments: '{"description":"换成绿色"}' },
+        ],
+      };
+    return tool('wait', { reason: '颜色已经换好了' });
+  });
+  const apply = vi.fn(async () => {});
+  await f.chat.send('c', request, () => {}, undefined, undefined, undefined, apply);
+  expect(apply).toHaveBeenCalledExactlyOnceWith(request);
+});
+
+it('applies a theme when DSH omits the tool and never exposes it for an unrelated turn', async () => {
+  const requests = ['我想用流萤的主题', '流萤是什么颜色？'];
+  const f = await setup(async (input, n) => {
+    expect(input.tools?.some((item) => item.name === 'change_theme')).toBe(n === 1);
+    return { content: '', usage: {}, toolCalls: [] };
+  });
+  const apply = vi.fn(async () => {});
+  for (const request of requests)
+    await f.chat.send('c', request, () => {}, undefined, undefined, undefined, apply);
+  expect(apply).toHaveBeenCalledExactlyOnceWith(requests[0]);
+});
+
+it('finishes a clear theme request even if the DSH chat provider is offline', async () => {
+  const f = await setup(async () => {
+    throw new Error('模型连接失败');
+  });
+  const request = '换成薄荷绿到白色的渐变';
+  const apply = vi.fn(async () => {});
+  await f.chat.send('c', request, () => {}, undefined, undefined, undefined, apply);
+  expect(apply).toHaveBeenCalledExactlyOnceWith(request);
+  expect(await f.chat.history('c')).toMatchObject([{ content: request, status: 'complete' }]);
+});
+
 it('blocks every proposed bubble and does not reopen the model loop after confirmed closure', async () => {
   const generate = vi.fn(
     async (): Promise<AgentModelResult> => ({

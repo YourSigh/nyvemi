@@ -83,7 +83,7 @@ export interface AgentInput {
   onSaved?: () => void;
   onSpeechDraft?: SpeechDraft;
   activity?: (value: ChatActivity) => void;
-  onThemeChange?: (description: string) => Promise<void>;
+  onThemeChange?: () => Promise<void>;
 }
 export class CompanionAgent {
   private running?: {
@@ -125,6 +125,7 @@ export class CompanionAgent {
     let session: AgentSession | undefined;
     const saved: Message[] = [];
     let bubbleCount = 0;
+    let themeApplied = false;
     try {
       const character = await this.store.get('characters', cid);
       if (!character) throw new Error('角色不存在');
@@ -648,7 +649,8 @@ export class CompanionAgent {
             }
             result = { shown: true };
           } else if (name === 'change_theme' && input.onThemeChange) {
-            await input.onThemeChange(z.string().min(1).max(500).parse(args.description));
+            await input.onThemeChange();
+            themeApplied = true;
             result = { applied: true };
           } else throw new Error('没有这个工具');
           await log(true);
@@ -688,7 +690,10 @@ export class CompanionAgent {
               this.host.clock(),
               await conversationContext(this.store, cid, now),
               await dialoguePreferences(this.store, cid),
-            ),
+            ) +
+            (input.onThemeChange
+              ? '\n这轮有用户当前的换色请求。先调用 change_theme 交给主题系统处理，再按工具结果接话。渐变方向、多个颜色、作品和角色名都是偏好的一部分。工具成功前不说已经换好。'
+              : ''),
           text,
           seed: session.events,
           maxSteps: 8,
@@ -762,13 +767,17 @@ export class CompanionAgent {
           detail: await this.host.redact(failure.detail).catch(() => 'error_detail_unavailable'),
         })
         .catch(() => undefined);
-      if (saved.length) {
+      if (saved.length || themeApplied) {
         if (input.task)
           await updatePendingIntention(this.store, input.task, (fresh) => ({
             ...fresh,
             status: 'completed',
           }));
-        input.activity?.({ phase: 'complete', hasMessages: true, emotion: saved.at(-1)?.emotion });
+        input.activity?.({
+          phase: 'complete',
+          hasMessages: saved.length > 0,
+          emotion: saved.at(-1)?.emotion,
+        });
         return saved;
       }
       throw new Error(failure.message);
