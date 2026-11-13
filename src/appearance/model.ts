@@ -86,6 +86,7 @@ export interface VisualBuildProgress {
 }
 export interface VisualDraft {
   build?: VisualBuildProgress;
+  generationFailure?: ImageRequestFailure;
   automaticArmRepairAttempted?: boolean;
   advisories?: (
     | 'research_unavailable'

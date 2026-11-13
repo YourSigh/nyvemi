@@ -4,6 +4,7 @@ import { id } from '../domain/models';
 import type { VisualBrief } from './brief';
 import { fallbackVisualResearch, type VisualResearch, type VisualCheck } from './research';
 import type { Storage } from '../storage/store';
+import { ImageProviderError } from './errors';
 import {
   type CharacterRig,
   type ImageAsset,
@@ -104,7 +105,8 @@ export class VisualCreationService {
         options.regenerate &&
         previous &&
         previous.input.mode !== 'animate' &&
-        previous.candidates.length < 3
+        previous.candidates.length < 3 &&
+        !previous.generationFailure
       )
         throw new Error('上一批候选尚未完成，请先继续生成或核对服务商记录，避免重复付费');
       const same =
@@ -141,8 +143,10 @@ export class VisualCreationService {
         draft.confirmedReferenceId = previous.confirmedReferenceId;
         draft.imagePrompt = previous.imagePrompt;
       }
-      if (options.reviewAgain && draft.candidates.length !== 3)
+      if (options.reviewAgain && draft.candidates.length !== 3 && !draft.generationFailure)
         throw Error('请先继续完成本批，再重新核对全部图片');
+      if (draft.generationFailure && !options.reviewAgain)
+        throw new ImageProviderError(draft.generationFailure);
       if (options.refreshResearch) {
         if (draft.candidates.length) throw Error('这批已有图片，请先选择新一批再更换参考');
         draft.research = undefined;
@@ -221,7 +225,8 @@ export class VisualCreationService {
         options.onDraft?.(draft);
       } else {
         options.onStage?.('generation');
-        for (let i = 0; i < 3; i++) {
+        const count = options.reviewAgain ? draft.candidates.length : 3;
+        for (let i = 0; i < count; i++) {
           const reference = draft.research?.references.find(
             (r) => r.id === draft.confirmedReferenceId,
           );
@@ -242,7 +247,19 @@ export class VisualCreationService {
           };
           if (!draft.candidates[i]) {
             options.onStage?.('generation');
-            draft.candidates.push(await provider.candidate(planned, i));
+            try {
+              draft.candidates.push(await provider.candidate(planned, i));
+            } catch (error) {
+              if (
+                error instanceof ImageProviderError &&
+                error.failure.category === 'content_review'
+              ) {
+                draft.generationFailure = error.failure;
+                await this.store.put('visualDrafts', draft);
+                options.onDraft?.(draft);
+              }
+              throw error;
+            }
             // Persist the paid result before any fallible vision call.
             await this.store.put('visualDrafts', draft);
             options.onDraft?.(draft);
@@ -486,7 +503,12 @@ export class VisualCreationService {
       const rig = validateRig(draft.rig);
       for (const l of rig.layers)
         if (!(await this.assets.exists(l.asset))) throw new Error('图层文件缺失，请重新整理图层');
-      await tx.put('characters', { ...character, rig, appearancePending: false });
+      await tx.put('characters', {
+        ...character,
+        rig,
+        meshAvatar: undefined,
+        appearancePending: false,
+      });
       await tx.put('visualDrafts', { ...draft, saved: true });
     });
   }

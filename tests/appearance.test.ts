@@ -11,6 +11,7 @@ import {
   type ImageAssets,
 } from '../src/appearance/service';
 import { SeedreamImageProvider } from '../src/appearance/seedream';
+import { ImageProviderError } from '../src/appearance/errors';
 import { defaultImageSettings, validateRig } from '../src/appearance/model';
 import { mockRig } from '../src/appearance/mock';
 async function setup() {
@@ -73,6 +74,20 @@ it('supports direct reference mode and refuses missing references or invalid lay
   rig.layers = rig.layers.filter((l) => l.role !== 'eyes');
   expect(() => validateRig(rig)).toThrow('eyes');
 });
+it('shows the newly saved layered appearance when replacing an imported mesh', async () => {
+  const { store, assets } = await setup();
+  const character = (await store.get('characters', 'c'))!;
+  await store.put('characters', {
+    ...character,
+    meshAvatar: { format: 'p2lrt', version: 1, uri: 'file://previous.p2lrt' },
+  });
+  const service = new VisualCreationService(store, async () => new MockImageProvider(), assets);
+  await service.generate('c', { description: 'new appearance', mode: 'text' });
+  const rig = await service.select('c', 0);
+  await service.save('c');
+  expect(await store.get('characters', 'c')).toMatchObject({ rig, appearancePending: false });
+  expect((await store.get('characters', 'c'))?.meshAvatar).toBeUndefined();
+});
 it('keeps successful candidates across partial failure and rejects changed provider reuse', async () => {
   const { store, assets } = await setup();
   const provider = new MockImageProvider();
@@ -90,6 +105,36 @@ it('keeps successful candidates across partial failure and rejects changed provi
   expect(spy).toHaveBeenCalledTimes(4);
   provider.identity = 'different';
   await expect(service.select('c', 0)).rejects.toThrow('已改变');
+});
+it('preserves a passing candidate and ends the batch on provider moderation', async () => {
+  const { store, assets } = await setup();
+  const provider = new MockImageProvider();
+  const original = provider.candidate.bind(provider);
+  const failure = {
+    httpStatus: 400,
+    code: 'OutputImageSensitiveContentDetected.PolicyViolation',
+    category: 'content_review' as const,
+    requestId: 'safe-request-id',
+  };
+  const spy = vi
+    .spyOn(provider, 'candidate')
+    .mockImplementationOnce(original)
+    .mockRejectedValueOnce(new ImageProviderError(failure))
+    .mockImplementation(original);
+  const service = new VisualCreationService(store, async () => provider, assets);
+  const input = { description: '二次元的q版纳西妲形象', mode: 'text' as const };
+
+  await expect(service.generate('c', input)).rejects.toMatchObject({ failure });
+  const saved = await store.get('visualDrafts', 'c');
+  expect(saved?.candidates).toHaveLength(1);
+  expect(saved?.generationFailure).toEqual(failure);
+  await expect(service.generate('c', input)).rejects.toMatchObject({ failure });
+  expect(spy).toHaveBeenCalledTimes(2);
+  expect(await service.select('c', 0)).toMatchObject({ source: 'mock' });
+
+  const next = await service.generate('c', { ...input, description: '另一个角色' });
+  expect(next.candidates).toHaveLength(3);
+  expect(next.generationFailure).toBeUndefined();
 });
 it('persists paid response before downloading and retries without paying twice', async () => {
   const { store, assets } = await setup();

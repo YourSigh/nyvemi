@@ -54,6 +54,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
   const [mode, setMode] = useState<CreationMode>('text');
   const [reference, setReference] = useState<ImageAsset>();
   const [config, setConfig] = useState<ImageSettings>(defaultImageSettings);
+  const [savedConfig, setSavedConfig] = useState<ImageSettings>(defaultImageSettings);
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number>();
@@ -86,7 +87,11 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         if (!c) throw new Error('角色不存在');
         setName(c.persona.name);
         setDescription(c.persona.appearance || '正面全身，可爱的二次元角色，简单背景');
-        if (settings) setConfig(upgradeImageSettings({ ...settings, provider: 'seedream' }));
+        if (settings) {
+          const stored = upgradeImageSettings({ ...settings, provider: 'seedream' });
+          setConfig(stored);
+          setSavedConfig(stored);
+        }
         setHasKey(Boolean(secret));
         if (d) {
           setDraft(d);
@@ -100,7 +105,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 d.rig ||
                 d.meshAvatar ||
                 d.build ||
-                d.research ||
+                (d.research && !d.generationFailure) ||
                 d.candidates.length ||
                 d.selected
               ),
@@ -179,6 +184,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
         throw new Error('请填写当前服务的 API Key；更换接口地址需重新填写');
     }
     await runtime.store.put('imageSettings', next);
+    setSavedConfig(next);
   };
   const select = (index?: number) =>
     void run('正在制作动态形象', async () => {
@@ -262,21 +268,36 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       navigation.reset({ index: 0, routes: [{ name: 'Chat', params: { characterId: cid } }] });
     });
   const awake = awakeningAt(elapsed);
+  const rejected = draft?.generationFailure;
+  const sameRejectedInput =
+    rejected &&
+    draft.input.description.trim() === description.trim() &&
+    draft.input.mode === mode &&
+    draft.input.reference?.uri === (mode === 'text' ? undefined : reference?.uri) &&
+    savedConfig.imageModel === config.imageModel &&
+    savedConfig.baseUrl === config.baseUrl;
+  const visibleRejection = sameRejectedInput && !rig && !meshAvatar && !build && !busy;
+  const currentFailure =
+    failure?.category === 'content_review' && rejected && !visibleRejection ? undefined : failure;
+  const shownFailure = currentFailure ?? (visibleRejection ? rejected : undefined);
+  const shownError =
+    (failure && !currentFailure ? '' : error) ||
+    (shownFailure ? new ImageProviderError(shownFailure).userMessage : '');
   const buildHeight = build?.preview
     ? Math.min(260, ((width - 40) * build.preview.height) / build.preview.width)
     : 260;
   return (
     <Page>
       <Heading>{route.params.onboarding ? '初次见面的样子' : '换个新形象'}</Heading>
-      <ErrorText text={error} />
-      {failure || schemaFailure ? (
+      <ErrorText text={shownError} />
+      {shownFailure || schemaFailure ? (
         <Details title="错误详情">
-          {failure ? (
+          {shownFailure ? (
             <>
-              <Note>HTTP {failure.httpStatus}</Note>
-              {failure.code ? <Note>错误码：{failure.code}</Note> : null}
-              {failure.parameter ? <Note>参数：{failure.parameter}</Note> : null}
-              {failure.requestId ? <Note>请求编号：{failure.requestId}</Note> : null}
+              <Note>HTTP {shownFailure.httpStatus}</Note>
+              {shownFailure.code ? <Note>错误码：{shownFailure.code}</Note> : null}
+              {shownFailure.parameter ? <Note>参数：{shownFailure.parameter}</Note> : null}
+              {shownFailure.requestId ? <Note>请求编号：{shownFailure.requestId}</Note> : null}
             </>
           ) : null}
           {schemaFailure ? (
@@ -436,8 +457,18 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           </Details>
           {config.provider === 'seedream' ? <Note>可能使用豆包额度。</Note> : null}
           <Button
-            title={mode === 'animate' ? '让原图动起来' : '生成 3 张候选图'}
-            disabled={Boolean(busy) || !description.trim() || (mode !== 'text' && !reference)}
+            title={
+              mode === 'animate'
+                ? '让原图动起来'
+                : sameRejectedInput
+                  ? '修改描述后生成'
+                  : '生成 3 张候选图'
+            }
+            disabled={
+              Boolean(busy || sameRejectedInput) ||
+              !description.trim() ||
+              (mode !== 'text' && !reference)
+            }
             onPress={() => generate()}
           />
           <Details title="导入已有形象">
@@ -480,6 +511,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
       !meshAvatar &&
       draft &&
       !draft.candidates.length &&
+      !rejected &&
       mode !== 'animate' ? (
         <Button title="继续生成候选图" disabled={Boolean(busy)} onPress={() => generate()} />
       ) : null}
@@ -529,11 +561,13 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
           {config.provider === 'seedream' ? <Note>可能使用豆包额度。</Note> : null}
           {usesVisualResearch(draft.promptVersion) &&
             (draft.candidates.length < 3 ? (
-              <TextButton
-                title="生成剩余候选图"
-                disabled={Boolean(busy)}
-                onPress={() => generate(false)}
-              />
+              !rejected ? (
+                <TextButton
+                  title="生成剩余候选图"
+                  disabled={Boolean(busy)}
+                  onPress={() => generate(false)}
+                />
+              ) : null
             ) : (
               <Details title="形象核对">
                 {selectedIndex !== undefined &&

@@ -1,6 +1,6 @@
 import { isBackgroundPart } from './rig-metadata';
 import { z } from 'zod';
-import { ImageProviderError, readImageFailure } from './errors';
+import { ImageProviderError, imageFailure, readImageFailure } from './errors';
 import type { VisualBrief } from './brief';
 import type { AppearanceDirector } from './research';
 import type { Storage } from '../storage/store';
@@ -38,6 +38,30 @@ const Output = z.object({
     .optional(),
 });
 const ResponseSchema = z.object({ data: z.array(Output).min(1).max(17) });
+const ResponseEnvelope = z.object({
+  error: z.object({}).passthrough().optional(),
+  request_id: z.unknown().optional(),
+  data: z.array(z.unknown()).max(17).optional(),
+});
+const FailedOutput = z.object({ error: z.object({}).passthrough() });
+
+function responseWithImageErrors(payload: unknown, headers: Pick<Headers, 'get'>, secret: string) {
+  const envelope = ResponseEnvelope.safeParse(payload);
+  if (!envelope.success) return undefined;
+  const { data, error, request_id } = envelope.data;
+  const failed = (data ?? []).flatMap((item) => {
+    const entry = FailedOutput.safeParse(item);
+    return entry.success ? [entry.data.error] : [];
+  });
+  if (!error && !failed.length) return undefined;
+  const failures = (error ? [error] : failed).map((failure) =>
+    imageFailure({ error: failure, request_id }, 200, headers, secret),
+  );
+  return {
+    failure: failures.find((failure) => failure.category === 'content_review') ?? failures[0],
+    data: error ? [] : (data ?? []).filter((item) => !FailedOutput.safeParse(item).success),
+  };
+}
 export const generationPrompt = (description: string, brief?: VisualBrief) =>
   `绘制用户指定角色的单人立绘。用户原始要求：${JSON.stringify(description)}。${brief ? `身份简报：${JSON.stringify(brief)}。` : ''}
 身份优先：若用户指定已有作品或角色，必须画该角色，不是相似的原创替代品。保留标志性发型、发色、瞳色、服装和饰物；参考图存在时以参考图及用户明确改动为准。用户要求Q版/Chibi时使用可爱的约2至3头身比例，不要画成常规比例的幼年新角色。
@@ -179,6 +203,8 @@ export class SeedreamImageProvider implements ImageProvider {
         throw new Error(
           '上次付费请求结果不确定，已停止自动重试以避免重复扣费。请先在火山方舟确认请求结果',
         );
+      if (record?.status === 'rejected' && record.error?.category === 'content_review')
+        throw new ImageProviderError(record.error);
       if (!record?.response) {
         const secret = await this.key();
         if (!secret?.trim()) throw new Error('请先保存豆包 API Key');
@@ -202,19 +228,35 @@ export class SeedreamImageProvider implements ImageProvider {
             const failure = await readImageFailure(response, secret);
             await this.store.put('imageRequests', {
               ...record,
-              status: [400, 401, 403, 404, 422, 429].includes(response.status)
-                ? 'rejected'
-                : 'started',
+              status:
+                failure.category === 'content_review' ||
+                [400, 401, 403, 404, 422, 429].includes(response.status)
+                  ? 'rejected'
+                  : 'started',
               error: failure,
             });
             throw new ImageProviderError(failure);
           }
           const payload: unknown = await response.json();
+          const partial = responseWithImageErrors(payload, response.headers, secret);
+          if (partial && (!generation || !partial.data.length)) {
+            await this.store.put('imageRequests', {
+              ...record,
+              status: partial.failure.category === 'content_review' ? 'rejected' : 'started',
+              error: partial.failure,
+            });
+            throw new ImageProviderError(partial.failure);
+          }
           // Persist before validation/download: retries must not issue another paid POST.
-          record = { ...record, status: 'received', response: payload };
+          record = {
+            ...record,
+            status: 'received',
+            response: partial ? { data: partial.data } : payload,
+            error: partial?.failure,
+          };
           await this.store.put('imageRequests', record);
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('生图接口返回')) throw error;
+          if (error instanceof ImageProviderError) throw error;
           throw new Error('生图请求中断；结果可能已计费，已保留请求状态，请先核对服务商记录');
         } finally {
           clearTimeout(timer);

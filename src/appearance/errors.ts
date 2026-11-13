@@ -36,6 +36,14 @@ export async function readImageFailure(
   secret: string,
 ): Promise<ImageRequestFailure> {
   const raw: unknown = await response.json().catch(() => undefined);
+  return imageFailure(raw, response.status, response.headers, secret);
+}
+export function imageFailure(
+  raw: unknown,
+  httpStatus: number,
+  headers: Pick<Headers, 'get'>,
+  secret: string,
+): ImageRequestFailure {
   const root = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const error =
     root.error && typeof root.error === 'object' ? (root.error as Record<string, unknown>) : {};
@@ -51,8 +59,8 @@ export async function readImageFailure(
       ? /Request[\s_-]*ID[:：=\s]+([A-Za-z0-9][A-Za-z0-9_.-]{7,127})/i.exec(error.message)?.[1]
       : undefined;
   const requestId = [
-    response.headers.get('x-request-id'),
-    response.headers.get('x-tt-logid'),
+    headers.get('x-request-id'),
+    headers.get('x-tt-logid'),
     root.request_id,
     error.request_id,
     messageId,
@@ -62,21 +70,21 @@ export async function readImageFailure(
   const category: ImageRequestFailure['category'] =
     code === 'ModelNotOpen' || code?.startsWith('OperationDenied.ServiceNotOpen')
       ? 'configuration'
-      : response.status === 401 || code?.startsWith('Authentication')
+      : httpStatus === 401 || code?.startsWith('Authentication')
         ? 'credentials'
         : code?.startsWith('OperationDenied.ServiceOverdue') ||
             code?.includes('InsufficientBalance')
           ? 'quota'
           : code && /SensitiveContentDetected|(?:Input|Output)ImageRiskDetection/.test(code)
             ? 'content_review'
-            : response.status === 429
+            : httpStatus === 429
               ? 'rate_limit'
               : code &&
                   /^(?:InvalidParameter|MissingParameter|InvalidImageURL|InvalidArgument)/.test(
                     code,
                   )
                 ? 'parameters'
-                : response.status >= 500
+                : httpStatus >= 500
                   ? 'service'
                   : 'unknown';
   // Classify known image rejection reasons; never store or display an arbitrary server message.
@@ -98,7 +106,7 @@ export async function readImageFailure(
                   ? 'reference_count'
                   : undefined;
   return {
-    httpStatus: response.status,
+    httpStatus,
     code,
     parameter,
     requestId,
@@ -112,7 +120,7 @@ export class ImageProviderError extends Error {
     const reviewHint = failure.code?.startsWith('InputImage')
       ? '参考图未通过服务商审核，请更换参考图后重试'
       : failure.code?.startsWith('OutputImage')
-        ? '生成的图片未通过审核，请重试'
+        ? '生成的图片未通过审核，请调整描述或参考图'
         : failure.code?.startsWith('InputText')
           ? '绘图文字未通过服务商审核，请检查并调整描述'
           : '内容未通过审核，请调整描述或参考图';

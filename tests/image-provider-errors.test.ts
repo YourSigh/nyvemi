@@ -113,6 +113,97 @@ it('distinguishes review of reference, prompt and generated output without blami
   expect(message('OutputImageSensitiveContentDetected')).toContain('生成的图片未通过审核');
   expect(message('SensitiveContentDetected')).toContain('调整描述或参考图');
 });
+it.each([200, 400])(
+  'caches moderation refusals without replaying the same HTTP %s request',
+  async (status) => {
+    const db = new TestDatabase();
+    await migrate(db);
+    const store = new SQLiteStore(db);
+    const assets = {
+      fingerprint: async () => 'ref',
+      dataUrl: async () => 'data:image/png;base64,AA',
+      download: vi.fn(),
+      exists: async () => true,
+    };
+    const error = {
+      code: 'OutputImageSensitiveContentDetected.PolicyViolation',
+      message: 'private-key and raw prompt',
+    };
+    const request = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify(status === 200 ? { data: [{ error }] } : { error }), {
+          status,
+          headers: { 'x-request-id': 'safe-request-id' },
+        }),
+    );
+    const provider = new SeedreamImageProvider(
+      defaultImageSettings,
+      async () => 'private-key',
+      store,
+      assets,
+      async (s) => createHash('sha256').update(s).digest('hex'),
+      request,
+    );
+    const input = { description: '角色', mode: 'text' as const };
+
+    for (let i = 0; i < 2; i++) {
+      await expect(provider.candidate(input, 0)).rejects.toMatchObject({
+        failure: { code: error.code, category: 'content_review', requestId: 'safe-request-id' },
+      });
+    }
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(assets.download).not.toHaveBeenCalled();
+    const records = await store.list('imageRequests');
+    expect(records[0]).toMatchObject({ status: 'rejected', error: { httpStatus: status } });
+    expect(JSON.stringify(records)).not.toMatch(/private-key|raw prompt/);
+  },
+);
+it('downloads an accepted output from a mixed provider response and discards raw failure details', async () => {
+  const db = new TestDatabase();
+  await migrate(db);
+  const store = new SQLiteStore(db);
+  const asset = { uri: 'file://generated', width: 1024, height: 1024 };
+  const assets = {
+    fingerprint: async () => 'ref',
+    dataUrl: async () => 'data:image/png;base64,AA',
+    download: vi.fn().mockResolvedValue(asset),
+    exists: async () => true,
+  };
+  const url = 'https://cdn.example/accepted.png';
+  const request = vi.fn<typeof fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              error: {
+                code: 'OutputImageSensitiveContentDetected',
+                message: 'private-key and raw prompt',
+              },
+            },
+            { url, size: '1024x1024' },
+          ],
+        }),
+      ),
+  );
+  const provider = new SeedreamImageProvider(
+    defaultImageSettings,
+    async () => 'private-key',
+    store,
+    assets,
+    async (s) => createHash('sha256').update(s).digest('hex'),
+    request,
+  );
+  const input = { description: '角色', mode: 'text' as const };
+
+  await expect(provider.candidate(input, 0)).resolves.toEqual(asset);
+  await expect(provider.candidate(input, 0)).resolves.toEqual(asset);
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(assets.download).toHaveBeenCalledExactlyOnceWith(url, expect.any(String));
+  const records = await store.list('imageRequests');
+  expect(records[0]).toMatchObject({ status: 'done', error: { category: 'content_review' } });
+  expect(JSON.stringify(records)).not.toMatch(/private-key|raw prompt/);
+});
 it('classifies image-specific rejection reasons without retaining the raw provider message', async () => {
   for (const [message, reason] of [
     ['Failed to decode image base64 private-key', 'decode'],

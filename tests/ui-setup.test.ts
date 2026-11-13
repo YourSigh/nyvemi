@@ -312,6 +312,40 @@ it('shows safe provider error details only when requested, including during firs
   expect(JSON.stringify(renderer!.toJSON())).toContain('safe-request-123');
   expect(JSON.stringify(renderer!.toJSON())).toContain('OutputImageSensitiveContentDetected');
 });
+it('restores a rejected batch and enables generation when its description changes', async () => {
+  const { runtime, store } = await fixture();
+  await store.put('characters', {
+    id: 'c',
+    persona: demoPersona('c'),
+    interests: [],
+    createdAt: 1,
+    state: { energy: 0.5, relationshipCloseness: 0, recentFocus: [], curiosityTopics: [] },
+  });
+  await store.put('visualDrafts', {
+    id: 'c',
+    characterId: 'c',
+    createdAt: 1,
+    providerId: 'seedream:test',
+    input: { mode: 'text', description: '二次元的q版纳西妲形象' },
+    candidates: [],
+    generationFailure: {
+      httpStatus: 400,
+      code: 'OutputImageSensitiveContentDetected.PolicyViolation',
+      category: 'content_review',
+    },
+  });
+  await mount(
+    runtime,
+    createElement(AppearanceScreen, {
+      route: { params: { characterId: 'c' } },
+      navigation: {},
+    } as never),
+  );
+  expect(button('修改描述后生成').props.disabled).toBe(true);
+  await act(async () => button('描述她的样子').props.onChangeText('新的描述'));
+  expect(button('生成 3 张候选图').props.disabled).toBe(false);
+  expect(JSON.stringify(renderer!.toJSON())).not.toContain('生成的图片未通过审核');
+});
 
 it('image routing presets save without calling models and preserve custom settings until explicitly changed', async () => {
   const { runtime, store, provider } = await fixture();
