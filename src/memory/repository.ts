@@ -1,6 +1,7 @@
 import { id, type Memory, type MemoryType } from '../domain/models';
 import type { Storage } from '../storage/store';
 import { overlap } from './retrieval';
+import { isDialoguePreference } from './dialogue-preference';
 export class MemoryRepository {
   constructor(private store: Storage) {}
   async list(characterId: string, now = Date.now()): Promise<Memory[]> {
@@ -24,7 +25,9 @@ export class MemoryRepository {
   ): Promise<Memory> {
     const normalized = content.trim().slice(0, 2000);
     if (!normalized) throw new Error('记忆不能为空');
-    const candidates = (await this.list(characterId, now)).filter((m) => m.type === type);
+    const candidates = (await this.list(characterId, now)).filter(
+      (m) => m.type === type && !isDialoguePreference(m),
+    );
     const existing = candidates.find(
       (m) =>
         m.content.replace(/\s/g, '') === normalized.replace(/\s/g, '') ||

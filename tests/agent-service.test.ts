@@ -6,6 +6,9 @@ import type { AgentModelRequest, AgentModelResult } from '../src/agent/core';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { Diagnostics } from '../src/storage/diagnostics';
+import { MemoryExtractionService } from '../src/memory/extraction';
+import { dialoguePreferences } from '../src/memory/dialogue-preference';
+import { MemoryRecall } from '../src/memory/recall';
 import { defaultAnswers, CharacterService } from '../src/characters/service';
 import type { LLMProvider } from '../src/providers/provider';
 import type { Intention } from '../src/domain/models';
@@ -149,6 +152,114 @@ it('wait and ordinary assistant text both allow silence without a confirmation b
   await f.chat.send('c', '。', () => {});
   expect((await f.chat.history('c')).filter((m) => m.role === 'assistant')).toEqual([]);
   expect((await f.store.get('characters', 'c'))?.state.contactMode).toBe('quiet');
+});
+it('learns explicit conversation preferences across restarts and removes a retracted preference', async () => {
+  const original = '以后我光吐槽的时候，先跟我一起吐槽，别给建议';
+  const revised = '改一下，我吐槽时先听着，需要时再给一个建议';
+  const removal = '那条我吐槽时怎么回的偏好不用记了';
+  const key = 'venting-replies';
+  let characterPrompt = '';
+  const f = await setup(async (request) => {
+    characterPrompt = request.messages[0].content.map((block) => block.text).join('\n');
+    const latest = request.messages.at(-1)!;
+    if (latest.role !== 'user') return tool('wait', { reason: '没有要补的话' });
+    const event = JSON.parse(latest.content[0].text!);
+    if (event.text === original || event.text === revised)
+      return tool('remember_conversation_preference', {
+        action: 'set',
+        key,
+        quote: event.text,
+        preference:
+          event.text === original ? '吐槽时接梗，省掉建议' : '吐槽时先听，必要时只提一个建议',
+      });
+    if (event.text === removal)
+      return tool('remember_conversation_preference', { action: 'forget', key, quote: event.text });
+    return tool('wait', { reason: '对话自然停住' });
+  });
+  await f.chat.send('c', original, () => {});
+  const feedbackTurn = (await f.chat.history('c'))[0];
+  expect(feedbackTurn.replyDisposition).toBe('silence');
+  expect(await dialoguePreferences(f.store, 'c')).toEqual([
+    { key, preference: '吐槽时接梗，省掉建议' },
+  ]);
+  const diagnostics = new Diagnostics(f.store);
+  const extraction = new MemoryExtractionService(f.store, async () => f.provider, diagnostics);
+  await extraction.apply(
+    'c',
+    {
+      memories: [],
+      openLoops: [],
+      relationshipUpdates: [],
+      personaFeedback: ['不要给建议'],
+      completedOpenLoopIds: [],
+    },
+    Date.now(),
+    feedbackTurn.id,
+  );
+  expect((await f.store.get('characters', 'c'))?.persona.responsePreferences).not.toContain(
+    '不要给建议',
+  );
+
+  const restarted = new CompanionAgent(f.store, async () => f.provider, diagnostics, f.host);
+  const chat = new ChatService(f.store, async () => f.provider, diagnostics, {
+    agent: (input) => restarted.run(input),
+    retrieve: async () => [],
+    afterRound: async () => {},
+  });
+  await chat.send('c', '周末去哪里好', () => {});
+  expect(characterPrompt).toContain(`"key":"${key}","preference":"吐槽时接梗，省掉建议"`);
+  expect(characterPrompt).toContain('短消息也可能正好答了刚才的问题');
+  await chat.send('c', revised, () => {});
+  expect(await dialoguePreferences(f.store, 'c')).toEqual([
+    { key, preference: '吐槽时先听，必要时只提一个建议' },
+  ]);
+  expect(
+    await new MemoryRecall(f.store, diagnostics).retrieve('c', '吐槽时接梗，省掉建议'),
+  ).toEqual([]);
+  await chat.send('c', removal, () => {});
+  await chat.send('c', '天快黑了', () => {});
+  expect(characterPrompt).toContain(
+    '当前有效的聊天偏好（用户直接提出；同一习惯以较新的要求为准）：[]',
+  );
+  expect(await dialoguePreferences(f.store, 'c')).toEqual([]);
+  expect((await chat.history('c')).every((message) => message.role === 'user')).toBe(true);
+});
+
+it('rejects unsourced preference writes and never exposes the action to autonomous turns', async () => {
+  let autonomousToolPresent: boolean | undefined;
+  const f = await setup(async (request, n) => {
+    if (n === 1)
+      return tool('remember_conversation_preference', {
+        action: 'set',
+        key: 'unfounded',
+        quote: '这条原话不在消息里',
+        preference: '每天换一个称呼',
+      });
+    if (n === 3)
+      autonomousToolPresent = request.tools?.some(
+        (item) => item.name === 'remember_conversation_preference',
+      );
+    return tool('wait', { reason: '没有要补的话' });
+  });
+  await f.chat.send('c', '刚才那件事我还在想', () => {});
+  expect(await dialoguePreferences(f.store, 'c')).toEqual([]);
+  const due = Date.now() - 1000;
+  const task: Intention = {
+    id: 'autonomous-preference-check',
+    characterId: 'c',
+    type: 'requested',
+    topic: '测试',
+    reason: '测试',
+    earliestAt: due,
+    latestAt: due + 60_000,
+    importance: 0.7,
+    status: 'pending',
+    createdAt: due,
+  };
+  await f.store.put('intentions', task);
+  await expect(f.agent.run({ characterId: 'c', task })).rejects.toThrow();
+  expect(autonomousToolPresent).toBe(false);
+  expect(await dialoguePreferences(f.store, 'c')).toEqual([]);
 });
 it('a natural scheduled request is registered by a model-selected tool, without a regex acknowledgement', async () => {
   const f = await setup(async (_, n) =>

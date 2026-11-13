@@ -16,6 +16,7 @@ import type { ScreenProps } from './navigation';
 import { updateSettings } from '../application/settings';
 import { bridge, pinCharacter, requestNotifications } from '../native/android';
 import { resetCharacter } from '../characters/reset';
+import { personalityEditable } from '../characters/personality';
 import { bundleAssets, pickAvatar } from '../transfer/native';
 function Row({ title, value, onPress }: { title: string; value?: string; onPress(): void }) {
   const palette = usePalette();
@@ -189,7 +190,8 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                 {character?.persona.name}
               </Text>
               <Text numberOfLines={1} style={{ color: palette.muted }}>
-                {character?.persona.corePersonality.slice(0, 3).join(' · ')}
+                {character?.persona.userSteering?.personality ||
+                  character?.persona.corePersonality.slice(0, 3).join(' · ')}
               </Text>
             </View>
           </Pressable>
@@ -203,6 +205,12 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
               title="角色形象"
               onPress={() => navigation.navigate('Appearance', { characterId: cid })}
             />
+            {character && personalityEditable(character) ? (
+              <Row
+                title="性格与说话方式"
+                onPress={() => navigation.navigate('PersonalitySettings', { characterId: cid })}
+              />
+            ) : null}
             <Row
               title="声音"
               onPress={() => navigation.navigate('VoiceSettings', { characterId: cid })}

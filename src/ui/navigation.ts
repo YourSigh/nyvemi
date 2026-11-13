@@ -3,6 +3,7 @@ import type { CharacterAnswers } from '../characters/service';
 export type Routes = {
   Welcome: undefined;
   MediaSettings: { characterId: string };
+  PersonalitySettings: { characterId: string };
   VoiceSettings: { characterId: string };
   Plugins: { characterId: string };
   Usage: undefined;

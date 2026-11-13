@@ -23,6 +23,7 @@ import type { Diagnostics } from '../storage/diagnostics';
 import type { ChatActivity } from '../character/interaction';
 import type { NotificationGateway } from '../proactive/heartbeat/engine';
 import { MemoryRecall } from '../memory/recall';
+import { dialoguePreferences, saveDialoguePreference } from '../memory/dialogue-preference';
 import { conversationContext } from '../conversation/context';
 import { setContactMode } from '../chat/contact';
 import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from '../chat/delivery';
@@ -476,6 +477,10 @@ export class CompanionAgent {
             result = (
               await new MemoryRecall(this.store, this.diagnostics).retrieve(cid, query)
             ).map((m) => ({ type: m.type, content: m.content }));
+          } else if (name === 'remember_conversation_preference' && input.user) {
+            result = await saveDialoguePreference(this.store, input.user, args, (value) =>
+              this.host.redact(value),
+            );
           } else if (name === 'read_context') {
             result = {
               time: this.host.clock(),
@@ -605,6 +610,7 @@ export class CompanionAgent {
               history,
               this.host.clock(),
               await conversationContext(this.store, cid, now),
+              await dialoguePreferences(this.store, cid),
             ),
           text,
           seed: session.events,
@@ -614,6 +620,7 @@ export class CompanionAgent {
             ...agentTools.filter(
               (t) =>
                 (t.name !== 'change_theme' || input.onThemeChange) &&
+                (t.name !== 'remember_conversation_preference' || input.user) &&
                 (t.name !== 'offer_voice_settings' || (input.user && this.host.visible())) &&
                 (!['inspect_image', 'draw_image', 'send_image'].includes(t.name) ||
                   this.host.media) &&

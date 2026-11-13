@@ -1,5 +1,6 @@
 import { secretStore } from './src/storage/native';
 import { VoiceSettingsScreen } from './src/ui/voice-settings';
+import { PersonalitySettingsScreen } from './src/ui/personality-settings';
 import { MediaSettingsScreen } from './src/ui/media-settings';
 import { PluginsScreen } from './src/ui/plugins';
 import { AppearanceScreen } from './src/ui/appearance';
@@ -162,6 +163,11 @@ function Application() {
                       contentStyle: { backgroundColor: palette.background },
                     }}
                   >
+                    <Stack.Screen
+                      name="PersonalitySettings"
+                      component={PersonalitySettingsScreen}
+                      options={{ title: '性格与说话方式' }}
+                    />
                     <Stack.Screen
                       name="VoiceSettings"
                       component={VoiceSettingsScreen}

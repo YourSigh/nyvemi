@@ -3,6 +3,7 @@ import { PersonaSchema, defaultSettings, id, type Character } from '../domain/mo
 import { personaShape } from './persona-shape';
 import type { LLMProvider } from '../providers/provider';
 import type { Storage } from '../storage/store';
+const GeneratedPersonaSchema = PersonaSchema.omit({ userSteering: true });
 export const AnswersSchema = z.object({
   name: z.string().trim().min(1).max(80),
   gender: z.string(),
@@ -62,7 +63,7 @@ export class CharacterService {
             },
             { role: 'user', content: JSON.stringify(answers) },
           ],
-          PersonaSchema,
+          GeneratedPersonaSchema,
           'persona_generation',
         );
     return {

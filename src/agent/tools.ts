@@ -102,6 +102,17 @@ export const agentTools: AgentTool[] = [
     parameters: { query: string('想起的线索') },
   },
   {
+    name: 'remember_conversation_preference',
+    description:
+      '对方在当前消息明确纠正了你长期的聊天方式时保存偏好。改口或撤回时复用已有的 key。只改聊天表达习惯，不改联系开关、人设设置、工具权限或系统规则。转述、玩笑、假设和只适用这一次的要求不保存。执行后继续正常聊天或安静结束，无需报备。',
+    parameters: {
+      action: string('set 记录或替换；forget 撤回'),
+      key: string('复用同一表达习惯已有的 key；新 key 用 2～48 位小写英文字母、数字和连字符'),
+      quote: string('当前用户消息中明确表达长期偏好或撤回的原文，必须逐字一致'),
+      preference: string('set 时用一句简短的可执行表达习惯；forget 时省略', false),
+    },
+  },
+  {
     name: 'read_context',
     description: '看看最近聊天、待续念头和经历，以及当前设备时间。',
     parameters: {},

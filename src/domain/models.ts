@@ -15,6 +15,18 @@ import type { ThemeRecord, ThemeOpening } from '../theme/model';
 import type { HatchingDraft } from '../characters/hatching';
 import type { InterviewDraft } from '../characters/interview';
 
+export const maxPersonalityNoteLength = 320;
+const PersonalityNoteSchema = z.string().trim().max(maxPersonalityNoteLength);
+export const PersonalitySteeringSchema = z
+  .object({
+    personality: PersonalityNoteSchema.optional(),
+    speech: PersonalityNoteSchema.optional(),
+    relationship: PersonalityNoteSchema.optional(),
+    boundaries: PersonalityNoteSchema.optional(),
+  })
+  .strict();
+export type PersonalitySteering = z.infer<typeof PersonalitySteeringSchema>;
+
 export const PersonaSchema = z
   .object({
     id: z.string().min(1),
@@ -43,6 +55,7 @@ export const PersonaSchema = z
     responsePreferences: z.array(z.string()),
     avoidPatterns: z.array(z.string()),
     boundaries: z.array(z.string()),
+    userSteering: PersonalitySteeringSchema.optional(),
   })
   .strict();
 export type Persona = z.infer<typeof PersonaSchema>;

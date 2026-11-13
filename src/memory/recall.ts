@@ -3,6 +3,7 @@ import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
 import { MemoryRepository } from './repository';
 import { KeywordMemoryRetriever } from './retrieval';
+import { isDialoguePreference } from './dialogue-preference';
 export function recallQuery(latest: string, history: Message[]): string {
   if (/换个话题|不聊这个|新话题|先不说这个/.test(latest)) return latest;
   if (
@@ -28,7 +29,8 @@ export class MemoryRecall {
   async retrieve(characterId: string, latest: string, now = Date.now()) {
     const query = recallQuery(latest, await this.store.list('messages', characterId, 16));
     const repo = new MemoryRepository(this.store);
-    const ranked = new KeywordMemoryRetriever().rank(query, await repo.list(characterId, now), now);
+    const memories = (await repo.list(characterId, now)).filter((m) => !isDialoguePreference(m));
+    const ranked = new KeywordMemoryRetriever().rank(query, memories, now);
     await repo.touch(
       ranked.map((r) => r.memory),
       now,

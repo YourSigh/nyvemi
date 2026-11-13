@@ -5,6 +5,7 @@ import type { Storage } from '../storage/store';
 import { Diagnostics } from '../storage/diagnostics';
 import { MemoryRepository } from './repository';
 import { overlap } from './retrieval';
+import { recordedDialoguePreference } from './dialogue-preference';
 const fact = z.object({
   content: z.string().min(1).max(2000),
   importance: z.number().min(0).max(1),
@@ -84,6 +85,11 @@ export class MemoryExtractionService {
             )
             .slice(0, 2)
             .map((m) => m.content.slice(0, 1000));
+          const preferenceRecorded = await recordedDialoguePreference(
+            this.store,
+            job.characterId,
+            job.id,
+          );
           const result = await (
             await this.provider()
           ).structuredOutput(
@@ -98,6 +104,12 @@ export class MemoryExtractionService {
                   user: user.content,
                   previousAssistant,
                   assistant: assistant.map((m) => m.content),
+                  ...(preferenceRecorded
+                    ? {
+                        handling:
+                          '该条用户消息的聊天表达反馈已单独处理，personaFeedback 保持空数组，relationshipUpdates 只写与聊天表达无关的新事实。',
+                      }
+                    : {}),
                 }),
               },
             ],
@@ -132,6 +144,9 @@ export class MemoryExtractionService {
       const job = await tx.get('extractions', source);
       if (job?.status === 'done') return;
       const repo = new MemoryRepository(tx);
+      const feedback = (await recordedDialoguePreference(tx, characterId, source))
+        ? []
+        : validated.personaFeedback;
       for (const item of validated.memories)
         if (item.importance >= 0.35)
           await repo.upsert(
@@ -154,9 +169,9 @@ export class MemoryExtractionService {
           source,
         );
       // Expression feedback is relationship knowledge even if the model only fills personaFeedback.
-      for (const feedback of validated.personaFeedback)
-        if (feedback.trim() && !validated.relationshipUpdates.length)
-          await repo.upsert(characterId, 'relationship', feedback, 0.75, now, undefined, source);
+      for (const preference of feedback)
+        if (preference.trim() && !validated.relationshipUpdates.length)
+          await repo.upsert(characterId, 'relationship', preference, 0.75, now, undefined, source);
       for (const loop of validated.openLoops) {
         if (loop.importance < 0.5 || loop.latestInMinutes <= loop.earliestInMinutes) continue;
         const active = await tx.list('intentions', characterId, 10000);
@@ -210,9 +225,9 @@ export class MemoryExtractionService {
       }
       const character = await tx.get('characters', characterId);
       if (character) {
-        const prefs = [
-          ...new Set([...character.persona.responsePreferences, ...validated.personaFeedback]),
-        ].slice(-24);
+        const prefs = [...new Set([...character.persona.responsePreferences, ...feedback])].slice(
+          -24,
+        );
         await tx.put('characters', {
           ...character,
           persona: { ...character.persona, responsePreferences: prefs },
