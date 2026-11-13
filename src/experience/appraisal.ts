@@ -10,6 +10,7 @@ export function appraiseExperience(
   experience: Experience,
   character: Character,
   memories: Memory[],
+  assessedSelfInterest?: number,
 ): ExperienceAppraisal {
   if (experience.source === 'local-time')
     return {
@@ -24,22 +25,24 @@ export function appraiseExperience(
     ...character.persona.likes,
     ...character.interests.filter((i) => i.score > 0.25).map((i) => i.topic),
   ];
-  const selfInterest = Math.min(
-    1,
-    0.15 +
-      Math.max(
-        0,
-        ...own.map((t) =>
-          Math.max(
-            overlap(text, t),
-            ['bilibili', 'mock-bilibili'].includes(experience.source)
-              ? overlap(experience.topics.join(' '), t)
-              : 0,
+  const selfInterest =
+    assessedSelfInterest ??
+    Math.min(
+      1,
+      0.15 +
+        Math.max(
+          0,
+          ...own.map((t) =>
+            Math.max(
+              overlap(text, t),
+              ['bilibili', 'mock-bilibili'].includes(experience.source)
+                ? overlap(experience.topics.join(' '), t)
+                : 0,
+            ),
           ),
-        ),
-      ) *
-        1.3,
-  );
+        ) *
+          1.3,
+    );
   const ranked = memories
     .map((memory) => ({ memory, score: overlap(text, memory.content) }))
     .sort((a, b) => b.score - a.score);
@@ -73,10 +76,8 @@ export function updateInterests(
   // A user's relevance alone never creates an identical character preference.
   const updated = interests.map((interest) => {
     if (
-      overlap(
-        `${experience.topics.join(' ')} ${experience.title} ${experience.content}`,
-        interest.topic,
-      ) < 0.05
+      !experience.topics.includes(interest.topic) &&
+      overlap(`${experience.title} ${experience.content}`, interest.topic) < 0.05
     )
       return interest;
     const elapsed = Math.max(0, now - interest.updatedAt) / 3600000;

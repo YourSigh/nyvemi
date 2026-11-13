@@ -11,6 +11,7 @@ import { CompanionAgent } from '../agent/service';
 import { PublicAgentWeb } from '../agent/web';
 import { BilibiliContentProvider } from '../exploration/content';
 import { DeepSeekBilibiliSearch } from '../exploration/deepseek-search';
+import { selectIndexedVideo } from '../exploration/selection';
 import { ExplorationEngine } from '../exploration/engine';
 import { BilibiliCaptionProvider } from '../exploration/bilibili-captions';
 import { createBilibiliSessionManager } from '../exploration/bilibili-session-native';
@@ -182,7 +183,9 @@ async function createRuntime() {
     read: (bvid, signal) => captions.read(bvid, signal),
     available: () => bilibiliSession.getStatus().then((status) => status === 'signed_in'),
   } satisfies ConstructorParameters<typeof ExplorationEngine>[2];
-  const exploration = new ExplorationEngine(store, bilibili, authorizedCaptions);
+  const exploration = new ExplorationEngine(store, bilibili, authorizedCaptions, async (...args) =>
+    selectIndexedVideo(await provider(), ...args),
+  );
   const prepareBilibiliExploration = async (characterId: string) => {
     await exploration.prepareAfterLogin(characterId);
     await bridge().enqueueMaintenanceCheck(20_000);

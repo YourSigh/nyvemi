@@ -318,3 +318,39 @@ it('prefers a relevant candidate with corroborated captions within a bounded sho
     evidence: 'subtitle',
   });
 });
+
+it('can choose semantically related indexed material when literal terms do not match', async () => {
+  const store = await setup();
+  const c = {
+    ...character,
+    interests: [{ ...character.interests[0], topic: '科技新闻里的小细节' }],
+    persona: { ...character.persona, likes: [] },
+  };
+  await store.put('characters', c);
+  await store.put('settings', { ...defaultSettings('c'), deepSeekBilibiliSearch: true });
+  const item = {
+    ...robot,
+    title: '一滴咖啡如何改变工业',
+    category: '',
+    description: '液滴蒸发的规律可以预测涂料和喷墨的效果。',
+    discovery: 'deepseek_search' as const,
+  };
+  expect(contentInterest(c, item)).toBe(0);
+  const choose = vi.fn().mockResolvedValue({ choices: [{ candidate: item.id, interest: 0.95 }] });
+  const provider = { id: 'bilibili', candidates: async () => [item] };
+  const engine = new ExplorationEngine(store, provider, undefined, choose);
+  await expect(engine.run('c', now)).resolves.toBe('explored');
+  expect(choose).toHaveBeenCalledExactlyOnceWith(c, '科技新闻里的小细节', [item], undefined);
+  const [experience] = await store.list('experiences', 'c');
+  expect(experience).toMatchObject({
+    externalId: item.id,
+    contentEvidence: 'metadata',
+    appraisal: { selfInterest: 0.95 },
+  });
+  expect((await store.get('characters', 'c'))!.interests[0].score).toBeGreaterThan(
+    c.interests[0].score,
+  );
+  expect((await store.list('intentions', 'c'))[0].experienceId).toBe(experience.id);
+  await expect(engine.run('c', now + 4 * 3600000)).resolves.toBe('no_interesting_unseen_content');
+  expect(choose).toHaveBeenCalledTimes(1);
+});

@@ -323,7 +323,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
                 })
               }
             >
-              <Note>使用她感兴趣的话题搜索。每次有结果的搜索约 $0.00075。</Note>
+              <Note>搜索她感兴趣的话题，偶尔会用模型挑选。每次有结果的搜索约 $0.00075。</Note>
             </Toggle>
           </Card>
           <NotificationSetup characterId={cid} />

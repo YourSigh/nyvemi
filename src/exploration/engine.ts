@@ -4,6 +4,8 @@ import { overlap } from '../memory/retrieval';
 import { ExperienceEngine } from '../experience/engine';
 import { BilibiliSourceError, type ContentItem, type ContentProvider } from './content';
 import type { BilibiliCaptionReader } from './bilibili-captions';
+import { appraiseExperience } from '../experience/appraisal';
+import type { ExplorationSelection } from './selection';
 
 const explorationCooldown = 4 * 60 * 60 * 1000;
 const providerBackoff = 30 * 60 * 1000;
@@ -53,8 +55,11 @@ function topicMatch(item: ContentItem, topic: string): number {
   );
 }
 
+const disliked = (c: Character, item: ContentItem) =>
+  c.persona.dislikes.some((t) => topicMatch(item, t) > 0.3);
+
 export function contentInterest(c: Character, item: ContentItem): number {
-  if (c.persona.dislikes.some((t) => topicMatch(item, t) > 0.3)) return 0;
+  if (disliked(c, item)) return 0;
   return Math.max(
     0,
     ...c.persona.likes.map((t) => topicMatch(item, t)),
@@ -66,6 +71,12 @@ export class ExplorationEngine {
     private store: Storage,
     private provider: ContentProvider,
     private captions?: BilibiliCaptionReader & { available(): Promise<boolean> },
+    private select?: (
+      character: Character,
+      topic: string,
+      items: ContentItem[],
+      signal?: AbortSignal,
+    ) => Promise<ExplorationSelection>,
   ) {}
   async prepareAfterLogin(characterId: string) {
     await this.store.atomic(async (tx) => {
@@ -138,6 +149,7 @@ export class ExplorationEngine {
         .map((topic) => topic.trim().slice(0, 80))
         .filter(Boolean);
       let candidates: ContentItem[];
+      let topic: string | undefined;
       try {
         await options.onFetch?.();
       } catch {
@@ -151,6 +163,7 @@ export class ExplorationEngine {
           const position = Math.floor(now / explorationCooldown) % uniqueTopics.length;
           uniqueTopics.push(...uniqueTopics.splice(0, position));
         }
+        topic = uniqueTopics[0];
         candidates = await this.provider.candidates({
           topics: uniqueTopics,
           signal: options.signal,
@@ -187,15 +200,41 @@ export class ExplorationEngine {
       const freshCharacter = await this.store.get('characters', characterId);
       if (options.signal?.aborted || !freshCharacter || unavailable(freshCharacter, freshSettings))
         return await cancel();
-      const ranked = candidates
-        .filter((v) => !seen.has(v.id) && !seenBilibili.has(bilibiliId(v.id) ?? bilibiliId(v.url)))
+      const unseen = candidates.filter(
+        (v) =>
+          !seen.has(v.id) &&
+          !seenBilibili.has(bilibiliId(v.id) ?? bilibiliId(v.url)) &&
+          !disliked(freshCharacter, v),
+      );
+      const ranked = unseen
         .map((v) => ({ v, score: contentInterest(freshCharacter, v) }))
         .filter((v) => v.score >= 0.12)
         .sort((a, b) => b.score - a.score);
+      const semanticScores = new Map<string, number>();
+      const indexed = unseen.filter((v) => v.discovery === 'deepseek_search').slice(0, 8);
+      let selection = 'local_interest';
+      if (!ranked.length && topic && indexed.length && this.select) {
+        const choice = await this.select(freshCharacter, topic, indexed, options.signal).catch(
+          () => undefined,
+        );
+        selection = choice ? 'semantic_interest' : 'semantic_unavailable';
+        if (options.signal?.aborted) return await cancel();
+        for (const { candidate, interest } of choice?.choices ?? []) {
+          const picked = indexed.find((v) => v.id === candidate);
+          if (!picked || interest < 0.65 || semanticScores.has(candidate)) continue;
+          semanticScores.set(candidate, interest);
+          ranked.push({ v: picked, score: interest });
+        }
+        ranked.sort((a, b) => b.score - a.score);
+      }
       let selected = ranked[0];
       if (!selected) {
         await complete();
-        return await log('no_interesting_unseen_content', { candidates: candidates.length });
+        return await log('no_interesting_unseen_content', {
+          candidates: candidates.length,
+          discovery: candidates[0]?.discovery,
+          selection,
+        });
       }
       let captionStatus = 'signed_out';
       let subtitle: string | undefined;
@@ -227,6 +266,7 @@ export class ExplorationEngine {
         }
       }
       const v = selected.v;
+      const semanticInterest = semanticScores.get(v.id);
       const metadata =
         v.discovery === 'deepseek_search'
           ? `搜索索引片段：${v.description}`
@@ -251,6 +291,7 @@ export class ExplorationEngine {
         topics: [
           ...new Set([
             v.category,
+            ...(semanticInterest !== undefined && topic ? [topic] : []),
             ...freshCharacter.interests.map((i) => i.topic).filter((t) => topicMatch(v, t) > 0.12),
             ...freshCharacter.persona.likes.filter((t) => topicMatch(v, t) > 0.12),
           ]),
@@ -262,6 +303,8 @@ export class ExplorationEngine {
         latestCharacter,
         [{ id: this.provider.id, fetch: async () => [experience] }],
         now,
+        undefined,
+        (item, owner, memories) => appraiseExperience(item, owner, memories, semanticInterest),
       );
       await complete();
       return await log('explored', {
@@ -272,6 +315,7 @@ export class ExplorationEngine {
         evidence: subtitle ? 'subtitle' : 'metadata_only',
         captionStatus,
         discovery: v.discovery ?? 'bilibili_feed',
+        selection,
       });
     } finally {
       await this.store.release(activeLease);
