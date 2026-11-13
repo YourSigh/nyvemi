@@ -104,6 +104,32 @@ it('follows touch gaze and clears a held interaction on backgrounding', () => {
   expect(values.get('ParamAngleX')).not.toBe(2.5);
 });
 
+it('offers a bounded one-arm wave for models with a shoulder and elbow in the default profile', () => {
+  const values = new Map<string, number>();
+  const d = createDriver({
+    parameterRanges: () =>
+      ['ParamArmLA', 'ParamArmRA', 'ParamArmRB'].map((id) => ({
+        id,
+        min: -180,
+        max: 180,
+        default: 0,
+      })),
+    setParameter: (id, value) => values.set(id, value),
+    behaviors: () => {},
+    update: () => {},
+    draw: () => {},
+  });
+  expect(d.play('wave')).toBe(true);
+  for (let frame = 0; frame < 20; frame++) d.step(0.04);
+  expect(values.get('ParamArmLA')).toBe(0);
+  expect(values.get('ParamArmRA')).toBeGreaterThan(10);
+  expect(values.get('ParamArmRB')).toBeGreaterThan(10);
+  expect(values.get('ParamArmRB')).toBeLessThanOrEqual(33);
+  expect(d.supports('eat')).toBe(false);
+  for (let frame = 0; frame < 100; frame++) d.step(0.04);
+  expect(Math.abs(values.get('ParamArmRA')!)).toBeLessThan(0.01);
+});
+
 it('keeps default motion small, reserves large arm actions and closes eyelids smoothly', () => {
   for (const state of ['idle', 'thinking', 'talking', 'happy'] as const)
     for (let t = 0; t < 20; t += 0.1) {

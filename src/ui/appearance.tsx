@@ -620,6 +620,7 @@ export function AppearanceScreen({ route, navigation }: ScreenProps<'Appearance'
                 ['thinking', '思考'],
                 ['talking', '说话'],
                 ['happy', '开心'],
+                ['shy', '害羞'],
                 ['sleepy', '困了'],
               ] as [CharacterInteractionState, string][]
             ).map(([state, label]) => (

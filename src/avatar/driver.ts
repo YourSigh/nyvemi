@@ -164,9 +164,7 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
           ['ParamArmLA', 'ParamArmLB', 'ParamArmRA', 'ParamArmRB'].every((id) => movable(id))
         );
       case 'wave':
-        return (
-          input.motionProfile === 'interactive' && movable('ParamArmRA') && movable('ParamArmRB')
-        );
+        return movable('ParamArmRA') && movable('ParamArmRB');
       case 'stretch':
         return (
           input.motionProfile === 'interactive' && movable('ParamArmLA') && movable('ParamArmRA')
@@ -249,6 +247,12 @@ export function createDriver(player: MeshPlayer, random: () => number = Math.ran
       } = pose(input.state, elapsed, input.intensity, input.reducedMotion);
       if (action) Object.assign(p, actionPose(action.kind, action.time));
       if (input.motionProfile !== 'interactive') {
+        if (action?.kind === 'wave') {
+          const progress = action.time / actionSeconds.wave;
+          const envelope = Math.min(1, progress * 6, (1 - progress) * 6);
+          p.armRA = 18 * envelope;
+          p.armRB = (24 + Math.sin(action.time * 10) * 9) * envelope;
+        }
         p.headX = Math.max(-3, Math.min(3, p.headX));
         p.headY = Math.max(-2, Math.min(2, p.headY));
         p.headZ = Math.max(-1.2, Math.min(1.2, p.headZ));
