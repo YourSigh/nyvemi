@@ -152,7 +152,9 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("cancelRequestedCharacter") { cid: String -> NyvemiRequestedWork.cancelCharacter(context(), cid) }
     Function("completeRequestedRun") { runId: String, done: Boolean -> NyvemiRequestedWork.complete(runId, done) }
     AsyncFunction("registerMaintenance") { NyvemiMaintenance.register(context().applicationContext) }
-    AsyncFunction("enqueueMaintenanceCheck") { NyvemiMaintenance.enqueueNow(context().applicationContext) }
+    AsyncFunction("enqueueMaintenanceCheck") { delayMs: Double? ->
+      NyvemiMaintenance.enqueueNow(context().applicationContext, delayMs?.toLong() ?: 0)
+    }
     AsyncFunction("maintenanceState") { NyvemiMaintenance.status(context().applicationContext) }
     Function("completeMaintenanceRun") { runId: String, done: Boolean -> NyvemiHeadlessRun.complete(runId, done) }
     Function("presenceState") {

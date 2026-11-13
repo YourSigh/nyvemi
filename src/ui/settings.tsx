@@ -2,6 +2,7 @@ import { Icon } from './icons';
 import { cleanupVisualAssets } from '../appearance/native';
 import { usePalette } from '../theme/context';
 import { NotificationSetup } from './notification-setup';
+import { BilibiliLogin } from './bilibili-login';
 import { useState, useCallback, useLayoutEffect } from 'react';
 import { Pressable, Switch, Text, View } from 'react-native';
 import type { PropsWithChildren } from 'react';
@@ -296,6 +297,7 @@ export function SettingsScreen({ navigation, route }: ScreenProps<'Settings'>) {
               <Note>在通知栏显示她的状态，会增加耗电。</Note>
             </Toggle>
           </Card>
+          <BilibiliLogin characterId={cid} />
           <NotificationSetup characterId={cid} />
         </>
       ) : section === 'preferences' ? (

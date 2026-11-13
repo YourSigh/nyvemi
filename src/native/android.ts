@@ -61,7 +61,7 @@ interface AndroidBridge {
   analyzeCharacterImage(uri: string): Promise<{ crop: number[]; pivot: number[] }[]>;
   registerMaintenance(): Promise<void>;
   maintenanceState(): Promise<BackgroundHealth>;
-  enqueueMaintenanceCheck(): Promise<void>;
+  enqueueMaintenanceCheck(delayMs?: number): Promise<void>;
   completeMaintenanceRun(runId: string, done: boolean): void;
   deviceTimeContext(): string;
   dictate(): Promise<string | null>;

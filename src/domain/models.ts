@@ -159,6 +159,7 @@ export const ExperienceSchema = z
     content: z.string(),
     url: z.string().optional(),
     topics: z.array(z.string()),
+    contentEvidence: z.enum(['metadata', 'subtitle']).optional(),
     createdAt: z.number(),
     appraisal: AppraisalSchema.optional(),
   })

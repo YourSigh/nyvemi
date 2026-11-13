@@ -19,8 +19,9 @@ object NyvemiMaintenance {
     WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, work).result.get()
   }
 
-  fun enqueueNow(context: Context) {
+  fun enqueueNow(context: Context, delayMs: Long) {
     val work = OneTimeWorkRequestBuilder<NyvemiMaintenanceWorker>()
+      .setInitialDelay(delayMs.coerceIn(0, 60_000), TimeUnit.MILLISECONDS)
       .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
     WorkManager.getInstance(context).enqueueUniqueWork("$WORK:manual", ExistingWorkPolicy.KEEP, work).result.get()
   }

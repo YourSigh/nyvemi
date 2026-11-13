@@ -40,16 +40,36 @@ it('stores a real-source-shaped exploration before intention sync even when proa
   const report = vi.fn();
   const activity = new ActivityMonitor();
   activity.subscribe(report);
+  const read = vi.fn().mockResolvedValue({
+    status: 'available',
+    bvid: 'BV1234567890',
+    part: 1,
+    language: 'zh-CN',
+    machineGenerated: false,
+    cues: [{ start: 0, end: 3, text: '机器人用脚踝调整重心。' }],
+  });
   const heartbeat = { run: vi.fn() };
   const syncIntentionWork = vi.fn(async () => {
     const experience = (await store.list('experiences', 'c')).find((e) => e.source === 'bilibili');
     expect(experience?.externalId).toBe('BV1234567890');
+    expect(experience?.contentEvidence).toBe('subtitle');
+    expect(experience?.content).toContain('机器人用脚踝调整重心');
     expect(experience?.appraisal?.shareImpulse).toBeGreaterThanOrEqual(0.7);
     expect(await store.list('notifications', 'c')).toHaveLength(0);
+    expect(await store.list('intentions', 'c')).toContainEqual(
+      expect.objectContaining({ type: 'share', status: 'pending', experienceId: experience?.id }),
+    );
   });
   const runtime = {
     store,
-    exploration: new ExplorationEngine(store, { id: 'bilibili', candidates }),
+    exploration: new ExplorationEngine(
+      store,
+      { id: 'bilibili', candidates },
+      {
+        available: async () => true,
+        read,
+      },
+    ),
     activity,
     diagnostics: new Diagnostics(store),
     extraction: { drain: vi.fn() },
@@ -59,6 +79,7 @@ it('stores a real-source-shaped exploration before intention sync even when proa
   await runBackgroundCycle(runtime, 'periodic_worker');
   await runBackgroundCycle(runtime, 'periodic_worker');
   expect(candidates).toHaveBeenCalledOnce();
+  expect(read).toHaveBeenCalledExactlyOnceWith('BV1234567890', undefined);
   expect(report).toHaveBeenCalledWith('browsing_bilibili', 'c');
   expect(syncIntentionWork).toHaveBeenCalledTimes(2);
   expect(heartbeat.run).toHaveBeenCalledTimes(2);

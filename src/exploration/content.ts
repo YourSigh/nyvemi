@@ -89,7 +89,13 @@ function clean(s: string): string {
 /** Guest public discovery metadata. No cookies, login, video playback or account mutation. */
 export class BilibiliContentProvider implements ContentProvider {
   readonly id = 'bilibili';
-  constructor(private request: typeof fetch = fetch) {}
+  constructor(
+    private request: typeof fetch = fetch,
+    private session?: {
+      getStatus(): Promise<'signed_in' | 'signed_out'>;
+      readAuthorized(url: URL, signal: AbortSignal): Promise<Response>;
+    },
+  ) {}
   async candidates({ topics = [], signal }: ContentQuery = {}): Promise<ContentItem[]> {
     const controller = new AbortController();
     const abort = () => controller.abort();
@@ -132,12 +138,15 @@ export class BilibiliContentProvider implements ContentProvider {
   private async fetchFeed(url: string, signal: AbortSignal): Promise<ContentItem[]> {
     let text: string;
     try {
-      const response = await this.request(url, {
-        signal,
-        headers: { Accept: 'application/json' },
-        credentials: 'omit',
-        redirect: 'manual',
-      });
+      const response =
+        this.session && (await this.session.getStatus()) === 'signed_in'
+          ? await this.session.readAuthorized(new URL(url), signal)
+          : await this.request(url, {
+              signal,
+              headers: { Accept: 'application/json' },
+              credentials: 'omit',
+              redirect: 'manual',
+            });
       if (!response.ok) throw new BilibiliSourceError('http', response.status);
       if (response.redirected || (response.url && response.url !== url))
         throw new BilibiliSourceError('invalid_response');

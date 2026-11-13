@@ -37,7 +37,9 @@ export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
             <Note>
               {new Date(e.createdAt).toLocaleString()} ·{' '}
               {e.source === 'bilibili'
-                ? '在 B 站刷到 · 标题与简介'
+                ? e.contentEvidence === 'subtitle'
+                  ? '在 B 站刷到 · 读过字幕片段'
+                  : '在 B 站刷到 · 标题与简介'
                 : e.source === 'mock-bilibili'
                   ? '测试探索 · Mock'
                   : e.source.startsWith('rss:')

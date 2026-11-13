@@ -11,6 +11,8 @@ import { CompanionAgent } from '../agent/service';
 import { PublicAgentWeb } from '../agent/web';
 import { BilibiliContentProvider } from '../exploration/content';
 import { ExplorationEngine } from '../exploration/engine';
+import { BilibiliCaptionProvider } from '../exploration/bilibili-captions';
+import { createBilibiliSessionManager } from '../exploration/bilibili-session-native';
 import { recoverVisualWork } from '../appearance/recovery';
 import { imageAssets, imageHash, imageSecret } from '../appearance/native';
 import { defaultImageSettings } from '../appearance/model';
@@ -160,8 +162,21 @@ async function createRuntime() {
       }
     },
   });
-  const bilibili = new BilibiliContentProvider(nativeFetch as unknown as typeof fetch);
-  const exploration = new ExplorationEngine(store, bilibili);
+  const bilibiliSession = createBilibiliSessionManager();
+  const request = nativeFetch as unknown as typeof fetch;
+  const bilibili = new BilibiliContentProvider(request, bilibiliSession);
+  const captions = new BilibiliCaptionProvider(
+    (url, signal) => bilibiliSession.readAuthorized(url, signal),
+    request,
+  );
+  const exploration = new ExplorationEngine(store, bilibili, {
+    read: (bvid, signal) => captions.read(bvid, signal),
+    available: () => bilibiliSession.getStatus().then((status) => status === 'signed_in'),
+  });
+  const prepareBilibiliExploration = async (characterId: string) => {
+    await exploration.prepareAfterLogin(characterId);
+    await bridge().enqueueMaintenanceCheck(20_000);
+  };
   const agentWeb = new PublicAgentWeb(bilibili, nativeFetch as unknown as typeof fetch);
   const plugins = new PluginManager(store, {
     load: (url) => agentWeb.pluginSource(url),
@@ -241,6 +256,8 @@ async function createRuntime() {
     diagnostics,
     activity,
     exploration,
+    bilibiliSession,
+    prepareBilibiliExploration,
     usage,
     provider,
     saveProvider,

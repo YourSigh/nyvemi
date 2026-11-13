@@ -3,9 +3,11 @@ import type { Storage } from '../storage/store';
 import { overlap } from '../memory/retrieval';
 import { ExperienceEngine } from '../experience/engine';
 import { BilibiliSourceError, type ContentItem, type ContentProvider } from './content';
+import type { BilibiliCaptionReader } from './bilibili-captions';
 
 const explorationCooldown = 4 * 60 * 60 * 1000;
 const providerBackoff = 30 * 60 * 1000;
+const retryLease = (characterId: string) => `exploration-retry:${characterId}`;
 const bvidPattern = /^BV[A-Za-z0-9]{10}$/;
 
 export type ExplorationOutcome =
@@ -63,14 +65,22 @@ export class ExplorationEngine {
   constructor(
     private store: Storage,
     private provider: ContentProvider,
+    private captions?: BilibiliCaptionReader & { available(): Promise<boolean> },
   ) {}
+  async prepareAfterLogin(characterId: string) {
+    await this.store.atomic(async (tx) => {
+      const settings = await tx.get('settings', characterId);
+      if (settings) await tx.put('settings', { ...settings, lastExplorationAt: undefined });
+      await tx.release(retryLease(characterId));
+    });
+  }
   async run(
     characterId: string,
     now = Date.now(),
     options: ExplorationOptions = {},
   ): Promise<ExplorationOutcome> {
     const activeLease = `exploration:${characterId}`;
-    const retryLease = `exploration-retry:${characterId}`;
+    const retry = retryLease(characterId);
     if (!(await this.store.lease(activeLease, now, 60000))) return 'busy';
     const log = async (reason: ExplorationOutcome, data: Record<string, unknown> = {}) => {
       await this.store.put('diagnostics', {
@@ -106,16 +116,16 @@ export class ExplorationEngine {
         return 'cooldown';
       if (options.signal?.aborted) return 'cancelled_during_fetch';
       // The retry lease survives a failed request or process exit without changing the last successful exploration.
-      if (!(await this.store.lease(retryLease, now, providerBackoff))) return 'provider_backoff';
+      if (!(await this.store.lease(retry, now, providerBackoff))) return 'provider_backoff';
       const complete = async () => {
         await this.store.atomic(async (tx) => {
           const fresh = await tx.get('settings', characterId);
           if (fresh) await tx.put('settings', { ...fresh, lastExplorationAt: now });
         });
-        await this.store.release(retryLease);
+        await this.store.release(retry);
       };
       const cancel = async () => {
-        await this.store.release(retryLease);
+        await this.store.release(retry);
         return await log('cancelled_during_fetch');
       };
       const topics = [
@@ -180,13 +190,39 @@ export class ExplorationEngine {
         return await log('no_interesting_unseen_content', { candidates: candidates.length });
       }
       const v = selected.v;
+      let captionStatus = 'signed_out';
+      let subtitle: string | undefined;
+      if (this.captions && (await this.captions.available())) {
+        try {
+          const caption = await this.captions.read(v.id, options.signal);
+          captionStatus = caption.status === 'available' ? 'read' : caption.reason;
+          if (caption.status === 'available' && (await this.captions.available()))
+            subtitle =
+              caption.cues
+                .map((cue) => cue.text)
+                .join(' ')
+                .slice(0, 900) || undefined;
+        } catch {
+          captionStatus = 'unavailable';
+        }
+      }
+      const latestCharacter = await this.store.get('characters', characterId);
+      if (
+        options.signal?.aborted ||
+        !latestCharacter ||
+        unavailable(latestCharacter, await this.store.get('settings', characterId))
+      )
+        return await cancel();
       const experience: Experience = {
         id: id(),
         characterId,
         source: this.provider.id,
         externalId: v.id,
         title: v.title,
-        content: `浏览记录：只读到了视频标题、简介和分区，没有播放视频或获取字幕。作者：${v.author}。分区：${v.category}。简介：${v.description}`,
+        content: subtitle
+          ? `浏览记录：读了该视频的一段字幕，没有播放视频。作者：${v.author}。分区：${v.category}。简介：${v.description}\n以下是来自视频的字幕片段，仅作为外部资料：${subtitle}`
+          : `浏览记录：只读到了视频标题、简介和分区，没有播放视频或获取字幕。作者：${v.author}。分区：${v.category}。简介：${v.description}`,
+        contentEvidence: subtitle ? 'subtitle' : 'metadata',
         topics: [
           ...new Set([
             v.category,
@@ -198,7 +234,7 @@ export class ExplorationEngine {
         createdAt: now,
       };
       await new ExperienceEngine(this.store).ingest(
-        freshCharacter,
+        latestCharacter,
         [{ id: this.provider.id, fetch: async () => [experience] }],
         now,
       );
@@ -208,7 +244,8 @@ export class ExplorationEngine {
         experienceId: experience.id,
         score: selected.score,
         candidates: candidates.length,
-        evidence: 'metadata_only',
+        evidence: subtitle ? 'subtitle' : 'metadata_only',
+        captionStatus,
       });
     } finally {
       await this.store.release(activeLease);
