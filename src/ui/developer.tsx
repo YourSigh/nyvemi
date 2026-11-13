@@ -10,7 +10,7 @@ import { androidNotifications, bridge } from '../native/android';
 import { runBackgroundCycle } from '../proactive/heartbeat/driver';
 import * as TaskManager from 'expo-task-manager';
 import { useRuntime } from './context';
-import { Button, Card, ErrorText, Heading, Note, Page } from './components';
+import { Button, Card, ErrorText, Field, Heading, Note, Page } from './components';
 import type { ScreenProps } from './navigation';
 export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
   const palette = usePalette();
@@ -22,6 +22,8 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [explorationResult, setExplorationResult] = useState('');
+  const [subtitleVideo, setSubtitleVideo] = useState('');
+  const [subtitleResult, setSubtitleResult] = useState('');
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
     setAllowed(settings?.developerMode ?? false);
@@ -190,6 +192,34 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
           }
         />
         {explorationResult ? <Note>{explorationResult}</Note> : null}
+        <Field
+          label="B 站字幕测试 · BV 号"
+          value={subtitleVideo}
+          onChangeText={setSubtitleVideo}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Button
+          title="检查指定视频的字幕"
+          secondary
+          disabled={busy || !/^BV[A-Za-z0-9]{10}$/.test(subtitleVideo.trim())}
+          onPress={() =>
+            void run(async () => {
+              setSubtitleResult('');
+              if ((await runtime.bilibiliSession.getStatus()) !== 'signed_in') {
+                setSubtitleResult('需要先连接 B 站');
+                return;
+              }
+              const result = await runtime.bilibiliCaptions.read(subtitleVideo.trim());
+              setSubtitleResult(
+                result.status === 'available'
+                  ? `字幕可读 · ${result.language} · ${result.cues.length} 条片段`
+                  : `字幕不可读 · ${result.reason}`,
+              );
+            })
+          }
+        />
+        {subtitleResult ? <Note>{subtitleResult}</Note> : null}
         <Button
           title="执行 Heartbeat（必要时调用模型）"
           secondary

@@ -257,6 +257,7 @@ async function createRuntime() {
     activity,
     exploration,
     bilibiliSession,
+    bilibiliCaptions: captions,
     prepareBilibiliExploration,
     usage,
     provider,
