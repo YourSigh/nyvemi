@@ -85,17 +85,24 @@ it('follows touch gaze and clears a held interaction on backgrounding', () => {
   const values = new Map<string, number>();
   const player: MeshPlayer = {
     parameterRanges: () =>
-      ['ParamAngleX', 'ParamEyeBallX'].map((id) => ({ id, min: -30, max: 30, default: 0 })),
+      ['ParamAngleX', 'ParamAngleY', 'ParamEyeBallX', 'ParamEyeBallY'].map((id) => ({
+        id,
+        min: -30,
+        max: 30,
+        default: 0,
+      })),
     setParameter: (id, v) => values.set(id, v),
     behaviors: () => {},
     update: () => {},
     draw: () => {},
   };
   const d = createDriver(player);
-  d.point(1, 0, true);
+  d.point(1, 1, true);
   d.step(0.03);
   expect(values.get('ParamAngleX')).toBe(2.5);
-  expect(values.get('ParamEyeBallX')).toBe(0.8);
+  expect(values.get('ParamEyeBallX')).toBe(0.36);
+  expect(values.get('ParamAngleY')).toBe(1.5);
+  expect(values.get('ParamEyeBallY')).toBe(0.28);
   d.play('pat');
   d.setInput({ active: false });
   expect(d.action()).toBeUndefined();
@@ -155,6 +162,44 @@ it('keeps default motion small, reserves large arm actions and closes eyelids sm
   expect(Math.min(...eyes)).toBeLessThan(0.05);
   expect(eyes.some((v) => v > 0.15 && v < 0.85)).toBe(true);
   expect(Math.max(...eyes.slice(1).map((v, i) => Math.abs(v - eyes[i])))).toBeLessThan(0.35);
+});
+
+it('begins mouth motion at speech onset and gives the lips time to close between phrases', () => {
+  expect(pose('talking', 0, 0.5, false, 0).mouth).toBe(0);
+  expect(pose('talking', 20, 0.5, false, 0.09).mouth).toBe(0.24);
+  expect(pose('talking', 20, 0.5, false, 0.32).mouth).toBe(0.36);
+  expect(pose('talking', 20, 0.5, false, 0.88).mouth).toBe(0);
+  expect(pose('talking', 20, 0.5, false, 1.72).mouth).toBe(0);
+  expect(pose('happy', 20).mouth).toBe(0);
+  expect(pose('happy', 20, 0.9).smile).toBeGreaterThan(pose('happy', 20, 0.2).smile);
+  expect(pose('happy', 20).eyeOpen).toBeGreaterThan(0.9);
+  expect(pose('thinking', 20).browL).toBeGreaterThan(pose('thinking', 20).browR);
+  expect(pose('idle', 20).browL).toBe(0);
+});
+
+it('does not stack a scheduled blink on top of a wink or a sleepy expression', () => {
+  const eyes = ['ParamEyeLOpen', 'ParamEyeROpen'];
+  const values = new Map<string, number>();
+  const driver = createDriver(
+    {
+      parameterRanges: () => eyes.map((id) => ({ id, min: 0, max: 1, default: 1 })),
+      setParameter: (id, value) => values.set(id, value),
+      behaviors: () => {},
+      update: () => {},
+      draw: () => {},
+    },
+    () => 0,
+  );
+  for (let i = 0; i < 32; i++) driver.step(0.05);
+  expect(driver.play('wink')).toBe(true);
+  for (let i = 0; i < 10; i++) driver.step(0.05);
+  expect(values.get('ParamEyeLOpen')).toBeLessThan(0.15);
+  expect(values.get('ParamEyeROpen')).toBe(1);
+  driver.cancelAction();
+  driver.setInput({ state: 'sleepy' });
+  for (let i = 0; i < 130; i++) driver.step(0.05);
+  expect(values.get('ParamEyeLOpen')).toBeCloseTo(0.09);
+  expect(values.get('ParamEyeROpen')).toBeCloseTo(0.09);
 });
 
 it('enables only actions backed by movable parameters and plays bounded small gestures', () => {

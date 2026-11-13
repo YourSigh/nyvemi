@@ -84,20 +84,23 @@ export function mountInteractions(
       return;
     }
     menu.style.display = 'none';
-    cue(
-      {
-        eat: '开饭！',
-        wave: '嗨～',
-        stretch: '伸个懒腰',
-        pat: '嗯…',
-        poke: '诶？',
-        lookAround: '让我看看',
-        nod: '嗯嗯',
-        shake: '唔～',
-        wink: '😉',
-        smile: '嘿嘿',
-      }[kind],
-    );
+    const feedback = {
+      eat: '开饭！',
+      wave: '嗨～',
+      stretch: '伸个懒腰',
+      pat: '嗯…',
+      poke: '诶？',
+      lookAround: '让我看看',
+      nod: '嗯嗯',
+      shake: '唔～',
+      wink: '',
+      smile: '',
+    }[kind];
+    if (feedback) cue(feedback);
+    else {
+      clearTimeout(cueTimer);
+      bubble.style.display = 'none';
+    }
     notify({ type: 'interaction', action: kind });
   };
   food.setAttribute('role', 'button');
