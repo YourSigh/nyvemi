@@ -1,5 +1,5 @@
 import { CharacterDebugControls } from './character/debug';
-import { conversationContext } from '../conversation/context';
+import { conversationContext, diagnosticNotificationBody } from '../conversation/context';
 import { deliveryReport } from '../proactive/delivery-report';
 import { usePalette } from '../theme/context';
 import { useCallback, useState } from 'react';
@@ -141,7 +141,8 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       characterId: cid,
       messageId: id(),
       title: character.persona.name,
-      body: '[开发测试] 这是一条本地角色通知，点开应进入当前角色聊天。',
+      body: diagnosticNotificationBody,
+      deliveryKind: 'diagnostic',
       createdAt: now,
       status: 'pending',
     };

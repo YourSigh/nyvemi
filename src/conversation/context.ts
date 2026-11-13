@@ -1,7 +1,19 @@
 import type { Message, NotificationRecord } from '../domain/models';
 import type { Storage } from '../storage/store';
+export const diagnosticNotificationBody =
+  '[开发测试] 这是一条本地角色通知，点开应进入当前角色聊天。';
+export function isDiagnosticNotification(record: NotificationRecord): boolean {
+  return (
+    record.deliveryKind === 'diagnostic' ||
+    (record.deliveryKind === undefined && record.body === diagnosticNotificationBody)
+  );
+}
 export function isAutonomous(record: NotificationRecord): boolean {
-  return record.deliveryKind !== 'requested' && !record.id.startsWith('requested:');
+  return (
+    record.deliveryKind !== 'requested' &&
+    !record.id.startsWith('requested:') &&
+    !isDiagnosticNotification(record)
+  );
 }
 export function interactionState(
   messages: Message[],

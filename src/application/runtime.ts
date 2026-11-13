@@ -170,7 +170,11 @@ async function createRuntime() {
     async () => ({ config: await store.get('provider', 'provider'), key: await secretStore.get() }),
     request,
     async (metric, billed) => {
-      await usage.recordFlatRate(metric, billed ? 0.00075 : 0, 'USD');
+      await usage.recordFlatRate(
+        metric,
+        billed === undefined ? undefined : billed ? 0.00075 : 0,
+        'USD',
+      );
       await diagnostics.record('api', '', { ...metric });
     },
   );

@@ -1,4 +1,5 @@
 import type { NotificationRecord, Settings } from '../../domain/models';
+import { isAutonomous } from '../../conversation/context';
 import { isQuietHour } from '../quiet-hours';
 export function localDayKey(now: number): string {
   const d = new Date(now);
@@ -16,9 +17,8 @@ export function policyBlock(
   const sent = notifications.filter(
     (n) =>
       n.status === 'delivered' &&
+      isAutonomous(n) &&
       n.deliveryKind !== 'continuation' &&
-      n.deliveryKind !== 'requested' &&
-      !n.id.startsWith('requested:') &&
       !n.id.startsWith('continuation:'),
   );
   const today = sent.filter((n) => localDayKey(n.createdAt) === localDayKey(now));

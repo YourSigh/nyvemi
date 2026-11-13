@@ -12,6 +12,8 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 ## Current status
 
+**0.20.15 adds editable personality and autonomous Bilibili discovery.** In 设置 → 性格与说话方式, users can set the character's name, traits, voice in chat, relationship style and boundaries. The character can also learn and revise explicit long-term feedback during conversation. A delivery review helps close exchanges naturally. In 设置 → 来信与通知, optional DeepSeek search uses the character's own interests to find public videos, with verified subtitle reading for connected Bilibili accounts when a track is available. See [setup and evidence scope](docs/BILIBILI_EXPLORATION.md).
+
 **0.18.0 fixes shared-arm motion and normalizes decomposition inputs.** New decomposition requests separate left/right arm assets. Existing transparent combined layers are analyzed locally and rendered around independent attachment pivots. Click-to-wave moves one arm. Ambiguous connected artwork stays still. Android decodes, applies orientation and re-encodes decomposition inputs as PNG, checking actual dimensions before an API request. A real Flash request reproduced HTTP 400 on the original JPEG; the re-encoded PNG produced eight outputs, including separate arms. Android emulator checks exercised both legacy/new layers and native preparation; physical-device testing is pending connection. See [verification and limits](docs/ARMS_AND_IMAGE_INPUT.md).
 
 **0.19.0 brings the first meeting into chat.** New users enter a DeepSeek key, meet an animated egg and shape the character through eight short conversations, starting with color. Suggestions live beside the composer; history and progress survive restart/import. Appearance reuses the existing generation pipeline. Android local speech can read new messages with installed offline Chinese voices, with preview, voice selection and stop-on-background behavior. Voice availability and perceived gender depend on the device; no cloud speech or voice cloning is implied. See [workflow, verification and limits](docs/EGG_ONBOARDING_AND_LOCAL_VOICE.md).
@@ -44,7 +46,7 @@ Nyvemi does not simulate consciousness. It implements persistent state, memory, 
 
 **0.13.0 embeds the official DeepSeek Harness core in the Android app.** DSH owns the model → tools → observations loop and durable sessions. Only `send_message` creates a visible bubble; ordinary model text stays internal, and `wait` ends a turn without sending anything. Tools connect the existing memory, experiences, interests, web search/fetch, guest Bilibili metadata, theme changes and durable wakeups. User-requested delivery and optional autonomous thoughts are distinct. See [integration, real-API evidence and limits](docs/DSH_EMBEDDING.md).
 
-The existing PSD2Live WASM/WebGL character, one-third stage, keyboard behavior and pink-white theme remain. Rig compilation still runs on the development computer; the phone loads user-imported rigs. No physical-device test was performed. Subjective character quality and Android background delivery remain user acceptance items.
+The PSD2Live WASM/WebGL character uses a compact stage and keyboard-aware layout. Rig compilation can run on the development computer, and the phone can load user-imported rigs. Background delivery depends on the device scheduler and character policy.
 
 ## Local-first and BYOK
 

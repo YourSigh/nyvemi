@@ -13,6 +13,11 @@ const timeLabels: Record<string, string> = {
   'late night': '夜深了',
   weekend: '周末的空气',
 };
+const bilibiliEvidence = {
+  subtitle: '读过字幕片段',
+  search_snippet: '读过搜索片段',
+  metadata: '读过标题和简介',
+};
 export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
   const palette = usePalette();
   const runtime = useRuntime();
@@ -37,9 +42,7 @@ export function ExperiencesScreen({ route }: ScreenProps<'Experiences'>) {
             <Note>
               {new Date(e.createdAt).toLocaleString()} ·{' '}
               {e.source === 'bilibili'
-                ? e.contentEvidence === 'subtitle'
-                  ? '在 B 站刷到 · 读过字幕片段'
-                  : '在 B 站刷到 · 标题与简介'
+                ? `在 B 站刷到 · ${bilibiliEvidence[e.contentEvidence ?? 'metadata']}`
                 : e.source === 'mock-bilibili'
                   ? '测试探索 · Mock'
                   : e.source.startsWith('rss:')

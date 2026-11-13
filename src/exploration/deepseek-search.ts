@@ -51,7 +51,10 @@ export class DeepSeekBilibiliSearch {
   constructor(
     private credentials: () => Promise<{ config: ProviderConfig | undefined; key: string | null }>,
     private request: typeof fetch = fetch,
-    private metric: (entry: ApiMetric, billed: boolean) => Promise<void> = async () => {},
+    private metric: (
+      entry: ApiMetric,
+      billed: boolean | undefined,
+    ) => Promise<void> = async () => {},
   ) {}
 
   async candidates(topic: string, signal: AbortSignal): Promise<ContentItem[] | undefined> {
@@ -63,7 +66,7 @@ export class DeepSeekBilibiliSearch {
     if (signal.aborted) throw new BilibiliSourceError('timeout');
     const startedAt = Date.now();
     const requestId = id();
-    let billed = false;
+    let billed: boolean | undefined;
     let success = false;
     let status: number | undefined;
     try {
@@ -80,7 +83,10 @@ export class DeepSeekBilibiliSearch {
         redirect: 'error',
       });
       status = response.status;
-      if (!response.ok) throw new BilibiliSourceError('http', status);
+      if (!response.ok) {
+        billed = false;
+        throw new BilibiliSourceError('http', status);
+      }
       if (response.redirected || (response.url && response.url !== endpoint))
         throw new BilibiliSourceError('invalid_response');
       const text = await readDiscoveryText(response, maxResponseBytes);

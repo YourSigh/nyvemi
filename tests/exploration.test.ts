@@ -344,7 +344,7 @@ it('can choose semantically related indexed material when literal terms do not m
   const [experience] = await store.list('experiences', 'c');
   expect(experience).toMatchObject({
     externalId: item.id,
-    contentEvidence: 'metadata',
+    contentEvidence: 'search_snippet',
     appraisal: { selfInterest: 0.95 },
   });
   expect((await store.get('characters', 'c'))!.interests[0].score).toBeGreaterThan(

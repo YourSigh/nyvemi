@@ -226,6 +226,7 @@ function purposeLabel(purpose: string): string {
         agent_step: '角色思考与工具',
         bilibili_discovery: 'B 站视频探索',
         bilibili_candidate_selection: '角色挑选视频',
+        conversation_delivery_review: '对话收尾判断',
         image_understanding: '看图',
         visual_identity_planning: '角色外观理解',
         visual_prompt_composition: '绘图描述整理',

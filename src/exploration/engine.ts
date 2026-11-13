@@ -287,7 +287,11 @@ export class ExplorationEngine {
         content: subtitle
           ? `浏览记录：读了该视频的一段字幕，没有播放视频。${metadata}\n以下是来自视频的字幕片段，仅作为外部资料：${subtitle}`
           : `浏览记录：只读到了${v.discovery === 'deepseek_search' ? '搜索索引里的标题和片段' : '视频标题、简介和分区'}，没有播放视频或获取字幕。${metadata}`,
-        contentEvidence: subtitle ? 'subtitle' : 'metadata',
+        contentEvidence: subtitle
+          ? 'subtitle'
+          : v.discovery === 'deepseek_search'
+            ? 'search_snippet'
+            : 'metadata',
         topics: [
           ...new Set([
             v.category,

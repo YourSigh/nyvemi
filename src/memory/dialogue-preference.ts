@@ -25,6 +25,7 @@ const eventSchema = z.object({
   action: z.enum(['set', 'forget']),
   messageAt: z.number(),
 });
+const withdrawnPreference = '用户撤回了这一项聊天偏好';
 
 export function isDialoguePreference(memory: Memory): boolean {
   return memory.type === 'relationship' && memory.metadata?.kind === 'dialogue_preference';
@@ -40,8 +41,8 @@ export async function recordedDialoguePreference(
   );
 }
 
-export async function dialoguePreferences(store: Storage, characterId: string) {
-  const events = (await store.list('memories', characterId, 10000))
+export function activeDialoguePreferences(memories: Memory[]) {
+  const events = memories
     .filter(isDialoguePreference)
     .flatMap((memory) => {
       const parsed = eventSchema.safeParse(memory.metadata);
@@ -50,10 +51,33 @@ export async function dialoguePreferences(store: Storage, characterId: string) {
     .sort((a, b) => b.messageAt - a.messageAt || b.memory.updatedAt - a.memory.updatedAt);
   const newest = new Map<string, (typeof events)[number]>();
   for (const event of events) if (!newest.has(event.key)) newest.set(event.key, event);
-  return [...newest.values()]
-    .filter((event) => event.action === 'set')
+  return [...newest.values()].filter((event) => event.action === 'set');
+}
+
+export async function dialoguePreferences(store: Storage, characterId: string) {
+  return activeDialoguePreferences(await store.list('memories', characterId, 10000))
     .slice(0, 12)
     .map(({ key, memory }) => ({ key, preference: memory.content }));
+}
+
+/** Called inside the memory deletion transaction. Keep source markers for pending extraction. */
+export async function clearDialoguePreference(store: Storage, selected: Memory): Promise<boolean> {
+  if (!isDialoguePreference(selected)) return false;
+  const selectedEvent = eventSchema.safeParse(selected.metadata);
+  if (!selectedEvent.success) return false;
+  for (const memory of await store.list(
+    'memories',
+    selected.characterId,
+    Number.MAX_SAFE_INTEGER,
+  )) {
+    if (!isDialoguePreference(memory) || memory.metadata?.key !== selectedEvent.data.key) continue;
+    await store.put('memories', {
+      ...memory,
+      content: withdrawnPreference,
+      metadata: { ...memory.metadata, action: 'forget' },
+    });
+  }
+  return true;
 }
 
 export async function saveDialoguePreference(
@@ -71,7 +95,7 @@ export async function saveDialoguePreference(
           .min(2)
           .max(200)
           .parse(await redact(change.preference))
-      : '用户撤回了这一项聊天偏好';
+      : withdrawnPreference;
   return store.atomic(async (tx) => {
     const latest = await tx.get('messages', user.id);
     if (

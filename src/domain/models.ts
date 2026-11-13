@@ -172,7 +172,7 @@ export const ExperienceSchema = z
     content: z.string(),
     url: z.string().optional(),
     topics: z.array(z.string()),
-    contentEvidence: z.enum(['metadata', 'subtitle']).optional(),
+    contentEvidence: z.enum(['metadata', 'search_snippet', 'subtitle']).optional(),
     createdAt: z.number(),
     appraisal: AppraisalSchema.optional(),
   })
@@ -237,7 +237,9 @@ export const NotificationSchema = z
     characterId: z.string(),
     messageId: z.string(),
     messageIds: z.array(z.string()).min(1).max(6).optional(),
-    deliveryKind: z.enum(['initiative', 'requested', 'continuation', 'reconnect']).optional(),
+    deliveryKind: z
+      .enum(['initiative', 'requested', 'continuation', 'reconnect', 'diagnostic'])
+      .optional(),
     title: z.string(),
     body: z.string(),
     createdAt: z.number(),

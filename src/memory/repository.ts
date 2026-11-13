@@ -1,7 +1,11 @@
 import { id, type Memory, type MemoryType } from '../domain/models';
 import type { Storage } from '../storage/store';
 import { overlap } from './retrieval';
-import { isDialoguePreference } from './dialogue-preference';
+import {
+  activeDialoguePreferences,
+  clearDialoguePreference,
+  isDialoguePreference,
+} from './dialogue-preference';
 export class MemoryRepository {
   constructor(private store: Storage) {}
   async list(characterId: string, now = Date.now()): Promise<Memory[]> {
@@ -13,6 +17,11 @@ export class MemoryRepository {
   }
   async get(memoryId: string): Promise<Memory | undefined> {
     return this.store.get('memories', memoryId);
+  }
+  async listVisible(characterId: string, now = Date.now()): Promise<Memory[]> {
+    const memories = await this.list(characterId, now);
+    const activeIds = new Set(activeDialoguePreferences(memories).map(({ memory }) => memory.id));
+    return memories.filter((m) => !isDialoguePreference(m) || activeIds.has(m.id));
   }
   async upsert(
     characterId: string,
@@ -70,6 +79,7 @@ export class MemoryRepository {
   async remove(memoryId: string): Promise<void> {
     await this.store.atomic(async (tx) => {
       const memory = await tx.get('memories', memoryId);
+      if (memory && (await clearDialoguePreference(tx, memory))) return;
       if (memory?.type === 'open_loop')
         for (const intention of await tx.list('intentions', memory.characterId, 10000))
           if (intention.openLoopId === memoryId)

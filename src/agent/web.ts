@@ -276,7 +276,12 @@ export class PublicAgentWeb implements AgentWeb {
         item.discovery === 'deepseek_search'
           ? `只找到视频标题和搜索片段，未播放视频。${item.description}`
           : `仅标题与简介，未播放视频。UP主：${item.author}；分区：${item.category}。${item.description}`,
-      source: this.content.id === 'bilibili' ? 'bilibili-metadata' : 'mock-bilibili-metadata',
+      source:
+        this.content.id !== 'bilibili'
+          ? 'mock-bilibili-metadata'
+          : item.discovery === 'deepseek_search'
+            ? 'bilibili-search'
+            : 'bilibili-metadata',
     }));
   }
   async bilibiliCaptions(input: string, signal?: AbortSignal): Promise<WebDocument> {

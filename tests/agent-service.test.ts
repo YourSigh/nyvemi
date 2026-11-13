@@ -5,6 +5,7 @@ import { CompanionAgent, type AgentHost } from '../src/agent/service';
 import type { AgentModelRequest, AgentModelResult } from '../src/agent/core';
 import { ChatService } from '../src/chat/service';
 import { SQLiteStore, migrate } from '../src/storage/store';
+import { serializeDatabase } from '../src/storage/serialized';
 import { Diagnostics } from '../src/storage/diagnostics';
 import { MemoryExtractionService } from '../src/memory/extraction';
 import { dialoguePreferences } from '../src/memory/dialogue-preference';
@@ -21,7 +22,7 @@ const tool = (name: string, args: unknown): AgentModelResult => ({
 async function setup(script: (request: AgentModelRequest, n: number) => Promise<AgentModelResult>) {
   const db = new TestDatabase();
   await migrate(db);
-  const store = new SQLiteStore(db);
+  const store = new SQLiteStore(serializeDatabase(db));
   let n = 0;
   const provider: LLMProvider = {
     chat: async () => {
@@ -657,6 +658,126 @@ it('a promised delivery that only waits remains retryable rather than being mark
   expect((await f.store.get('intentions', 'promise'))?.status).toBe('pending');
   expect((await f.store.get('intentions', 'promise'))?.attempts).toBe(1);
 });
+
+it.each([
+  { count: 1, reason: 'global_minimum_interval' },
+  { count: 4, reason: 'global_daily_limit' },
+])('checks $reason across characters before running a share', async ({ count, reason }) => {
+  const model = vi.fn(async () => tool('send_message', { messages: ['有件事想分享'] }));
+  const f = await setup(model);
+  f.host.visible = () => false;
+  const now = Date.now();
+  await f.store.put('settings', {
+    ...(await f.store.get('settings', 'c'))!,
+    quietStart: 0,
+    quietEnd: 0,
+    lastActiveAt: now - 86400000,
+  });
+  for (let n = 0; n < count; n++) {
+    await f.store.put('notifications', {
+      id: `other:${n}`,
+      characterId: `other-character:${n}`,
+      messageId: `other-message:${n}`,
+      title: '另一个角色',
+      body: '先前主动来信',
+      deliveryKind: 'initiative',
+      createdAt: now,
+      deliveredAt: now,
+      status: 'delivered',
+    });
+  }
+  const task: Intention = {
+    id: 'share',
+    characterId: 'c',
+    type: 'share',
+    topic: '机器人',
+    reason: '想分享新鲜事',
+    importance: 0.9,
+    earliestAt: now - 1,
+    latestAt: now + 3600000,
+    createdAt: now,
+    status: 'pending',
+  };
+  await f.store.put('intentions', task);
+  const run = (id: string) => f.agent.due(undefined, id);
+  expect(await executeIntentionWork(f.store, run, task.id)).toBe(false);
+  expect(model).not.toHaveBeenCalled();
+  expect(await f.store.get('intentions', task.id)).toMatchObject({
+    status: 'pending',
+    earliestAt: expect.any(Number),
+  });
+  expect((await f.store.get('intentions', task.id))!.earliestAt).toBeGreaterThan(now);
+  expect(await f.store.list('diagnostics', 'c')).toContainEqual(
+    expect.objectContaining({ data: expect.objectContaining({ reason }) }),
+  );
+});
+
+it.each(['share', 'follow_up', 'continuation', 'reconnect', 'requested'] as const)(
+  'bounds failed generation for unsolicited %s while retaining requested recovery',
+  async (type) => {
+    const model = vi.fn(async () => {
+      throw Error('模型请求失败（HTTP 503）');
+    });
+    const f = await setup(model);
+    f.host.visible = () => false;
+    const now = Date.now();
+    await f.store.put('settings', {
+      ...(await f.store.get('settings', 'c'))!,
+      quietStart: 0,
+      quietEnd: 0,
+      lastActiveAt: now - 86400000,
+    });
+    await f.store.put('messages', {
+      id: 'prior-user',
+      characterId: 'c',
+      role: 'user',
+      content: '我下午去听机器人讲座',
+      createdAt: now - 15 * 60000,
+      origin: 'chat',
+      status: 'complete',
+    });
+    const task: Intention = {
+      id: 'retry',
+      characterId: 'c',
+      type,
+      sourceMessageId: 'prior-user',
+      topic: '机器人',
+      reason: '上次聊到这里',
+      importance: 0.9,
+      earliestAt: now - 1,
+      latestAt: now + 3600000,
+      createdAt: now,
+      status: 'pending',
+    };
+    await f.store.put('intentions', task);
+    for (let n = 1; n <= 4; n++) {
+      const cold = new CompanionAgent(
+        f.store,
+        async () => f.provider,
+        new Diagnostics(f.store),
+        f.host,
+      );
+      const run = (id: string) => cold.due(undefined, id);
+      const exhausted = type !== 'requested' && n >= 3;
+      expect(await executeIntentionWork(f.store, run, task.id)).toBe(exhausted);
+      const saved = (await f.store.get('intentions', task.id))!;
+      expect(saved.attempts).toBe(type === 'requested' ? n : Math.min(n, 3));
+      expect(saved.status).toBe(exhausted ? 'cancelled' : 'pending');
+      if (saved.status === 'pending') {
+        expect(saved.earliestAt).toBeGreaterThan(now);
+        await f.store.put('intentions', { ...saved, earliestAt: now - 1 });
+      }
+    }
+    expect(model).toHaveBeenCalledTimes(type === 'requested' ? 4 : 3);
+    expect(f.notifications).toHaveLength(0);
+    if (type !== 'requested')
+      expect(await f.store.list('diagnostics', 'c')).toContainEqual(
+        expect.objectContaining({
+          data: expect.objectContaining({ reason: 'agent_retry_exhausted' }),
+        }),
+      );
+  },
+);
 
 it('reports the actual provider failure, keeps private details redacted and retries the same user message', async () => {
   let fail = true;

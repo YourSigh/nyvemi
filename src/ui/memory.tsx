@@ -22,7 +22,7 @@ export function MemoryScreen({ route }: ScreenProps<'Memory'>) {
   const refresh = useCallback(
     () =>
       runtime.memories
-        .list(cid)
+        .listVisible(cid)
         .then(setMemories)
         .catch(() => setError('读取记忆失败')),
     [runtime, cid],

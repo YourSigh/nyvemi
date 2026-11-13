@@ -14,6 +14,7 @@ import {
 import { SQLiteStore, migrate } from '../src/storage/store';
 import { TestDatabase } from './database';
 import { Diagnostics } from '../src/storage/diagnostics';
+import { diagnosticNotificationBody, interactionState } from '../src/conversation/context';
 import type { LLMProvider } from '../src/providers/provider';
 const now = new Date(2026, 9, 22, 19).getTime();
 const character: Character = {
@@ -82,6 +83,24 @@ it('scores context above the threshold and expires stale intentions', async () =
   await store.put('intentions', { ...intention, latestAt: now });
   expect(await expireIntentions(store, 'c', now)).toBe(1);
   expect((await store.get('intentions', 'i'))?.status).toBe('expired');
+});
+it('keeps native diagnostic test notifications out of the proactive budget and conversation state', () => {
+  const legacy: NotificationRecord = {
+    id: 'native-test-legacy',
+    characterId: 'c',
+    messageId: 'legacy',
+    title: 'Nyvemi',
+    body: diagnosticNotificationBody,
+    status: 'delivered',
+    createdAt: now - 60000,
+  };
+  const current: NotificationRecord = {
+    ...legacy,
+    id: 'native-test-current',
+    deliveryKind: 'diagnostic',
+  };
+  expect(policyBlock(settings, [legacy, current], now)).toBeUndefined();
+  expect(interactionState([], [legacy, current], now).unansweredCount).toBe(0);
 });
 it('skips most heartbeats without calling a model and explains each skip', async () => {
   const store = await setup();

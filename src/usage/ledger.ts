@@ -103,7 +103,11 @@ export class UsageLedger {
       currency: price?.currency,
     });
   }
-  async recordFlatRate(metric: ApiMetric, cost: number, currency: TokenPrice['currency']) {
+  async recordFlatRate(
+    metric: ApiMetric,
+    cost: number | undefined,
+    currency: TokenPrice['currency'],
+  ) {
     await this.persist({ ...metric, estimatedCost: cost, currency });
   }
   private async persist(record: UsageRecord): Promise<void> {

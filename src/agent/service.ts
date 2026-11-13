@@ -34,6 +34,9 @@ import { agentTools } from './tools';
 import { runEmbeddedAgent, type AgentRunner } from './core';
 import type { AgentSession } from './model';
 import type { AgentWeb, WebDocument } from './web';
+
+const unsolicitedAttemptLimit = 3;
+
 export interface AgentHost {
   web: AgentWeb;
   plugins?: PluginManager;
@@ -591,7 +594,9 @@ export class CompanionAgent {
                         source === 'bilibili'
                           ? doc.source === 'bilibili-subtitle'
                             ? 'subtitle'
-                            : 'metadata'
+                            : doc.source === 'bilibili-search'
+                              ? 'search_snippet'
+                              : 'metadata'
                           : undefined,
                       appraisal: parsed.appraisal,
                       createdAt: Date.now(),
@@ -759,14 +764,20 @@ export class CompanionAgent {
     }
     const settings = await this.store.get('settings', cid);
     if (!settings) return 'settings_missing';
-    const records = await this.store.list('notifications', cid, 1000);
-    const blocked = await autonomousBlock(this.store, cid, records, now);
-    if (blocked) return blocked;
-    // Conversation continuations have their own modest per-hour limit; ordinary shares use daily policy.
+    // Conversation continuations have their own per-character limit; other initiative uses global limits too.
     if (input.task?.type === 'continuation' && input.task.sourceMessageId)
-      return continuationBlock(this.store, input.task, settings, records, now);
+      return continuationBlock(
+        this.store,
+        input.task,
+        settings,
+        await this.store.list('notifications', cid, 1000),
+        now,
+      );
+    const records = await this.store.list('notifications', undefined, 10000);
     if (input.task?.type === 'reconnect')
       return reconnectBlock(this.store, input.task, settings, records, now);
+    const blocked = await autonomousBlock(this.store, cid, records, now);
+    if (blocked) return blocked;
     return policyBlock(settings, records, now);
   }
   async due(kind?: 'requested' | 'continuation' | 'reconnect', targetId?: string): Promise<void> {
@@ -854,14 +865,21 @@ export class CompanionAgent {
           messages.length ? 'send' : 'skip',
         );
       } catch {
-        const fresh = await this.store.get('intentions', task.id);
-        if (fresh?.status === 'pending')
-          await this.store.put('intentions', {
+        const exhausted = await this.store.atomic(async (tx) => {
+          const fresh = await tx.get('intentions', task.id);
+          if (fresh?.status !== 'pending') return false;
+          const attempts = (fresh.attempts ?? 0) + 1;
+          const reachedLimit = fresh.type !== 'requested' && attempts >= unsolicitedAttemptLimit;
+          await tx.put('intentions', {
             ...fresh,
-            attempts: (fresh.attempts ?? 0) + 1,
-            earliestAt: now + Math.min(30, 2 ** Math.min(fresh.attempts ?? 0, 4)) * 60000,
+            attempts,
+            ...(reachedLimit
+              ? { status: 'cancelled' as const }
+              : { earliestAt: now + Math.min(30, 2 ** Math.min(attempts - 1, 4)) * 60000 }),
           });
-        await report('agent_run_failed');
+          return reachedLimit;
+        });
+        await report(exhausted ? 'agent_retry_exhausted' : 'agent_run_failed');
       }
       return;
     }
