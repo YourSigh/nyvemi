@@ -37,7 +37,7 @@ async function executeMaintenance(full: boolean, source: string): Promise<boolea
         requested: () => runtime.heartbeat.runRequested(),
         continuations: () => runtime.heartbeat.runContinuations(),
         reconnects: () => runtime.heartbeat.runReconnects(),
-        cycle: () => runBackgroundCycle(runtime),
+        cycle: () => runBackgroundCycle(runtime, source),
         sync: () => runtime.syncIntentionWork(),
         idle: async () => {
           const state = bridge().presenceState();

@@ -3,6 +3,7 @@ import { serializeDatabase } from '../src/storage/serialized';
 import { it, expect, vi } from 'vitest';
 import {
   BilibiliContentProvider,
+  BilibiliSourceError,
   MockContentProvider,
   type ContentItem,
 } from '../src/exploration/content';
@@ -59,8 +60,12 @@ it('selects by own interests, persists browse history, experience, interest grow
     updatedAt: now,
     accessCount: 0,
   });
-  const engine = new ExplorationEngine(store, new MockContentProvider([cooking, robot]));
-  expect(await engine.run('c', now)).toBe('explored');
+  const candidates = vi.fn().mockResolvedValue([cooking, robot]);
+  const onFetch = vi.fn();
+  const engine = new ExplorationEngine(store, { id: 'mock-bilibili', candidates });
+  expect(await engine.run('c', now, { trigger: 'presence_service', onFetch })).toBe('explored');
+  expect(candidates).toHaveBeenCalledWith({ topics: ['机器人'] });
+  expect(onFetch).toHaveBeenCalledBefore(candidates);
   const experiences = await store.list('experiences', 'c');
   expect(experiences).toHaveLength(1);
   expect(experiences[0].externalId).toBe(robot.id);
@@ -73,7 +78,16 @@ it('selects by own interests, persists browse history, experience, interest grow
   expect(intents[0].experienceId).toBe(experiences[0].id);
   expect(await engine.run('c', now + 60000)).toBe('cooldown');
   expect(await engine.run('c', now + 4 * 3600000)).toBe('no_interesting_unseen_content');
+  expect(await engine.run('c', now + 4 * 3600000 + 60000)).toBe('cooldown');
   expect(await store.list('experiences', 'c')).toHaveLength(1);
+  const logs = await store.list('diagnostics', 'c');
+  expect(logs).toHaveLength(2);
+  expect(logs[1].data).toMatchObject({
+    decision: 'explore',
+    trigger: 'presence_service',
+    reason: 'explored',
+    evidence: 'metadata_only',
+  });
 });
 it('feeds the saved experience to proactive generation and delivers one natural message', async () => {
   const store = await setup();
@@ -102,28 +116,52 @@ it('feeds the saved experience to proactive generation and delivers one natural 
 });
 it('records failure and backs off without inventing a mock experience', async () => {
   const store = await setup();
-  const candidates = vi.fn().mockRejectedValue(new Error('private failure'));
+  const candidates = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('private failure'))
+    .mockResolvedValue([robot]);
   const engine = new ExplorationEngine(store, { id: 'bilibili', candidates });
   expect(await engine.run('c', now)).toBe('provider_unavailable');
-  expect(await engine.run('c', now + 60000)).toBe('cooldown');
+  expect(
+    await new ExplorationEngine(store, { id: 'bilibili', candidates }).run('c', now + 60000),
+  ).toBe('provider_backoff');
   expect(candidates).toHaveBeenCalledOnce();
   expect(await store.list('experiences', 'c')).toHaveLength(0);
-  expect(JSON.stringify(await store.list('diagnostics', 'c'))).not.toContain('private failure');
+  const logs = await store.list('diagnostics', 'c');
+  expect(logs).toHaveLength(1);
+  expect(JSON.stringify(logs)).not.toContain('private failure');
+  expect((await store.get('settings', 'c'))?.lastExplorationAt).toBeUndefined();
+  expect(await engine.run('c', now + 30 * 60000)).toBe('explored');
 });
-it('respects disabled/quiet settings and rejects disliked or unrelated content', async () => {
+it('stores allowlisted provider failure details for background diagnosis', async () => {
+  const store = await setup();
+  const candidates = vi.fn().mockRejectedValue(new BilibiliSourceError('api', undefined, -412));
+  const engine = new ExplorationEngine(store, { id: 'bilibili', candidates });
+  await expect(engine.run('c', now, { trigger: 'periodic_worker' })).resolves.toBe(
+    'provider_unavailable',
+  );
+  expect((await store.list('diagnostics', 'c'))[0].data).toMatchObject({
+    trigger: 'periodic_worker',
+    decision: 'skip',
+    reason: 'provider_unavailable',
+    failure: 'api',
+    apiCode: -412,
+  });
+});
+it('allows silent exploration with proactive delivery disabled and during quiet hours', async () => {
   const store = await setup();
   const candidates = vi.fn().mockResolvedValue([robot]);
   const engine = new ExplorationEngine(store, { id: 'mock-bilibili', candidates });
-  await store.put('settings', { ...defaultSettings('c'), proactiveEnabled: false });
-  expect(await engine.run('c', now)).toBe('disabled');
   await store.put('settings', {
     ...defaultSettings('c'),
-    proactiveEnabled: true,
+    proactiveEnabled: false,
     quietStart: 13,
     quietEnd: 16,
   });
-  expect(await engine.run('c', now)).toBe('quiet_hours');
-  expect(candidates).not.toHaveBeenCalled();
+  expect(await engine.run('c', now)).toBe('explored');
+  expect(candidates).toHaveBeenCalledOnce();
+});
+it('rejects disliked or unrelated content', () => {
   expect(contentInterest(character, cooking)).toBe(0);
   expect(
     contentInterest(
@@ -131,6 +169,28 @@ it('respects disabled/quiet settings and rejects disliked or unrelated content',
       robot,
     ),
   ).toBe(0);
+});
+it('uses precise title and category matches even if the description is long', () => {
+  const description = Array.from({ length: 100 }, (_, index) => `unrelated${index}`).join(' ');
+  const longDescription = { ...robot, description };
+  expect(contentInterest(character, longDescription)).toBe(1);
+  expect(
+    contentInterest(
+      { ...character, persona: { ...character.persona, dislikes: ['机器人'] } },
+      longDescription,
+    ),
+  ).toBe(0);
+});
+it('skips onboarding but allows a completed character that still uses the cocoon', async () => {
+  const store = await setup();
+  await store.put('characters', { ...character, egg: true, creationActive: true });
+  const candidates = vi.fn().mockResolvedValue([robot]);
+  const engine = new ExplorationEngine(store, { id: 'bilibili', candidates });
+  expect(await engine.run('c', now)).toBe('creation_active');
+  expect(candidates).not.toHaveBeenCalled();
+  expect(await store.list('diagnostics', 'c')).toEqual([]);
+  await store.put('characters', { ...character, egg: true, creationActive: false });
+  expect(await engine.run('c', now)).toBe('explored');
 });
 it('parses guest responses without cookies and rejects invalid IDs, API errors and oversized bodies', async () => {
   const request = vi.fn().mockResolvedValue(
@@ -188,4 +248,40 @@ it('serializes concurrent exploration so one candidate request creates one histo
   await Promise.all([engine.run('c', now), engine.run('c', now)]);
   expect(candidates).toHaveBeenCalledOnce();
   expect(await store.list('experiences', 'c')).toHaveLength(1);
+});
+it.each([
+  { source: 'bilibili', externalId: `${robot.url}/?spm_id_from=333`, url: undefined },
+  { source: 'agent-web', externalId: 'old', url: `${robot.url}?share_source=copy_web` },
+])('deduplicates previously recorded Bilibili watch URLs (%j)', async (legacy) => {
+  const store = await setup();
+  await store.put('experiences', {
+    id: 'legacy',
+    characterId: 'c',
+    ...legacy,
+    title: robot.title,
+    content: robot.description,
+    topics: [robot.category],
+    createdAt: now - 60000,
+  });
+  const candidates = vi.fn().mockResolvedValue([robot]);
+  const engine = new ExplorationEngine(store, { id: 'bilibili', candidates });
+  expect(await engine.run('c', now)).toBe('no_interesting_unseen_content');
+  expect((await store.list('experiences', 'c')).map((experience) => experience.id)).toEqual([
+    'legacy',
+  ]);
+});
+it('cancels an interrupted fetch without setting a retry delay', async () => {
+  const store = await setup();
+  const controller = new AbortController();
+  const candidates = vi
+    .fn()
+    .mockImplementationOnce(async () => {
+      controller.abort();
+      throw new Error('aborted');
+    })
+    .mockResolvedValue([robot]);
+  const engine = new ExplorationEngine(store, { id: 'bilibili', candidates });
+  expect(await engine.run('c', now, { signal: controller.signal })).toBe('cancelled_during_fetch');
+  expect(await store.list('experiences', 'c')).toEqual([]);
+  expect(await engine.run('c', now + 60000)).toBe('explored');
 });

@@ -1,6 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import type { ContentItem, ContentProvider } from '../exploration/content';
+import { overlap } from '../memory/retrieval';
 export interface WebDocument {
   url: string;
   title: string;
@@ -233,18 +234,29 @@ export class PublicAgentWeb implements AgentWeb {
     // Public guest recommendations. Selection is the agent's own, not a user-profile ranking.
     let items: ContentItem[];
     try {
-      items = await this.content.candidates();
+      items = await this.content.candidates({ topics: query.trim() ? [query] : [], signal });
     } catch {
+      if (signal?.aborted) throw new Error('已取消');
       throw new Error('B站游客接口暂不可用，没有读取到视频内容');
     }
     const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
     const ranked = items
       .map((item) => ({
         item,
-        hits: terms.filter((term) =>
-          `${item.title} ${item.description} ${item.category}`.toLowerCase().includes(term),
-        ).length,
+        hits: terms.reduce((score, term) => {
+          if (term.length < 2) return score;
+          const fields = [item.title, item.category, item.description].map((text) =>
+            text.toLowerCase(),
+          );
+          return (
+            score +
+            Math.max(
+              ...fields.map((field) => (field.includes(term) ? 1 : overlap(field, term) * 0.5)),
+            )
+          );
+        }, 0),
       }))
+      .filter(({ hits }) => !terms.length || hits >= 0.12)
       .sort((a, b) => b.hits - a.hits)
       .slice(0, 8);
     return ranked.map(({ item }) => ({

@@ -56,7 +56,7 @@ it('cold-starts the finite headless callback while backgrounded and acknowledges
     source: 'periodic_worker',
   });
   expect(r.heartbeat.runRequested).toHaveBeenCalledOnce();
-  expect(mocks.cycle).toHaveBeenCalledWith(r);
+  expect(mocks.cycle).toHaveBeenCalledWith(r, 'periodic_worker');
   expect(mocks.complete).toHaveBeenCalledWith('r', true);
   expect(r.diagnostics.record).toHaveBeenCalledWith(
     'heartbeat',

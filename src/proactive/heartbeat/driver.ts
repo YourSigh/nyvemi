@@ -7,10 +7,30 @@ import {
   type ExperienceSource,
 } from '../../experience/sources';
 import { ExperienceEngine } from '../../experience/engine';
-export async function runBackgroundCycle(runtime: Runtime): Promise<void> {
+type CycleRuntime = Pick<Runtime, 'store' | 'syncIntentionWork'> & {
+  exploration: Pick<Runtime['exploration'], 'run'>;
+  activity: Pick<Runtime['activity'], 'report'>;
+  diagnostics: Pick<Runtime['diagnostics'], 'error'>;
+  extraction: Pick<Runtime['extraction'], 'drain'>;
+  heartbeat: Pick<Runtime['heartbeat'], 'run'>;
+};
+
+export async function runBackgroundCycle(
+  runtime: CycleRuntime,
+  trigger = 'developer',
+): Promise<void> {
   const now = Date.now();
   if (!(await runtime.store.lease('background-cycle', now, 540000))) return;
   try {
+    const characters = await runtime.store.list('characters');
+    for (const character of characters) {
+      await runtime.exploration
+        .run(character.id, now, {
+          trigger,
+          onFetch: () => runtime.activity.report('browsing_bilibili', character.id),
+        })
+        .catch(() => runtime.diagnostics.error(character.id, 'bilibili_exploration'));
+    }
     if (await runtime.store.get('provider', 'provider')) {
       const pending = (await runtime.store.list('extractions', undefined, 10000)).find(
         (j) => j.status === 'pending' && j.nextAttemptAt <= now,

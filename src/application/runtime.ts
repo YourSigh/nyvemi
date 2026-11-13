@@ -10,6 +10,7 @@ import * as Crypto from 'expo-crypto';
 import { CompanionAgent } from '../agent/service';
 import { PublicAgentWeb } from '../agent/web';
 import { BilibiliContentProvider } from '../exploration/content';
+import { ExplorationEngine } from '../exploration/engine';
 import { recoverVisualWork } from '../appearance/recovery';
 import { imageAssets, imageHash, imageSecret } from '../appearance/native';
 import { defaultImageSettings } from '../appearance/model';
@@ -159,10 +160,9 @@ async function createRuntime() {
       }
     },
   });
-  const agentWeb = new PublicAgentWeb(
-    new BilibiliContentProvider(nativeFetch as unknown as typeof fetch),
-    nativeFetch as unknown as typeof fetch,
-  );
+  const bilibili = new BilibiliContentProvider(nativeFetch as unknown as typeof fetch);
+  const exploration = new ExplorationEngine(store, bilibili);
+  const agentWeb = new PublicAgentWeb(bilibili, nativeFetch as unknown as typeof fetch);
   const plugins = new PluginManager(store, {
     load: (url) => agentWeb.pluginSource(url),
     hash: imageHash,
@@ -240,6 +240,7 @@ async function createRuntime() {
     syncIntentionWork,
     diagnostics,
     activity,
+    exploration,
     usage,
     provider,
     saveProvider,

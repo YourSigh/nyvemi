@@ -1,6 +1,33 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { MockContentProvider } from '../src/exploration/content';
 import { PublicAgentWeb, publicUrl } from '../src/agent/web';
+it('passes Bilibili interests to the provider and returns no unrelated results for a query', async () => {
+  const robot = {
+    id: 'BV1234567890',
+    url: 'https://www.bilibili.com/video/BV1234567890',
+    title: '机器人平衡实验',
+    author: '实验室',
+    category: '科技',
+    description: '介绍双足运动',
+  };
+  const candidates = vi.fn().mockResolvedValue([
+    robot,
+    {
+      ...robot,
+      id: 'BV0987654321',
+      title: '在家做饭',
+      category: '美食',
+      description: '煮一道菜',
+    },
+  ]);
+  const web = new PublicAgentWeb({ id: 'bilibili', candidates });
+  expect(await web.bilibili('机器人')).toEqual([
+    expect.objectContaining({ title: robot.title, source: 'bilibili-metadata' }),
+  ]);
+  expect(candidates).toHaveBeenCalledWith({ topics: ['机器人'], signal: undefined });
+  expect(await web.bilibili('乒乓球')).toEqual([]);
+  expect(await web.bilibili('')).toHaveLength(2);
+});
 it('reads real-shaped search RSS and pages with bounded public HTTPS redirects', async () => {
   const request = (async (url) =>
     new Response(

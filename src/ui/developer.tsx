@@ -21,6 +21,7 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
   const [tab, setTab] = useState('人格');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [explorationResult, setExplorationResult] = useState('');
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
     setAllowed(settings?.developerMode ?? false);
@@ -77,7 +78,13 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
         (m) => m.type === 'open_loop',
       ),
       未来意图: await runtime.store.list('intentions', cid, 100),
-      自主探索: diagnostics.filter((d) => d.characterId === cid && d.data.event === 'exploration'),
+      自主探索: {
+        enabled: settings.explorationEnabled !== false,
+        lastCompletedAt: settings.lastExplorationAt,
+        records: (await runtime.store.list('diagnostics', cid, 10000)).filter(
+          (d) => d.data.event === 'exploration',
+        ),
+      },
       经历与评估: await runtime.store.list('experiences', cid, 60),
       Heartbeat: diagnostics.filter((d) => d.characterId === cid && d.kind === 'heartbeat'),
       通知历史: await runtime.store.list('notifications', cid, 60),
@@ -169,6 +176,20 @@ export function DeveloperScreen({ route }: ScreenProps<'Developer'>) {
       <ErrorText text={error} />
       <View style={{ gap: 8 }}>
         <Button title="刷新" secondary disabled={busy} onPress={() => void run(refresh)} />
+        <Button
+          title="检查 B 站探索"
+          secondary
+          disabled={busy}
+          onPress={() =>
+            void run(async () => {
+              setTab('自主探索');
+              setExplorationResult(
+                await runtime.exploration.run(cid, Date.now(), { trigger: 'developer' }),
+              );
+            })
+          }
+        />
+        {explorationResult ? <Note>{explorationResult}</Note> : null}
         <Button
           title="执行 Heartbeat（必要时调用模型）"
           secondary

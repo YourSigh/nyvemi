@@ -26,7 +26,9 @@ export class Diagnostics {
       data,
     });
     const rows = await this.store.list('diagnostics', undefined, 10000);
-    for (const row of rows.slice(200)) await this.store.remove('diagnostics', row.id);
+    // Exploration runs much less often than native maintenance, and keeps its own bounded history.
+    for (const row of rows.filter((entry) => entry.data.event !== 'exploration').slice(200))
+      await this.store.remove('diagnostics', row.id);
   }
   async error(characterId: string, operation: string): Promise<void> {
     await this.record('error', characterId, {
