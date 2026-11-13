@@ -638,6 +638,106 @@ it('a completed DSH turn is not a successful native receipt while its notificati
   expect(await executeIntentionWork(f.store, run, 'receipt')).toBe(true);
   expect(calls).toBe(previous);
 });
+it('allows only one concurrent worker to post the same pending notification', async () => {
+  const f = await setup(async () => tool('wait', { reason: '测试' }));
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const finishing = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const show = vi.fn(async () => {
+    enter();
+    await finishing;
+  });
+  f.host.notifications.show = show;
+  await f.store.put('notifications', {
+    id: 'agent:queued-share',
+    characterId: 'c',
+    messageId: 'queued-message',
+    title: '小舟',
+    body: '看看这个',
+    deliveryKind: 'initiative',
+    createdAt: Date.now(),
+    status: 'pending',
+  });
+  const competing = new CompanionAgent(
+    f.store,
+    async () => f.provider,
+    new Diagnostics(f.store),
+    f.host,
+  );
+  const first = f.agent.flushOutbox('c');
+  await entered;
+  await competing.flushOutbox('c');
+  release();
+  await first;
+  expect(show).toHaveBeenCalledTimes(1);
+  expect((await f.store.get('notifications', 'agent:queued-share'))?.status).toBe('delivered');
+});
+
+it('keeps a completed share terminal even if another lane read an older pending snapshot', async () => {
+  const model = vi.fn(async () => tool('wait', { reason: '测试' }));
+  const f = await setup(model);
+  const now = Date.now();
+  const task: Intention = {
+    id: 'concurrent-share',
+    characterId: 'c',
+    type: 'share',
+    topic: '机器人',
+    reason: '觉得挺有意思',
+    importance: 0.9,
+    earliestAt: now - 1000,
+    latestAt: now + 3600000,
+    status: 'pending',
+    createdAt: now,
+  };
+  await f.store.put('intentions', task);
+  const list = f.store.list.bind(f.store);
+  vi.spyOn(f.store, 'list').mockImplementation(async (kind, characterId, limit) => {
+    const rows = await list(kind, characterId, limit);
+    if (kind === 'messages' && limit === 100)
+      await f.store.put('intentions', { ...task, status: 'completed' });
+    return rows;
+  });
+  await f.agent.due('share');
+  expect(await f.store.get('intentions', task.id)).toMatchObject({ status: 'completed' });
+  expect(model).not.toHaveBeenCalled();
+});
+
+it('does not count contention on the shared agent lease as a generation failure', async () => {
+  const model = vi.fn(async () => tool('wait', { reason: '测试' }));
+  const f = await setup(model);
+  const now = Date.now();
+  await f.store.put('settings', {
+    ...(await f.store.get('settings', 'c'))!,
+    quietStart: 0,
+    quietEnd: 0,
+    lastActiveAt: now - 86400000,
+  });
+  const task: Intention = {
+    id: 'lease-share',
+    characterId: 'c',
+    type: 'share',
+    topic: '机器人',
+    reason: '觉得挺有意思',
+    importance: 0.9,
+    earliestAt: now - 1000,
+    latestAt: now + 3600000,
+    status: 'pending',
+    createdAt: now,
+  };
+  await f.store.put('intentions', task);
+  expect(await f.store.lease('agent-runtime', now, 60_000)).toBe(true);
+  await f.agent.due('share');
+  expect(await f.store.get('intentions', task.id)).toEqual(task);
+  expect(model).not.toHaveBeenCalled();
+  expect(await f.store.list('diagnostics', 'c')).toContainEqual(
+    expect.objectContaining({ data: expect.objectContaining({ reason: 'agent_busy' }) }),
+  );
+});
 it('a promised delivery that only waits remains retryable rather than being marked delivered', async () => {
   const f = await setup(async () => tool('wait', { reason: '现在没有话' }));
   const now = Date.now();

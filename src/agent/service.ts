@@ -36,6 +36,31 @@ import type { AgentSession } from './model';
 import type { AgentWeb, WebDocument } from './web';
 
 const unsolicitedAttemptLimit = 3;
+const outboxLeaseMs = 60_000;
+
+class AgentBusyError extends Error {
+  constructor() {
+    super('她还在处理上一件事，请稍候');
+  }
+}
+
+async function updatePendingIntention(
+  store: Storage,
+  task: Intention,
+  update: (fresh: Intention) => Intention,
+) {
+  await store.atomic(async (tx) => {
+    const fresh = await tx.get('intentions', task.id);
+    if (
+      fresh?.status !== 'pending' ||
+      fresh.earliestAt !== task.earliestAt ||
+      fresh.latestAt !== task.latestAt ||
+      fresh.attempts !== task.attempts
+    )
+      return;
+    await tx.put('intentions', update(fresh));
+  });
+}
 
 export interface AgentHost {
   web: AgentWeb;
@@ -64,8 +89,8 @@ export class CompanionAgent {
   private running?: {
     controller: AbortController;
     done: Promise<void>;
-    finish(): void;
     user: boolean;
+    groupId: string;
   };
   constructor(
     private store: Storage,
@@ -89,16 +114,16 @@ export class CompanionAgent {
       now = Date.now();
     if (!(await this.store.lease('agent-runtime', now, 240000))) {
       parentSignal?.removeEventListener('abort', abort);
-      throw new Error('她还在处理上一件事，请稍候');
+      throw new AgentBusyError();
     }
     let finish!: () => void;
     const done = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    this.running = { controller, done, finish, user: Boolean(input.user) };
+    const groupId = input.user?.id ?? input.task?.id ?? `explore:${id()}`;
+    this.running = { controller, done, user: Boolean(input.user), groupId };
     let session: AgentSession | undefined;
     const saved: Message[] = [];
-    const groupId = input.user?.id ?? input.task?.id ?? `explore:${id()}`;
     let bubbleCount = 0;
     try {
       const character = await this.store.get('characters', cid);
@@ -446,7 +471,7 @@ export class CompanionAgent {
               input.onSaved?.();
             }
             if (!input.user || !this.host.visible())
-              await this.queueNotification(input, groupId, saved);
+              await this.store.atomic((tx) => this.queueNotification(input, groupId, saved, tx));
             result = { sent: messages.map((m) => m.id) };
           } else if (name === 'wait' || name === 'pause_contact') {
             z.object({ reason: z.string().max(300) }).parse(args);
@@ -706,12 +731,14 @@ export class CompanionAgent {
       if (input.task) {
         if (input.task.type === 'requested' && !saved.length)
           throw new Error('约定尚未履行：没有发出消息');
-        const fresh = await this.store.get('intentions', input.task.id);
-        if (fresh?.status === 'pending')
-          await this.store.put('intentions', { ...fresh, status: 'completed' });
+        await updatePendingIntention(this.store, input.task, (fresh) => ({
+          ...fresh,
+          status: 'completed',
+        }));
       }
-      if (!input.user || !this.host.visible()) await this.queueNotification(input, groupId, saved);
-      await this.flushOutbox(cid);
+      if (!input.user || !this.host.visible())
+        await this.store.atomic((tx) => this.queueNotification(input, groupId, saved, tx));
+      await this.flushOutbox(cid, groupId);
       input.activity?.({
         phase: 'complete',
         hasMessages: saved.length > 0,
@@ -725,7 +752,7 @@ export class CompanionAgent {
           lastRunStatus: 'error',
           updatedAt: Date.now(),
         });
-      await this.flushOutbox(cid).catch(() => undefined);
+      await this.flushOutbox(cid, groupId).catch(() => undefined);
       const failure = agentFailure(error);
       await this.diagnostics
         .record('error', cid, {
@@ -736,7 +763,11 @@ export class CompanionAgent {
         })
         .catch(() => undefined);
       if (saved.length) {
-        if (input.task) await this.store.put('intentions', { ...input.task, status: 'completed' });
+        if (input.task)
+          await updatePendingIntention(this.store, input.task, (fresh) => ({
+            ...fresh,
+            status: 'completed',
+          }));
         input.activity?.({ phase: 'complete', hasMessages: true, emotion: saved.at(-1)?.emotion });
         return saved;
       }
@@ -784,6 +815,7 @@ export class CompanionAgent {
     kind?: 'requested' | 'continuation' | 'reconnect' | 'share',
     targetId?: string,
   ): Promise<void> {
+    if (this.running) return;
     for (const character of await this.store.list('characters'))
       await this.flushOutbox(character.id);
     const tasks = (await this.store.list('intentions', undefined, 10000))
@@ -800,8 +832,10 @@ export class CompanionAgent {
       );
     for (const task of tasks) {
       const now = Date.now();
+      const updatePending = (update: (fresh: Intention) => Intention) =>
+        updatePendingIntention(this.store, task, update);
       if (task.latestAt <= now) {
-        await this.store.put('intentions', { ...task, status: 'expired' });
+        await updatePending((fresh) => ({ ...fresh, status: 'expired' }));
         continue;
       }
       if (task.earliestAt > now) continue;
@@ -817,7 +851,7 @@ export class CompanionAgent {
         (m) => m.role === 'assistant' && m.groupId === task.id && m.status === 'complete',
       );
       if (delivered) {
-        await this.store.put('intentions', { ...task, status: 'completed' });
+        await updatePending((fresh) => ({ ...fresh, status: 'completed' }));
         await this.flushOutbox(task.characterId);
         continue;
       }
@@ -835,20 +869,20 @@ export class CompanionAgent {
             'awaiting_user_reply',
           ].includes(blocked)
         )
-          await this.store.put('intentions', {
-            ...task,
+          await updatePending((fresh) => ({
+            ...fresh,
             status: blocked === 'expired' ? 'expired' : 'cancelled',
-          });
+          }));
         else {
           const settings = await this.store.get('settings', task.characterId);
           const later =
             blocked === 'quiet_hours' && settings
               ? nextOutsideQuietHours(now + 60000, settings.quietStart, settings.quietEnd)
               : now + 5 * 60000;
-          await this.store.put('intentions', {
-            ...task,
-            earliestAt: Math.min(later, task.latestAt),
-          });
+          await updatePending((fresh) => ({
+            ...fresh,
+            earliestAt: Math.min(later, fresh.latestAt),
+          }));
         }
         await report(blocked);
         continue;
@@ -867,20 +901,22 @@ export class CompanionAgent {
           messages.length ? 'agent_sent' : 'agent_waited',
           messages.length ? 'send' : 'skip',
         );
-      } catch {
-        const exhausted = await this.store.atomic(async (tx) => {
-          const fresh = await tx.get('intentions', task.id);
-          if (fresh?.status !== 'pending') return false;
+      } catch (error) {
+        if (error instanceof AgentBusyError) {
+          await report('agent_busy');
+          return;
+        }
+        let exhausted = false;
+        await updatePending((fresh) => {
           const attempts = (fresh.attempts ?? 0) + 1;
-          const reachedLimit = fresh.type !== 'requested' && attempts >= unsolicitedAttemptLimit;
-          await tx.put('intentions', {
+          exhausted = fresh.type !== 'requested' && attempts >= unsolicitedAttemptLimit;
+          return {
             ...fresh,
             attempts,
-            ...(reachedLimit
+            ...(exhausted
               ? { status: 'cancelled' as const }
               : { earliestAt: now + Math.min(30, 2 ** Math.min(attempts - 1, 4)) * 60000 }),
-          });
-          return reachedLimit;
+          };
         });
         await report(exhausted ? 'agent_retry_exhausted' : 'agent_run_failed');
       }
@@ -933,7 +969,7 @@ export class CompanionAgent {
     input: AgentInput,
     groupId: string,
     messages: Message[],
-    store: Storage = this.store,
+    store: Storage,
   ) {
     if (!messages.length) return;
     const character = await store.get('characters', input.characterId);
@@ -958,32 +994,48 @@ export class CompanionAgent {
       createdAt: messages[0].createdAt,
       status: 'pending',
     };
-    await store.put('notifications', record);
+    // A concurrent maintenance lane may already have delivered this group.
+    if ((await store.get('notifications', record.id))?.status !== 'delivered')
+      await store.put('notifications', record);
   }
-  async flushOutbox(cid: string): Promise<void> {
-    const character = await this.store.get('characters', cid);
-    if (!character) return;
-    for (const record of await this.store.list('notifications', cid, 100)) {
-      if (!record.id.startsWith('agent:') || record.status !== 'pending') continue;
-      const taskId = record.id.slice('agent:'.length);
-      const task = await this.store.get('intentions', taskId);
-      const currentCharacter = await this.store.get('characters', cid);
-      if (
-        Date.now() - record.createdAt > 30 * 60000 ||
-        currentCharacter?.state.contactMode === 'quiet' ||
-        task?.status === 'cancelled'
-      ) {
-        await this.store.put('notifications', { ...record, status: 'error' });
-        continue;
+  async flushOutbox(cid: string, finishedGroup?: string): Promise<void> {
+    const lease = `agent-outbox:${cid}`;
+    if (!(await this.store.lease(lease, Date.now(), outboxLeaseMs))) return;
+    try {
+      for (const listed of await this.store.list('notifications', cid, 100)) {
+        if (!listed.id.startsWith('agent:') || listed.status !== 'pending') continue;
+        const enabled = await this.host.notifications.enabled();
+        const taskId = listed.id.slice('agent:'.length);
+        const task = await this.store.get('intentions', taskId);
+        const character = await this.store.get('characters', cid);
+        if (!character) return;
+        const record = await this.store.get('notifications', listed.id);
+        if (record?.status !== 'pending') continue;
+        // The agent publishes intermediate outbox snapshots as it composes.
+        if (this.running?.groupId === taskId && taskId !== finishedGroup) continue;
+        if (
+          Date.now() - record.createdAt > 30 * 60000 ||
+          character.state.contactMode === 'quiet' ||
+          task?.status === 'cancelled'
+        ) {
+          await this.store.put('notifications', { ...record, status: 'error' });
+          continue;
+        }
+        if (!enabled) continue;
+        await this.host.notifications.show(record, character);
+        this.host.activity?.('sent', cid);
+        await this.store.atomic(async (tx) => {
+          const fresh = await tx.get('notifications', record.id);
+          if (fresh?.status !== 'pending') return;
+          await tx.put('notifications', {
+            ...fresh,
+            status: 'delivered',
+            deliveredAt: Date.now(),
+          });
+        });
       }
-      if (!(await this.host.notifications.enabled())) continue;
-      await this.host.notifications.show(record, character);
-      this.host.activity?.('sent', cid);
-      await this.store.put('notifications', {
-        ...record,
-        status: 'delivered',
-        deliveredAt: Date.now(),
-      });
+    } finally {
+      await this.store.release(lease);
     }
   }
 }
