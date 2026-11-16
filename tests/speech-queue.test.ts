@@ -223,3 +223,37 @@ it('prepares the next bubble while keeping its reveal paired with the previous p
   await prepared;
   expect(ready).toHaveBeenCalledWith(true);
 });
+
+it('prepares the next reference-voice sentence while the current sentence plays', async () => {
+  let finishFirst: (value: boolean) => void = () => {};
+  const steps: string[] = [];
+  const driver = {
+    ...makeDriver(),
+    prepare: vi.fn(async (id: string) => {
+      steps.push('prepare:' + id);
+      return true;
+    }),
+    play: vi.fn((id: string) => {
+      steps.push('play:' + id);
+      return id.endsWith(':0')
+        ? new Promise<boolean>((resolve) => {
+            finishFirst = resolve;
+          })
+        : Promise.resolve(true);
+    }),
+  };
+  const queue = new SpeechQueue(driver, undefined, () => 100);
+  const profile = {
+    ...audible,
+    referenceVoice: { id: '12345678-0000-0000-0000-000000000001', label: '测试' },
+  };
+  queue.observe([], profile);
+  queue.observe(
+    [msg('sent', '你好呀，今天你打算做什么呢？我们先放松一下，再慢慢把想说的事情讲给我听。')],
+    profile,
+  );
+  await vi.waitFor(() => expect(steps).toContain('play:sent:0'));
+  expect(steps).toEqual(['prepare:sent:0', 'prepare:sent:1', 'play:sent:0']);
+  finishFirst(true);
+  await vi.waitFor(() => expect(steps).toContain('play:sent:1'));
+});

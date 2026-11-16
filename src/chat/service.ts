@@ -1,4 +1,8 @@
-import { voiceSettingsMessage, wantsVoiceSettings } from './voice-settings';
+import {
+  requestedVoiceReference,
+  voiceSettingsMessage,
+  wantsVoiceSettings,
+} from './voice-settings';
 import { setContactMode } from './contact';
 import { messageChunks, typingDelay, waitForBubble, type SpeechDraft } from './delivery';
 import { decideParticipation, type ParticipationDecision } from './participation';
@@ -28,6 +32,11 @@ export function streamingPreview(raw: string): string {
   }
 }
 export interface ChatHooks {
+  requestVoiceReference?: (
+    characterId: string,
+    query: string,
+    signal?: AbortSignal,
+  ) => Promise<string>;
   agent?: (input: import('../agent/service').AgentInput) => Promise<Message[]>;
   clock?: () => string;
   scheduleRequested?: (user: Message, delayMs: number) => Promise<string>;
@@ -183,7 +192,19 @@ export class ChatService {
       await this.store.put('messages', user);
       onSaved();
       if (!attachments.length && wantsVoiceSettings(content)) {
-        const card = voiceSettingsMessage(user);
+        const query = requestedVoiceReference(content);
+        let notice: string | undefined;
+        if (query && this.hooks.requestVoiceReference) {
+          this.activities.publish(characterId, { phase: 'thinking' });
+          try {
+            notice = await this.hooks.requestVoiceReference(characterId, query, signal);
+          } catch {
+            if (signal?.aborted) throw new Error('换声请求已取消');
+            notice = '没找到可以读取的参考声音，原声没有变。可以在声音设置里导入一段参考录音。';
+          }
+        }
+        if (signal?.aborted) throw new Error('换声请求已取消');
+        const card = voiceSettingsMessage(user, notice);
         user = { ...user, status: 'complete', replyDisposition: 'reply' };
         await this.store.atomic(async (tx) => {
           await tx.put('messages', user!);

@@ -1,7 +1,8 @@
 import { QwenPackCard, useQwenPack } from './qwen-pack';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Switch, View, Text } from 'react-native';
 import Slider from '@react-native-community/slider';
+import * as DocumentPicker from 'expo-document-picker';
 import {
   originalQwenSound,
   qwenTuningRanges,
@@ -11,6 +12,14 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { bridge, type LocalSpeechState } from '../native/android';
 import { localSpeechDriver, warmLocalSpeech } from '../speech/native';
+import {
+  deleteVoiceCompanion,
+  getVoiceCompanion,
+  loadReferenceWav,
+  playReferenceWav,
+  readPickedReference,
+  saveVoiceCompanion,
+} from '../speech/reference-storage';
 import {
   qwenSpeaker,
   qwenTuning,
@@ -23,7 +32,17 @@ import {
 } from '../speech/preferences';
 import { useRuntime } from './context';
 import { usePalette } from '../theme/context';
-import { Page, Heading, Note, Details, Button, TextButton, ErrorText, Card } from './components';
+import {
+  Page,
+  Heading,
+  Note,
+  Details,
+  Button,
+  TextButton,
+  ErrorText,
+  Card,
+  Field,
+} from './components';
 import type { ScreenProps } from './navigation';
 
 const sample = '嗨，我在这儿。今天想和我聊点什么？';
@@ -53,6 +72,13 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [savingTuning, setSavingTuning] = useState(false);
+  const [endpoint, setEndpoint] = useState('');
+  const [token, setToken] = useState('');
+  const [connection, setConnection] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voiceNote, setVoiceNote] = useState('');
+  const sampleRun = useRef(0);
+  const referenceDriver = useMemo(() => runtime.voiceDriver(setVoiceNote), [runtime]);
   const [draft, setDraft] = useState<{ speaker: QwenSpeaker; tuning: QwenTuning }>();
   const autoplay = useRef(false);
   const speaker = qwen ? qwenSpeaker(config) : undefined;
@@ -73,9 +99,10 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     useCallback(() => {
       void refresh().catch(() => setError('读取本机声音失败'));
       return () => {
-        void localSpeechDriver.stop().catch(() => {});
+        sampleRun.current++;
+        void referenceDriver.stop().catch(() => {});
       };
-    }, [refresh]),
+    }, [refresh, referenceDriver]),
   );
   useEffect(() => {
     if (!qwen) return;
@@ -99,6 +126,105 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       else warmLocalSpeech(next);
     } catch {
       setError('没有保存成功');
+    }
+  };
+  useEffect(() => {
+    let alive = true;
+    void getVoiceCompanion()
+      .then((saved) => {
+        if (alive && saved) {
+          setConnection(true);
+          setEndpoint(saved.baseUrl);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const syncVoice = async () => {
+    const next = voiceOptions((await runtime.store.get('settings', cid))?.voice);
+    autoplay.current = next.enabled;
+    setConfig(next);
+  };
+  const applyCompanion = async () => {
+    try {
+      await referenceDriver.stop();
+      await saveVoiceCompanion(endpoint, token);
+      setConnection(true);
+      setToken('');
+      const available = await runtime.referenceTransport.checkCompanion();
+      const ready = available && (await runtime.referenceTransport.checkCompanion(undefined, true));
+      setVoiceNote(
+        ready
+          ? '已连接，换声模型就绪。'
+          : available
+            ? '已连接，换声模型尚未启动。'
+            : '地址已保存，但还连不上换声服务。',
+      );
+    } catch (e) {
+      setVoiceNote(e instanceof Error ? e.message : '没有保存成功');
+    }
+  };
+  const clearCompanion = async () => {
+    await referenceDriver.stop();
+    await deleteVoiceCompanion();
+    setConnection(false);
+    setToken('');
+    setVoiceNote('已断开换声服务。原有离线语音不受影响。');
+  };
+  const selectWav = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['audio/wav', 'audio/x-wav', 'audio/wave', 'application/octet-stream'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+      const { uri, name } = result.assets[0];
+      await referenceDriver.stop();
+      const bytes = await readPickedReference(uri);
+      await runtime.referenceVoice.importOwn(cid, bytes, name.replace(/\.wav$/i, ''));
+      await syncVoice();
+      setVoiceNote('参考音色已保存。');
+    } catch (e) {
+      setVoiceNote(e instanceof Error ? e.message : '没有导入成功');
+    }
+  };
+  const selectFoundReference = async () => {
+    try {
+      const selected = config.referenceCandidate;
+      if (!selected) return;
+      await loadReferenceWav(selected.id);
+      await referenceDriver.stop();
+      await runtime.referenceVoice.useCandidate(cid);
+      await syncVoice();
+      setVoiceNote('参考音色已保存。');
+    } catch {
+      setVoiceNote('无法启用这段参考声音');
+    }
+  };
+  const stopReferencePreview = async () => {
+    sampleRun.current++;
+    setVoiceBusy(false);
+    await referenceDriver.stop();
+  };
+  const previewReference = async (candidate: boolean) => {
+    if (voiceBusy) return stopReferencePreview();
+    const run = ++sampleRun.current;
+    setVoiceBusy(true);
+    setVoiceNote('');
+    try {
+      if (candidate && config.referenceCandidate) {
+        const bytes = await loadReferenceWav(config.referenceCandidate.id);
+        if (sampleRun.current === run) await playReferenceWav(`reference:${Date.now()}`, bytes);
+      } else if (config.referenceVoice) {
+        await referenceDriver.play(`reference:${Date.now()}`, sample, { ...config, enabled: true });
+      }
+    } catch {
+      if (sampleRun.current === run) setVoiceNote('这段声音暂时无法播放');
+    } finally {
+      if (sampleRun.current === run) setVoiceBusy(false);
     }
   };
   const applyTuning = async () => {
@@ -148,6 +274,91 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
           onValueChange={(enabled) => void save({ enabled, playbackSet: true })}
         />
       </View>
+      <Card>
+        <Text style={{ color: palette.ink, fontWeight: '600' }}>参考音色</Text>
+        <Note>
+          {config.referenceVoice
+            ? `当前：${config.referenceVoice.label}。用 DeepSeek 生成语音，再由你配置的换声服务处理；不可用时回退本机声音。`
+            : '在聊天里说「我希望你的声音跟某个角色一样」可查找。也可以选择有权使用的 WAV。'}
+        </Note>
+        {config.referenceCandidate ? (
+          <>
+            <Note>{`已找到：${config.referenceCandidate.label}（尚未换声）`}</Note>
+            <TextButton
+              title={voiceBusy ? '停止试听' : '试听找到的声音'}
+              onPress={() => void previewReference(true)}
+            />
+            <TextButton
+              title="我有权使用，设为参考音色"
+              disabled={voiceBusy}
+              onPress={() => void selectFoundReference()}
+            />
+            <TextButton
+              title="移除找到的录音"
+              disabled={voiceBusy}
+              onPress={() =>
+                void runtime.referenceVoice
+                  .clearCandidate(cid)
+                  .then(syncVoice)
+                  .catch(() => setVoiceNote('没能移除这段录音'))
+              }
+            />
+          </>
+        ) : null}
+        <TextButton
+          title="导入有权使用的参考 WAV"
+          disabled={voiceBusy}
+          onPress={() => void selectWav()}
+        />
+        {config.referenceVoice ? (
+          <>
+            <TextButton
+              title={voiceBusy ? '停止试听' : '试听换声'}
+              onPress={() => void previewReference(false)}
+            />
+            <TextButton
+              title="恢复本机音色"
+              disabled={voiceBusy}
+              onPress={() =>
+                void runtime.referenceVoice
+                  .clear(cid)
+                  .then(syncVoice)
+                  .catch(() => setVoiceNote('没有保存成功'))
+              }
+            />
+          </>
+        ) : null}
+        <Details title={connection ? '换声服务 · 已保存' : '连接换声服务'}>
+          <Note>
+            请使用你信任的服务。换声时会把合成音频和参考音频发送给它，不会发 DeepSeek Key。
+          </Note>
+          <Field
+            label="换声服务地址"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="url"
+            placeholder={__DEV__ ? 'http://127.0.0.1:4319 或 HTTPS' : 'https://你的换声服务'}
+            value={endpoint}
+            onChangeText={setEndpoint}
+          />
+          <Field
+            label="换声服务令牌"
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="off"
+            value={token}
+            onChangeText={setToken}
+          />
+          <TextButton title="保存服务连接" onPress={() => void applyCompanion()} />
+          {connection ? (
+            <TextButton
+              title="断开换声服务"
+              onPress={() => void clearCompanion().catch(() => setVoiceNote('没有断开成功'))}
+            />
+          ) : null}
+        </Details>
+        {voiceNote ? <Note>{voiceNote}</Note> : null}
+      </Card>
       <QwenPackCard pack={pack} />
       {qwen ? (
         <Details title={qwenVoices.find(({ id }) => id === speaker)?.label ?? 'Qwen 音色'}>

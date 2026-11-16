@@ -1,6 +1,38 @@
 import type { Message } from '../domain/models';
 
+export function requestedVoiceReference(text: string): string | undefined {
+  const request = text.trim().replace(/\s+/g, ' ');
+  if (
+    request.length > 120 ||
+    /(?:别|不要|不用|不想|不是|不像|假如|比如|举例|能否|能不能)/u.test(request)
+  )
+    return undefined;
+  if (/我的(?:音色|声线|声音)/u.test(request) && !/你的(?:音色|声线|声音)/u.test(request))
+    return undefined;
+  const rules = [
+    /^(?:(?:我想要|我希望|希望|请|以后|从今以后|想要)[，、：:\s]*)*(?:把)?你(?:的)?(?:说话的)?(?:音色|声线|声音)[\s]*(?:跟|像|和|模仿)\s*(.+?)(?:这样|一样|相似)[。！!\s]*$/u,
+    /^(?:(?:请|帮我|以后|我希望|想让)[，、：:\s]*)*(?:把)?你(?:的)?(?:音色|声线|声音)[\s]*(?:换成|改成|设成)\s*(.+?)(?:的(?:音色|声线|声音))?[。！!\s]*$/u,
+    /^(?:(?:请|以后|我希望你|让你|你就)[，、：:\s]*)*用\s*(.+?)的(?:音色|声线|声音)(?:说话|回复|跟我聊天)[。！!\s]*$/u,
+  ];
+  for (const rule of rules) {
+    const role = rule
+      .exec(request)?.[1]
+      ?.trim()
+      .replace(/^[「“"《]+|[」”"》]+$/g, '');
+    if (
+      role &&
+      /^[\p{L}\p{N}·・ _：:\-—]{1,40}$/u.test(role) &&
+      !/^(?:更|有点|原来|平时|以前|我|你|她|他|它|温柔|甜美|可爱|低沉|清亮|成熟|好听|正常|自然|以前一样)/u.test(
+        role,
+      )
+    )
+      return role;
+  }
+  return undefined;
+}
+
 export function wantsVoiceSettings(text: string) {
+  if (requestedVoiceReference(text)) return true;
   const request = text.trim().replace(/\s+/g, ' ');
   if (
     request.length > 120 ||

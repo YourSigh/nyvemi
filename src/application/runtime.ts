@@ -44,6 +44,17 @@ import { androidNotifications, bridge, requestNotifications } from '../native/an
 import { AppState } from 'react-native';
 import { UsageLedger } from '../usage/ledger';
 import { redactKnownSecret } from '../domain/privacy';
+import { createReferenceTransport } from '../speech/reference-transport';
+import { createReferenceSpeechDriver } from '../speech/reference-driver';
+import { createReferenceVoiceService } from '../speech/reference-service';
+import {
+  getVoiceCompanion,
+  loadReferenceWav,
+  playReferenceWav,
+  removeReferenceWav,
+  saveReferenceWav,
+} from '../speech/reference-storage';
+import { localSpeechDriver } from '../speech/native';
 async function createRuntime() {
   if (!globalThis.crypto?.getRandomValues)
     Object.defineProperty(globalThis, 'crypto', {
@@ -62,7 +73,14 @@ async function createRuntime() {
   const activity = new ActivityMonitor();
   const usage = new UsageLedger(await openDatabase());
   const redactRuntime = async (value: unknown) => {
-    const keys = await Promise.all([secretStore.get(), imageSecret.get(), visionSecret.get()]);
+    const keys = await Promise.all([
+      secretStore.get(),
+      imageSecret.get(),
+      visionSecret.get(),
+      getVoiceCompanion()
+        .then((c) => c?.token)
+        .catch(() => undefined),
+    ]);
     return keys.reduce((data, key) => redactKnownSecret(data, key ?? undefined), value);
   };
   const diagnostics = new Diagnostics(store, async (json) => {
@@ -217,8 +235,52 @@ async function createRuntime() {
       await bridge().scheduleRequested(task.id, task.characterId, task.earliestAt);
     },
   });
+  const referenceTransport = createReferenceTransport({
+    getDeepSeekKey: async () => {
+      const config = await store.get('provider', 'provider');
+      if (!config) return undefined;
+      try {
+        const url = new URL(config.baseUrl);
+        if (url.origin !== 'https://api.deepseek.com' || url.username || url.password)
+          return undefined;
+      } catch {
+        return undefined;
+      }
+      return (await secretStore.get()) ?? undefined;
+    },
+    getCompanion: async () => (await getVoiceCompanion()) ?? undefined,
+    allowDevLoopback: __DEV__,
+    fetch: nativeFetch as unknown as typeof fetch,
+  });
+  const referenceVoice = createReferenceVoiceService(
+    store,
+    { save: saveReferenceWav, remove: removeReferenceWav },
+    async (query, signal = new AbortController().signal) => {
+      if (!(await referenceTransport.checkCompanion(signal))) throw Error('换声服务无法连接');
+      try {
+        return await referenceTransport.resolveReference(query, [], signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        const results = await referenceTransport
+          .search(query + ' 角色语音 音频', signal)
+          .catch(() => []);
+        if (!results.length || signal.aborted) throw error;
+        return referenceTransport.resolveReference(query, results, signal);
+      }
+    },
+    async () => !!(await getVoiceCompanion()),
+  );
+  const voiceDriver = (onFallback?: (message: string) => void) =>
+    createReferenceSpeechDriver({
+      transport: referenceTransport,
+      loadReference: loadReferenceWav,
+      playWav: playReferenceWav,
+      fallback: localSpeechDriver,
+      onFallback,
+    });
   const chat = new ChatService(store, provider, diagnostics, {
     agent: (input) => agent.run(input),
+    requestVoiceReference: referenceVoice.request,
     clock: () => bridge().deviceTimeContext(),
     scheduleRequested: async (user, delayMs) => {
       if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');
@@ -279,6 +341,9 @@ async function createRuntime() {
     usage,
     provider,
     saveProvider,
+    referenceVoice,
+    referenceTransport,
+    voiceDriver,
     themes: new ThemeService(store, provider, agentWeb),
     memories,
     retriever,

@@ -42,7 +42,7 @@ export const localSpeechDriver: SpeechDriver = {
 };
 
 export function warmLocalSpeech(options: VoiceOptions): void {
-  if (options.enabled && qwenSpeaker(options))
+  if (options.enabled && !options.referenceVoice && qwenSpeaker(options))
     void bridge()
       .warmQwenVoice()
       .catch(() => {});

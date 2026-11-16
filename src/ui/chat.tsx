@@ -2,7 +2,7 @@ import { Icon } from './icons';
 import { QwenPackCard, useQwenPack } from './qwen-pack';
 import { wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
-import { localSpeechDriver, warmLocalSpeech } from '../speech/native';
+import { warmLocalSpeech } from '../speech/native';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
@@ -101,16 +101,24 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const [birth, setBirth] = useState<HatchingDraft>();
   const [speaking, setSpeaking] = useState<string>();
   const [speechNotice, setSpeechNotice] = useState('');
+  const speechFallback = useRef('');
   const voiceFocused = useRef(false);
   const voice = useRef({ options: voiceProfile(), revision: 0, saving: false });
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const speech = useMemo(
     () =>
-      new SpeechQueue(localSpeechDriver, (value) => {
-        setSpeaking(value.messageId);
-        setSpeechNotice(value.error ?? '');
-      }),
-    [],
+      new SpeechQueue(
+        runtime.voiceDriver((message) => {
+          speechFallback.current = message;
+          setSpeechNotice(message);
+        }),
+        (value) => {
+          if (value.messageId) speechFallback.current = '';
+          setSpeaking(value.messageId);
+          setSpeechNotice(value.error ?? speechFallback.current);
+        },
+      ),
+    [runtime],
   );
   const prepareVoice = useCallback(
     (id: string, content: string) => {
@@ -174,7 +182,12 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     if (voice.current !== voiceSnapshot) return;
     if (!voiceSnapshot.saving && voiceSnapshot.revision === revision) {
       const options = voiceOptions(settings?.voice);
-      if (voiceSnapshot.options.enabled && !options.enabled) speech.stop(true);
+      if (
+        voiceSnapshot.options.enabled &&
+        (!options.enabled ||
+          voiceSnapshot.options.referenceVoice?.id !== options.referenceVoice?.id)
+      )
+        speech.stop(true);
       voiceSnapshot.options = options;
       setVoiceEnabled(options.enabled);
     }

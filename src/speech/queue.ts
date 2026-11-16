@@ -12,15 +12,18 @@ function speechParts(content: string, options: VoiceOptions): string[] {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[*#_`]/g, '')
     .trim();
-  const limit = qwenSpeaker(options) ? 180 : 1000;
+  const limit = options.referenceVoice ? 60 : qwenSpeaker(options) ? 180 : 1000;
   const characters = Array.from(text);
   const parts: string[] = [];
   for (let start = 0; start < characters.length; ) {
-    const cap = Math.min(start + limit, characters.length);
+    const size = options.referenceVoice && start === 0 ? 30 : limit;
+    const cap = Math.min(start + size, characters.length);
     let end = cap;
     if (cap < characters.length) {
-      while (end > start + limit / 2 && !/[。！？；.!?;\s]/u.test(characters[end - 1])) end--;
-      if (end <= start + limit / 2) end = cap;
+      const floor = start + (options.referenceVoice ? (start === 0 ? 8 : 16) : size / 2);
+      const breakOn = options.referenceVoice ? /[。！？；.!?;，、,\s]/u : /[。！？；.!?;\s]/u;
+      while (end > floor && !breakOn.test(characters[end - 1])) end--;
+      if (end <= floor) end = cap;
     }
     parts.push(characters.slice(start, end).join('').trim());
     start = end;
@@ -142,8 +145,21 @@ export class SpeechQueue {
         if (epoch !== this.epoch) continue;
         this.state({ messageId: item.message.id });
         try {
-          for (const [index, text] of speechParts(item.message.content, item.options).entries()) {
+          const parts = speechParts(item.message.content, item.options);
+          for (const [index, text] of parts.entries()) {
             if (epoch !== this.epoch) break;
+            if (item.options.referenceVoice && this.driver.prepare) {
+              // Only committed bubbles reach this queue. Prepare the next clip when
+              // the current clip is ready, while the Android player outputs it.
+              const prepared = await this.driver
+                .prepare(`${item.message.id}:${index}`, text, item.options)
+                ?.catch(() => false);
+              if (epoch !== this.epoch) break;
+              if (prepared && parts[index + 1])
+                void this.driver
+                  .prepare(`${item.message.id}:${index + 1}`, parts[index + 1], item.options)
+                  ?.catch(() => {});
+            }
             const completed = await this.driver.play(
               `${item.message.id}:${index}`,
               text,

@@ -49,6 +49,7 @@ interface AndroidBridge {
     rate: number,
     pitch: number,
   ): Promise<boolean>;
+  playVoiceWav(id: string, uri: string): Promise<boolean>;
   stopSpeech(): Promise<void>;
   installSpeechData(): Promise<void>;
   refineCharacterRig(

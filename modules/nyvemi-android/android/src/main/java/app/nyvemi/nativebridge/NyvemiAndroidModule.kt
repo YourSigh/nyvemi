@@ -36,6 +36,7 @@ class NyvemiAndroidModule : Module() {
   private val voiceInput = NyvemiVoiceInput { id, text -> sendEvent("voicePartial", mapOf("id" to id, "text" to text)) }
   private val channelId = "nyvemi-companions-v1"
   private val speechOutput = NyvemiSpeechOutput()
+  private val voiceWav = NyvemiVoiceWav()
   private val qwenSpeech = NyvemiQwenSpeech()
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
   private fun manager(ctx: Context): NotificationManager = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -90,14 +91,20 @@ class NyvemiAndroidModule : Module() {
       else promise.resolve(false)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("speakQwen") { id: String, text: String, speaker: String, rate: Double, pitch: Double, volume: Double, promise: expo.modules.kotlin.Promise ->
+      voiceWav.stop()
       val tuning = NyvemiQwenSpeech.Tuning(rate, pitch, volume)
       if (qwenSpeech.available(context())) qwenSpeech.play(context(), id, text, speaker, tuning, promise)
       else promise.reject("qwen_voice_unavailable", "本机未安装 Qwen 音色", null)
     }.runOnQueue(Queues.MAIN)
     AsyncFunction("speakLocal") { id: String, text: String, voiceId: String?, rate: Double, pitch: Double, promise: expo.modules.kotlin.Promise ->
+      voiceWav.stop()
       speechOutput.speak(context(), id, text, voiceId, rate, pitch, promise)
     }.runOnQueue(Queues.MAIN)
-    AsyncFunction("stopSpeech") { speechOutput.stop(); qwenSpeech.stop() }.runOnQueue(Queues.MAIN)
+    AsyncFunction("playVoiceWav") { id: String, uri: String, promise: expo.modules.kotlin.Promise ->
+      speechOutput.stop(); qwenSpeech.stop()
+      voiceWav.play(context(), id, uri, promise)
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("stopSpeech") { voiceWav.stop(); speechOutput.stop(); qwenSpeech.stop() }.runOnQueue(Queues.MAIN)
     AsyncFunction("releaseQwenVoice") { speechOutput.stop(); qwenSpeech.release() }.runOnQueue(Queues.MAIN)
     AsyncFunction("installSpeechData") { speechOutput.install(context()) }.runOnQueue(Queues.MAIN)
     AsyncFunction("refineCharacterRig") { uri: String, spec: String -> NyvemiRigRefinement.refine(context(), uri, spec) }
@@ -122,8 +129,8 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("startVoice") { id: String -> voiceInput.start(context(), id) }.runOnQueue(Queues.MAIN)
     AsyncFunction("finishVoice") { id: String, cancel: Boolean, promise: expo.modules.kotlin.Promise -> voiceInput.finish(id, cancel, promise) }.runOnQueue(Queues.MAIN)
     AsyncFunction("cancelVoice") { id: String -> voiceInput.cancel(id) }.runOnQueue(Queues.MAIN)
-    OnActivityEntersBackground { themeTransition.finish(); voiceInput.cancel(); speechOutput.stop(); qwenSpeech.release() }
-    OnDestroy { qwenSpeech.shutdown(); speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
+    OnActivityEntersBackground { voiceWav.stop(); themeTransition.finish(); voiceInput.cancel(); speechOutput.stop(); qwenSpeech.release() }
+    OnDestroy { voiceWav.shutdown(); qwenSpeech.shutdown(); speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
     AsyncFunction("dictate") { promise: expo.modules.kotlin.Promise ->
       val activity = appContext.currentActivity
       if (activity == null || dictation != null) { promise.reject("dictation_unavailable", "请稍后重试语音输入", null); return@AsyncFunction }

@@ -237,6 +237,10 @@ export function readBundle(bytes: Uint8Array): {
     throw Error('图片与技能需要Bundle v5');
   return { manifest, avatar, images, model, media };
 }
+function portableVoice(voice: z.infer<typeof SettingsSchema>['voice']) {
+  return voice ? { ...voice, referenceVoice: undefined, referenceCandidate: undefined } : undefined;
+}
+
 export class CharacterBundleService {
   constructor(
     private store: Storage,
@@ -278,7 +282,7 @@ export class CharacterBundleService {
         theme: await tx.get('themes', 'app'),
         exportedAt: Date.now(),
         character: portable,
-        settings,
+        settings: { ...settings, voice: portableVoice(settings.voice) },
         memories: await tx.list('memories', characterId, 100001),
         messages,
         intentions: await tx.list('intentions', characterId, 100001),
@@ -419,6 +423,7 @@ export class CharacterBundleService {
         if (m.theme && !(await tx.get('themes', 'app'))) await tx.put('themes', m.theme);
         await tx.put('settings', {
           ...m.settings,
+          voice: portableVoice(m.settings.voice),
           id: cid,
           characterId: cid,
           proactiveEnabled: false,

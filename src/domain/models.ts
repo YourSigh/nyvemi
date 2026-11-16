@@ -178,6 +178,14 @@ export const ExperienceSchema = z
   })
   .strict();
 export type Experience = z.infer<typeof ExperienceSchema>;
+export const VoiceReferenceSchema = z
+  .object({
+    id: z.string().regex(/^[a-f0-9-]{36}$/),
+    label: z.string().trim().min(1).max(120),
+  })
+  .strict();
+export type VoiceReference = z.infer<typeof VoiceReferenceSchema>;
+
 export const SettingsSchema = z
   .object({
     id: z.string(),
@@ -203,6 +211,8 @@ export const SettingsSchema = z
         pitch: z.number().min(0.7).max(1.4),
         qwenTuning: z.record(QwenSpeakerSchema, QwenTuningSchema).optional(),
         description: z.string().max(1000).optional(),
+        referenceVoice: VoiceReferenceSchema.optional(),
+        referenceCandidate: VoiceReferenceSchema.optional(),
       })
       .strict()
       .optional(),

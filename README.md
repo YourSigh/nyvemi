@@ -341,3 +341,5 @@ Configure your own drawing Key in 图片与识图; default vision reuses the exi
 Default tests use Mock network/model providers. `node scripts/test-live.cjs --extensions` explicitly runs billed DeepSeek plugin acceptance. `node scripts/test-live-vision.cjs` additionally requires `NYVEMI_VISION_ENABLE_LIVE_TESTS=1` and permits at most one real Ark vision request; this round did not enable it. App configuration is independent of these local development fields.
 
 `node scripts/test-live.cjs --vision` tests the default DeepSeek vision path using the existing local test Key, limited to one billed request. The 0.14.1 test correctly identified a red-left/blue-right fixture, then reused the cached observation: 249 input tokens, 10 output tokens. No Ark request was made.
+
+试验性角色参考音色（DeepSeek TTS + 本地换声）：[接入说明](docs/REFERENCE_VOICE.md)。
