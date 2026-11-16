@@ -159,17 +159,30 @@ describe('reference driver', () => {
     await f.d.play('a', '新', options);
     expect(f.transport.synthesize).toHaveBeenCalledTimes(2);
   });
-  it('real failure falls back visibly', async () => {
+  it('missing or failed companion keeps DeepSeek audio without a duplicate synthesis', async () => {
+    for (const available of [false, true]) {
+      const f = fixture();
+      f.transport.checkCompanion.mockResolvedValueOnce(available);
+      f.transport.convert.mockRejectedValueOnce(Error('private detail'));
+      expect(await f.d.play('a', 'text', options)).toBe(true);
+      expect(f.transport.synthesize).toHaveBeenCalledOnce();
+      expect(f.transport.convert).toHaveBeenCalledTimes(available ? 1 : 0);
+      expect(f.playWav).toHaveBeenCalledOnce();
+      expect(f.fallback.play).not.toHaveBeenCalled();
+      expect(f.onFallback).toHaveBeenCalledWith('参考换声不可用，已使用 DeepSeek 声音');
+    }
+  });
+  it('when DeepSeek itself fails, uses the system fallback visibly', async () => {
     const f = fixture();
-    f.transport.convert.mockRejectedValueOnce(Error('private detail'));
+    f.transport.synthesize.mockRejectedValueOnce(Error('private detail'));
     expect(await f.d.play('a', 'text', options)).toBe(true);
     expect(f.fallback.play).toHaveBeenCalledOnce();
-    expect(f.onFallback).toHaveBeenCalledWith('参考音色暂不可用，已切换本机声音');
+    expect(f.onFallback).toHaveBeenCalledWith('DeepSeek 语音暂不可用，已切换系统离线声音');
   });
-  it('stop during preparation suppresses playback and fallback', async () => {
+  it('stop during synthesis suppresses playback and fallback', async () => {
     const f = fixture();
     let finish!: (v: Uint8Array<ArrayBuffer>) => void;
-    f.loadReference.mockImplementationOnce(
+    f.transport.synthesize.mockImplementationOnce(
       () =>
         new Promise((r) => {
           finish = r;
@@ -182,11 +195,26 @@ describe('reference driver', () => {
     expect(f.playWav).not.toHaveBeenCalled();
     expect(f.fallback.play).not.toHaveBeenCalled();
   });
-  it('without reference uses original driver', async () => {
-    const f = fixture();
-    await f.d.play('a', 'text', { enabled: true, rate: 1, pitch: 1 });
-    expect(f.fallback.play).toHaveBeenCalledOnce();
-    expect(f.transport.synthesize).not.toHaveBeenCalled();
+  it('ordinary DeepSeek voice needs no companion and tunes PCM before playback', async () => {
+    const f = fixture(),
+      input = wav(),
+      samples = new DataView(input.buffer);
+    for (let i = 44; i < input.length; i += 2) samples.setInt16(i, 8192, true);
+    f.transport.synthesize.mockResolvedValueOnce(input);
+    await f.d.play('a', 'text', {
+      enabled: true,
+      rate: 1,
+      pitch: 1,
+      deepSeekVoice: 'tide',
+      localTuning: { pitch: 0, warmth: 0, brightness: 0, presence: 0, air: 0, speed: 1, volume: 0 },
+    });
+    expect(f.fallback.play).not.toHaveBeenCalled();
+    expect(f.transport.synthesize).toHaveBeenCalledWith('text', expect.any(AbortSignal), 'tide');
+    expect(f.transport.checkCompanion).not.toHaveBeenCalled();
+    expect(f.transport.convert).not.toHaveBeenCalled();
+    const played = (f.playWav.mock.calls as unknown as [string, Uint8Array][])[0][1];
+    expect(played.subarray(44).every((n) => n === 0)).toBe(true);
+    expect(input.subarray(44).some((n) => n !== 0)).toBe(true);
   });
 });
 

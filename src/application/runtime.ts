@@ -54,7 +54,7 @@ import {
   removeReferenceWav,
   saveReferenceWav,
 } from '../speech/reference-storage';
-import { localSpeechDriver } from '../speech/native';
+import { systemSpeechDriver } from '../speech/native';
 async function createRuntime() {
   if (!globalThis.crypto?.getRandomValues)
     Object.defineProperty(globalThis, 'crypto', {
@@ -275,7 +275,7 @@ async function createRuntime() {
       transport: referenceTransport,
       loadReference: loadReferenceWav,
       playWav: playReferenceWav,
-      fallback: localSpeechDriver,
+      fallback: systemSpeechDriver,
       onFallback,
     });
   const chat = new ChatService(store, provider, diagnostics, {

@@ -1,17 +1,8 @@
-import { QwenPackCard, useQwenPack } from './qwen-pack';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Switch, View, Text } from 'react-native';
 import Slider from '@react-native-community/slider';
 import * as DocumentPicker from 'expo-document-picker';
-import {
-  originalQwenSound,
-  qwenTuningRanges,
-  type QwenSpeaker,
-  type QwenTuning,
-} from '../domain/qwen-voice';
 import { useFocusEffect } from '@react-navigation/native';
-import { bridge, type LocalSpeechState } from '../native/android';
-import { localSpeechDriver, warmLocalSpeech } from '../speech/native';
 import {
   deleteVoiceCompanion,
   getVoiceCompanion,
@@ -20,16 +11,7 @@ import {
   readPickedReference,
   saveVoiceCompanion,
 } from '../speech/reference-storage';
-import {
-  qwenSpeaker,
-  qwenTuning,
-  updateQwenTuning,
-  qwenVoices,
-  updateVoice,
-  voiceOptions,
-  voiceProfile,
-  type VoiceOptions,
-} from '../speech/preferences';
+import { updateVoice, voiceOptions, voiceProfile, type VoiceOptions } from '../speech/preferences';
 import { useRuntime } from './context';
 import { usePalette } from '../theme/context';
 import {
@@ -46,28 +28,73 @@ import {
 import type { ScreenProps } from './navigation';
 
 const sample = '嗨，我在这儿。今天想和我聊点什么？';
+type LocalVoiceTuning = {
+  pitch: number;
+  warmth: number;
+  brightness: number;
+  presence: number;
+  air: number;
+  speed: number;
+  volume: number;
+};
+const defaultLocalVoiceTuning: LocalVoiceTuning = {
+  pitch: 0,
+  warmth: 0,
+  brightness: 0,
+  presence: 0,
+  air: 0,
+  speed: 1,
+  volume: 1,
+};
 const controls = [
-  ['rate', '语速'],
-  ['pitch', '音高'],
-  ['volume', '音量'],
+  ['pitch', '音高', -4, 4, 0.5],
+  ['warmth', '温暖', -100, 100, 5],
+  ['brightness', '明亮', -100, 100, 5],
+  ['presence', '清晰', -100, 100, 5],
+  ['air', '空气感', -100, 100, 5],
+  ['speed', '语速', 0.7, 1.3, 0.05],
+  ['volume', '音量', 0, 1.5, 0.05],
 ] as const;
-const sameTuning = (a: QwenTuning, b: QwenTuning) =>
-  a.rate === b.rate && a.pitch === b.pitch && a.volume === b.volume;
-
-function tuningLabel(key: keyof QwenTuning, value: number) {
-  if (key === 'rate') return `${value.toFixed(2)}×`;
+const presets: { label: string; tuning: LocalVoiceTuning }[] = [
+  { label: '自然', tuning: defaultLocalVoiceTuning },
+  {
+    label: '温柔',
+    tuning: {
+      pitch: -0.5,
+      warmth: 25,
+      brightness: -10,
+      presence: 5,
+      air: 10,
+      speed: 0.95,
+      volume: 1,
+    },
+  },
+  {
+    label: '清亮',
+    tuning: {
+      pitch: 1,
+      warmth: -10,
+      brightness: 20,
+      presence: 15,
+      air: 15,
+      speed: 1.05,
+      volume: 1,
+    },
+  },
+];
+const sameTuning = (a: LocalVoiceTuning, b: LocalVoiceTuning) =>
+  controls.every(([key]) => a[key] === b[key]);
+function tuningLabel(key: keyof LocalVoiceTuning, value: number) {
+  if (key === 'speed') return `${value.toFixed(2)}×`;
   if (key === 'volume') return `${Math.round(value * 100)}%`;
-  const change = Number(((value - 1) * 100).toFixed(1));
-  return change === 0 ? '原声' : `${change > 0 ? '+' : ''}${change}%`;
+  if (key === 'pitch') return value === 0 ? '原调' : `${value > 0 ? '+' : ''}${value} 半音`;
+  return value === 0 ? '中性' : `${value > 0 ? '+' : ''}${value}`;
 }
 
 export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const runtime = useRuntime(),
     palette = usePalette(),
     cid = route.params.characterId;
-  const [voices, setVoices] = useState<LocalSpeechState>();
-  const pack = useQwenPack(cid);
-  const qwen = pack.status?.phase === 'ready';
   const [config, setConfig] = useState<VoiceOptions>(voiceProfile());
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -79,51 +106,33 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [voiceNote, setVoiceNote] = useState('');
   const sampleRun = useRef(0);
   const referenceDriver = useMemo(() => runtime.voiceDriver(setVoiceNote), [runtime]);
-  const [draft, setDraft] = useState<{ speaker: QwenSpeaker; tuning: QwenTuning }>();
-  const autoplay = useRef(false);
-  const speaker = qwen ? qwenSpeaker(config) : undefined;
-  const savedTuning = speaker ? qwenTuning(config, speaker) : originalQwenSound;
-  const tuning = draft && draft.speaker === speaker ? draft.tuning : savedTuning;
+  const [draft, setDraft] = useState<LocalVoiceTuning>();
+  const savedTuning: LocalVoiceTuning = { ...defaultLocalVoiceTuning, ...config.localTuning };
+  const tuning = draft ?? savedTuning;
   const dirty = !sameTuning(tuning, savedTuning);
   const refresh = useCallback(async () => {
     const settings = await runtime.store.get('settings', cid);
     const options = voiceOptions(settings?.voice);
-    autoplay.current = options.enabled;
     setConfig(options);
     setDraft(undefined);
-    warmLocalSpeech(options);
-    const native = bridge();
-    setVoices(await native.speechState());
   }, [runtime, cid]);
   useFocusEffect(
     useCallback(() => {
-      void refresh().catch(() => setError('读取本机声音失败'));
+      void refresh().catch(() => setError('读取声音设置失败'));
       return () => {
         sampleRun.current++;
+        setBusy(false);
+        setVoiceBusy(false);
         void referenceDriver.stop().catch(() => {});
       };
     }, [refresh, referenceDriver]),
   );
-  useEffect(() => {
-    if (!qwen) return;
-    void runtime.store
-      .get('settings', cid)
-      .then((settings) => {
-        const options = voiceOptions(settings?.voice);
-        setConfig(options);
-        warmLocalSpeech(options);
-      })
-      .catch(() => {});
-  }, [cid, qwen, runtime]);
   const save = async (patch: Partial<VoiceOptions>) => {
     try {
       const next = await updateVoice(runtime.store, cid, patch);
       setError('');
-      autoplay.current = next.enabled;
       setConfig(next);
-      if ('voiceId' in patch && patch.voiceId !== config.voiceId) setDraft(undefined);
-      if (!next.enabled || !qwenSpeaker(next)) await bridge().releaseQwenVoice();
-      else warmLocalSpeech(next);
+      if (!next.enabled) await referenceDriver.stop();
     } catch {
       setError('没有保存成功');
     }
@@ -144,7 +153,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   }, []);
   const syncVoice = async () => {
     const next = voiceOptions((await runtime.store.get('settings', cid))?.voice);
-    autoplay.current = next.enabled;
     setConfig(next);
   };
   const applyCompanion = async () => {
@@ -171,7 +179,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     await deleteVoiceCompanion();
     setConnection(false);
     setToken('');
-    setVoiceNote('已断开换声服务。原有离线语音不受影响。');
+    setVoiceNote('已断开换声服务。普通 DeepSeek 朗读不受影响。');
   };
   const selectWav = async () => {
     try {
@@ -210,6 +218,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     await referenceDriver.stop();
   };
   const previewReference = async (candidate: boolean) => {
+    if (busy) return;
     if (voiceBusy) return stopReferencePreview();
     const run = ++sampleRun.current;
     setVoiceBusy(true);
@@ -219,7 +228,11 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         const bytes = await loadReferenceWav(config.referenceCandidate.id);
         if (sampleRun.current === run) await playReferenceWav(`reference:${Date.now()}`, bytes);
       } else if (config.referenceVoice) {
-        await referenceDriver.play(`reference:${Date.now()}`, sample, { ...config, enabled: true });
+        await referenceDriver.play(`reference:${Date.now()}`, sample, {
+          ...config,
+          localTuning: tuning,
+          enabled: true,
+        });
       }
     } catch {
       if (sampleRun.current === run) setVoiceNote('这段声音暂时无法播放');
@@ -228,11 +241,11 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     }
   };
   const applyTuning = async () => {
-    if (!speaker || !dirty || savingTuning) return;
+    if (!dirty || savingTuning) return;
     setSavingTuning(true);
     setError('');
     try {
-      setConfig(await updateQwenTuning(runtime.store, cid, speaker, tuning));
+      setConfig(await updateVoice(runtime.store, cid, { localTuning: tuning }));
       setDraft(undefined);
     } catch {
       setError('没有保存成功');
@@ -240,40 +253,132 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       setSavingTuning(false);
     }
   };
+  const stopPreview = async () => {
+    sampleRun.current++;
+    setBusy(false);
+    setVoiceBusy(false);
+    await referenceDriver.stop();
+  };
   const preview = async () => {
+    const run = ++sampleRun.current;
     setBusy(true);
     setError('');
+    setVoiceNote('');
     try {
-      const id = `preview:${Date.now()}`;
-      if (speaker)
-        await bridge().speakQwen(id, sample, speaker, tuning.rate, tuning.pitch, tuning.volume);
-      else
-        await localSpeechDriver.play(id, sample, {
-          ...config,
-          voiceId: config.voiceId ?? 'system:default',
-        });
+      await referenceDriver.stop();
+      if (sampleRun.current !== run) return;
+      const played = await referenceDriver.play(`preview:${Date.now()}`, sample, {
+        ...config,
+        localTuning: tuning,
+        referenceVoice: undefined,
+        enabled: true,
+      });
+      if (!played && sampleRun.current === run) setError('这次试听未完成，请稍后重试。');
     } catch {
-      setError(
-        speaker ? '这个声音暂时用不了，可以试试系统音色。' : '请安装中文语音包或换一个音色。',
-      );
+      if (sampleRun.current === run) setError('这次试听暂时不可用，请检查官方语音配置。');
     } finally {
-      if (!autoplay.current) void localSpeechDriver.release?.().catch(() => {});
-      setBusy(false);
+      if (sampleRun.current === run) setBusy(false);
     }
   };
   return (
     <Page>
       <Heading>声音</Heading>
+      <Note>默认使用 DeepSeek 语音。普通朗读无需换声服务；网络不可用时自动尝试本机离线声音。</Note>
       <ErrorText text={error} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={{ color: palette.ink }}>消息语音</Text>
         <Switch
           accessibilityLabel="消息语音"
           value={config.enabled}
-          disabled={busy || savingTuning}
+          disabled={busy || voiceBusy || savingTuning}
           onValueChange={(enabled) => void save({ enabled, playbackSet: true })}
         />
       </View>
+      <Card>
+        <Text style={{ color: palette.ink, fontWeight: '600' }}>DeepSeek 基础声音</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {(['stella', 'tide'] as const).map((id) => (
+            <TextButton
+              key={id}
+              title={`${(config.deepSeekVoice ?? 'stella') === id ? '✓ ' : ''}${id === 'stella' ? 'Stella' : 'Tide'}`}
+              disabled={busy || voiceBusy || savingTuning}
+              onPress={() => void save({ deepSeekVoice: id })}
+            />
+          ))}
+        </View>
+        <Note>基础声音选择会直接保存；下方微调可以先试听再应用。</Note>
+      </Card>
+      <Card>
+        <Text style={{ color: palette.ink, fontWeight: '600' }}>本地声音微调</Text>
+        <Note>
+          DeepSeek 生成语音后在本机调整，不需要换声服务。试听不会保存；点「应用到聊天」后生效。
+        </Note>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {presets.map((preset) => (
+            <TextButton
+              key={preset.label}
+              title={preset.label}
+              disabled={busy || voiceBusy || savingTuning}
+              onPress={() => setDraft({ ...preset.tuning })}
+            />
+          ))}
+          <TextButton
+            title="重置"
+            disabled={
+              busy || voiceBusy || savingTuning || sameTuning(tuning, defaultLocalVoiceTuning)
+            }
+            onPress={() => setDraft({ ...defaultLocalVoiceTuning })}
+          />
+        </View>
+        {controls.map(([key, label, min, max, step]) => {
+          const value = tuningLabel(key, tuning[key]);
+          return (
+            <View key={key}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: palette.ink }}>{label}</Text>
+                <Text style={{ color: palette.muted, fontVariant: ['tabular-nums'] }}>{value}</Text>
+              </View>
+              <Slider
+                testID={`local-voice-${key}`}
+                accessibilityLabel={label}
+                accessibilityValue={{ text: value }}
+                style={{ height: 44 }}
+                minimumValue={min}
+                maximumValue={max}
+                step={step}
+                value={tuning[key]}
+                minimumTrackTintColor={palette.accent}
+                maximumTrackTintColor={palette.line}
+                thumbTintColor={palette.accent}
+                disabled={busy || voiceBusy || savingTuning}
+                onValueChange={(number) =>
+                  setDraft((previous) => ({
+                    ...(previous ?? savedTuning),
+                    [key]: Math.max(min, Math.min(max, Math.round(number * 100) / 100)),
+                  }))
+                }
+              />
+            </View>
+          );
+        })}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Button
+              title={busy ? '停止试听' : '普通试听'}
+              secondary
+              disabled={savingTuning || voiceBusy}
+              onPress={() => void (busy ? stopPreview() : preview())}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button
+              title="应用到聊天"
+              disabled={!dirty || busy || voiceBusy || savingTuning}
+              onPress={() => void applyTuning()}
+            />
+          </View>
+        </View>
+      </Card>
       <Card>
         <Text style={{ color: palette.ink, fontWeight: '600' }}>参考音色</Text>
         <Note>
@@ -290,12 +395,12 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
             />
             <TextButton
               title="我有权使用，设为参考音色"
-              disabled={voiceBusy}
+              disabled={busy || voiceBusy}
               onPress={() => void selectFoundReference()}
             />
             <TextButton
               title="移除找到的录音"
-              disabled={voiceBusy}
+              disabled={busy || voiceBusy}
               onPress={() =>
                 void runtime.referenceVoice
                   .clearCandidate(cid)
@@ -307,7 +412,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         ) : null}
         <TextButton
           title="导入有权使用的参考 WAV"
-          disabled={voiceBusy}
+          disabled={busy || voiceBusy}
           onPress={() => void selectWav()}
         />
         {config.referenceVoice ? (
@@ -317,8 +422,8 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
               onPress={() => void previewReference(false)}
             />
             <TextButton
-              title="恢复本机音色"
-              disabled={voiceBusy}
+              title="恢复 DeepSeek 原声"
+              disabled={busy || voiceBusy}
               onPress={() =>
                 void runtime.referenceVoice
                   .clear(cid)
@@ -359,157 +464,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         </Details>
         {voiceNote ? <Note>{voiceNote}</Note> : null}
       </Card>
-      <QwenPackCard pack={pack} />
-      {qwen ? (
-        <Details title={qwenVoices.find(({ id }) => id === speaker)?.label ?? 'Qwen 音色'}>
-          {qwenVoices.map(({ id, label }) => (
-            <TextButton
-              key={id}
-              title={`${id === speaker ? '✓ ' : ''}${label}`}
-              disabled={busy || savingTuning}
-              onPress={() => void save({ voiceId: `qwen:${id}` })}
-            />
-          ))}
-        </Details>
-      ) : null}
-      {speaker ? (
-        <Card>
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <Text style={{ color: palette.ink, fontWeight: '600' }}>微调音色</Text>
-            <TextButton
-              title="恢复原声"
-              disabled={busy || savingTuning || sameTuning(tuning, originalQwenSound)}
-              onPress={() => setDraft({ speaker, tuning: originalQwenSound })}
-            />
-          </View>
-          {controls.map(([key, label]) => {
-            const range = qwenTuningRanges[key];
-            const value = tuningLabel(key, tuning[key]);
-            return (
-              <View key={key}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={{ color: palette.ink }}>{label}</Text>
-                  <Text style={{ color: palette.muted, fontVariant: ['tabular-nums'] }}>
-                    {value}
-                  </Text>
-                </View>
-                <Slider
-                  testID={`qwen-voice-${key}`}
-                  accessibilityLabel={label}
-                  accessibilityValue={{ text: value }}
-                  style={{ height: 44 }}
-                  minimumValue={range.min}
-                  maximumValue={range.max}
-                  step={range.step}
-                  value={tuning[key]}
-                  minimumTrackTintColor={palette.accent}
-                  maximumTrackTintColor={palette.line}
-                  thumbTintColor={palette.accent}
-                  disabled={busy || savingTuning}
-                  onValueChange={(number) =>
-                    setDraft((previous) => ({
-                      speaker,
-                      tuning: {
-                        ...(previous?.speaker === speaker ? previous.tuning : savedTuning),
-                        [key]: Math.max(
-                          range.min,
-                          Math.min(range.max, Math.round(number * 1000) / 1000),
-                        ),
-                      },
-                    }))
-                  }
-                />
-              </View>
-            );
-          })}
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                title={busy ? '停止试听' : '试听'}
-                secondary
-                disabled={savingTuning}
-                onPress={() => {
-                  if (busy) void localSpeechDriver.stop().catch(() => {});
-                  else void preview();
-                }}
-              />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                title="应用到聊天"
-                disabled={!dirty || busy || savingTuning}
-                onPress={() => void applyTuning()}
-              />
-            </View>
-          </View>
-        </Card>
-      ) : null}
-      <Details title={speaker ? '系统音色' : '换个系统音色'}>
-        {!voices ? (
-          <Note>正在找本机音色…</Note>
-        ) : voices.available ? (
-          <>
-            <TextButton
-              title="系统默认"
-              disabled={busy || savingTuning}
-              onPress={() => void save({ voiceId: 'system:default' })}
-            />
-            {voices.voices.map((voice) => (
-              <TextButton
-                key={voice.id}
-                title={`${voice.id === config.voiceId ? '✓ ' : ''}${voice.label}`}
-                disabled={busy || savingTuning}
-                onPress={() => void save({ voiceId: voice.id })}
-              />
-            ))}
-            {!speaker ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                {[
-                  ['gentle', '轻柔'],
-                  ['bright', '清亮'],
-                  ['calm', '自然'],
-                  ['low', '低缓'],
-                ].map(([style, label]) => (
-                  <TextButton
-                    key={style}
-                    title={label}
-                    onPress={() => {
-                      const { rate, pitch } = voiceProfile(style);
-                      void save({ rate, pitch });
-                    }}
-                  />
-                ))}
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Button
-              title="安装系统语音包"
-              onPress={() =>
-                void bridge()
-                  .installSpeechData()
-                  .catch(() => setError('请在系统设置中打开文字转语音'))
-              }
-            />
-            <TextButton
-              title="重新检查"
-              onPress={() => void refresh().catch(() => setError('读取失败'))}
-            />
-          </>
-        )}
-      </Details>
-      {!speaker && voices?.available ? (
-        <Button
-          title={busy ? '停止试听' : '听听这个声音'}
-          onPress={() => {
-            if (busy) void localSpeechDriver.stop();
-            else void preview();
-          }}
-        />
-      ) : null}
     </Page>
   );
 }

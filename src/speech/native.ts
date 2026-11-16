@@ -47,3 +47,21 @@ export function warmLocalSpeech(options: VoiceOptions): void {
       .warmQwenVoice()
       .catch(() => {});
 }
+
+/** Offline fallback for the DeepSeek-first mode; keeps the Qwen pack dormant. */
+export const systemSpeechDriver: SpeechDriver = {
+  play(id, text, options) {
+    const chosen = [options.voiceId, options.fallbackVoiceId].find(
+      (value) => value && !/^(?:qwen|kokoro):/.test(value),
+    );
+    return bridge().speakLocal(
+      id,
+      text,
+      chosen === 'system:default' ? null : (chosen ?? null),
+      options.rate,
+      options.pitch,
+    );
+  },
+  stop: () => bridge().stopSpeech(),
+  release: () => bridge().stopSpeech(),
+};

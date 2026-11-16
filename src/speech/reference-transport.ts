@@ -12,7 +12,7 @@ export interface ResolvedReference {
 }
 export interface ReferenceTransport {
   checkCompanion(signal?: AbortSignal, requireConverter?: boolean): Promise<boolean>;
-  synthesize(text: string, signal: AbortSignal): Promise<Uint8Array>;
+  synthesize(text: string, signal: AbortSignal, voice?: 'stella' | 'tide'): Promise<Uint8Array>;
   convert(source: Uint8Array, reference: Uint8Array, signal: AbortSignal): Promise<Uint8Array>;
   resolveReference(
     query: string,
@@ -270,12 +270,12 @@ export function createReferenceTransport(deps: {
         return false;
       }
     },
-    async synthesize(text, signal) {
+    async synthesize(text, signal, voice = 'stella') {
       if (!text.trim() || text.length > 2000) throw Error('朗读文本长度无效');
       const bytes = (await request(
         'https://api.deepseek.com/v1/tools/tts',
         await key(),
-        { text, voice_id: 'stella', format: 'pcm', filter_markdown: true },
+        { text, voice_id: voice, format: 'pcm', filter_markdown: true },
         signal,
         false,
         15000,

@@ -178,6 +178,18 @@ export const ExperienceSchema = z
   })
   .strict();
 export type Experience = z.infer<typeof ExperienceSchema>;
+export const LocalVoiceTuningSchema = z
+  .object({
+    pitch: z.number().min(-4).max(4),
+    warmth: z.number().min(-100).max(100),
+    brightness: z.number().min(-100).max(100),
+    presence: z.number().min(-100).max(100),
+    air: z.number().min(-100).max(100),
+    speed: z.number().min(0.7).max(1.3),
+    volume: z.number().min(0).max(1.5),
+  })
+  .strict();
+
 export const VoiceReferenceSchema = z
   .object({
     id: z.string().regex(/^[a-f0-9-]{36}$/),
@@ -211,6 +223,8 @@ export const SettingsSchema = z
         pitch: z.number().min(0.7).max(1.4),
         qwenTuning: z.record(QwenSpeakerSchema, QwenTuningSchema).optional(),
         description: z.string().max(1000).optional(),
+        deepSeekVoice: z.enum(['stella', 'tide']).optional(),
+        localTuning: LocalVoiceTuningSchema.optional(),
         referenceVoice: VoiceReferenceSchema.optional(),
         referenceCandidate: VoiceReferenceSchema.optional(),
       })

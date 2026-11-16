@@ -1,8 +1,6 @@
 import { Icon } from './icons';
-import { QwenPackCard, useQwenPack } from './qwen-pack';
 import { wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
-import { warmLocalSpeech } from '../speech/native';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
 import { pickChatImages } from '../media/native';
@@ -79,7 +77,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const s = useMemo(() => createStyles(theme), [theme]);
   const runtime = useRuntime();
   const cid = route.params.characterId;
-  const voicePack = useQwenPack(cid);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [developerMode, setDeveloperMode] = useState(false);
   const debug = useCharacterDebug(runtime.characterDebug, cid, developerMode);
@@ -123,7 +120,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
   const prepareVoice = useCallback(
     (id: string, content: string) => {
       if (voiceFocused.current && AppState.currentState === 'active')
-        return speech.prepare(id, content, voice.current.options);
+        void speech.prepare(id, content, voice.current.options)?.catch(() => {});
+      return undefined;
     },
     [speech],
   );
@@ -185,7 +183,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       if (
         voiceSnapshot.options.enabled &&
         (!options.enabled ||
-          voiceSnapshot.options.referenceVoice?.id !== options.referenceVoice?.id)
+          voiceSnapshot.options.referenceVoice?.id !== options.referenceVoice?.id ||
+          voiceSnapshot.options.deepSeekVoice !== options.deepSeekVoice ||
+          JSON.stringify(voiceSnapshot.options.localTuning) !== JSON.stringify(options.localTuning))
       )
         speech.stop(true);
       voiceSnapshot.options = options;
@@ -193,7 +193,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     }
     setDeveloperMode(settings?.developerMode ?? false);
     if (voiceFocused.current && AppState.currentState === 'active') {
-      warmLocalSpeech(voiceSnapshot.options);
       requestAnimationFrame(() => {
         if (
           voice.current === voiceSnapshot &&
@@ -281,15 +280,6 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       abort.current?.abort();
     };
   }, [cid, speech]);
-  const qwenReady = voicePack.status?.phase === 'ready';
-  const wasQwenReady = useRef(false);
-  useEffect(() => {
-    if (qwenReady && !wasQwenReady.current) {
-      speech.unblock();
-      void refresh().catch(() => {});
-    }
-    wasQwenReady.current = qwenReady;
-  }, [qwenReady, refresh, speech]);
   const toggleVoice = async () => {
     const state = voice.current;
     if (state.saving) return;
@@ -299,10 +289,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     state.revision++;
     state.options = { ...previous, enabled, playbackSet: true };
     setVoiceEnabled(enabled);
-    if (enabled) {
-      speech.resume();
-      warmLocalSpeech(state.options);
-    } else speech.stop(true);
+    if (enabled) speech.resume();
+    else speech.stop(true);
     try {
       const saved = await updateVoice(runtime.store, cid, { enabled, playbackSet: true });
       if (voice.current === state) state.options = saved;
@@ -310,10 +298,8 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
       if (voice.current !== state) return;
       state.options = previous;
       setVoiceEnabled(previous.enabled);
-      if (previous.enabled) {
-        speech.resume();
-        warmLocalSpeech(previous);
-      } else speech.stop(true);
+      if (previous.enabled) speech.resume();
+      else speech.stop(true);
       setError('声音设置未保存，请重试');
     } finally {
       state.revision++;
@@ -616,9 +602,10 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                             </Text>
                           ) : null}
                           {m.voiceSettings ? (
-                            <QwenPackCard
-                              pack={voicePack}
-                              onSettings={() =>
+                            <Button
+                              title="打开声音设置"
+                              secondary
+                              onPress={() =>
                                 navigation.navigate('VoiceSettings', { characterId: cid })
                               }
                             />
@@ -648,7 +635,7 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
             {voiceEnabled && speechNotice ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="设置本机声音"
+                accessibilityLabel="设置声音"
                 onPress={() => navigation.navigate('VoiceSettings', { characterId: cid })}
               >
                 <Text style={{ color: theme.textSecondary, fontSize: 12 }}>

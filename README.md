@@ -193,11 +193,11 @@ npm run android:release -- -PreactNativeArchitectures=arm64-v8a --console=plain
 
 The release command cleans App outputs to remove obsolete React assets and checks the APK for developer-only character assets and local credentials.
 
-### Offline Qwen voice
+### Message voice
 
-Nyvemi starts with the Android system voice. Download Qwen3-TTS 0.6B CustomVoice (Q4_K, 761 MB) in Settings → Voice or ask to change the companion’s voice in chat. The app can resume an interrupted download, tries HF-Mirror before Hugging Face, and verifies the model with SHA-256 before using it. You can also import the same GGUF file from Android Files. Each Qwen preset has its own playback speed, pitch, and volume. When message voice is enabled, Nyvemi warms the model as chat opens and starts synthesis during the typing pause. Going to the background or muting releases the model.
+When enabled in Settings → Voice, message speech uses the official DeepSeek TTS provider (Stella or Tide). Pitch, warmth, brightness, presence, air, speed and volume are processed on the phone, with no voice conversion service. Reference voice is optional. When DeepSeek is unavailable, the Android offline system voice is used.
 
-For local builds that need a bundled voice pack, use the optional flag below.
+The experimental Qwen screen is hidden for now; existing downloaded weights are not deleted. The following developer build instructions are retained only for reproducing the previous offline model pack.
 
 Install Android SDK CMake 3.22.1 and the NDK used by the Expo project. Download the model file before running the build command below. [Q4_K GGUF file](https://huggingface.co/sakasegawa/Qwen3-TTS-12Hz-0.6B-CustomVoice-GGUF/blob/fd9df9364613a92a86b4137074bc281204823033/Qwen3-TTS-12Hz-0.6B-CustomVoice-Q4_K.gguf)
 

@@ -1,27 +1,27 @@
 import type { Message } from '../domain/models';
-import { qwenSpeaker, type VoiceOptions } from './preferences';
+import type { VoiceOptions } from './preferences';
 export interface SpeechDriver {
   play(id: string, text: string, options: VoiceOptions): Promise<boolean>;
   stop(): Promise<void>;
   prepare?(id: string, text: string, options: VoiceOptions): Promise<boolean> | undefined;
   release?(): Promise<void>;
 }
-function speechParts(content: string, options: VoiceOptions): string[] {
+function speechParts(content: string): string[] {
   const text = content
     .replace(/```[\s\S]*?```/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[*#_`]/g, '')
     .trim();
-  const limit = options.referenceVoice ? 60 : qwenSpeaker(options) ? 180 : 1000;
+  const limit = 60;
   const characters = Array.from(text);
   const parts: string[] = [];
   for (let start = 0; start < characters.length; ) {
-    const size = options.referenceVoice && start === 0 ? 30 : limit;
+    const size = start === 0 ? 30 : limit;
     const cap = Math.min(start + size, characters.length);
     let end = cap;
     if (cap < characters.length) {
-      const floor = start + (options.referenceVoice ? (start === 0 ? 8 : 16) : size / 2);
-      const breakOn = options.referenceVoice ? /[。！？；.!?;，、,\s]/u : /[。！？；.!?;\s]/u;
+      const floor = start + (start === 0 ? 8 : 16);
+      const breakOn = /[。！？；.!?;，、,\s]/u;
       while (end > floor && !breakOn.test(characters[end - 1])) end--;
       if (end <= floor) end = cap;
     }
@@ -83,7 +83,7 @@ export class SpeechQueue {
   }
   prepare(id: string, content: string, options: VoiceOptions) {
     if (!options.enabled || this.blocked || !this.driver.prepare) return undefined;
-    const [text] = speechParts(content, options);
+    const [text] = speechParts(content);
     const prepared = text ? this.driver.prepare(`${id}:0`, text, options) : undefined;
     const previous = this.drained;
     return prepared && previous
@@ -145,10 +145,10 @@ export class SpeechQueue {
         if (epoch !== this.epoch) continue;
         this.state({ messageId: item.message.id });
         try {
-          const parts = speechParts(item.message.content, item.options);
+          const parts = speechParts(item.message.content);
           for (const [index, text] of parts.entries()) {
             if (epoch !== this.epoch) break;
-            if (item.options.referenceVoice && this.driver.prepare) {
+            if (this.driver.prepare) {
               // Only committed bubbles reach this queue. Prepare the next clip when
               // the current clip is ready, while the Android player outputs it.
               const prepared = await this.driver

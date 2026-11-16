@@ -2,8 +2,9 @@ import type { SpeechDriver } from './queue';
 import type { VoiceOptions } from './preferences';
 import type { ReferenceTransport } from './reference-transport';
 import { assertReferenceWav } from './reference-transport';
+import { tuneSpeechWav } from './local-tuning';
 
-type ReferenceOptions = VoiceOptions & { referenceVoice?: { id: string; label: string } };
+type PreparedSpeech = { bytes: Uint8Array; notice?: string };
 export function createReferenceSpeechDriver(deps: {
   transport: ReferenceTransport;
   loadReference(id: string): Promise<Uint8Array>;
@@ -16,11 +17,11 @@ export function createReferenceSpeechDriver(deps: {
   let epoch = 0;
   const cache = new Map<
     string,
-    { key: string; controller: AbortController; result: Promise<Uint8Array> }
+    { key: string; controller: AbortController; result: Promise<PreparedSpeech> }
   >();
-  function prepare(id: string, text: string, options: ReferenceOptions) {
+  function prepare(id: string, text: string, options: VoiceOptions) {
     const reference = options.referenceVoice;
-    if (!reference?.id || !options.enabled) return undefined;
+    if (!options.enabled) return undefined;
     const key = JSON.stringify([text, options]);
     const old = cache.get(id);
     if (old?.key === key) return old;
@@ -32,15 +33,44 @@ export function createReferenceSpeechDriver(deps: {
       cache.delete(first);
     }
     const controller = new AbortController();
-    const result = (async () => {
-      const ref = await deps.loadReference(reference.id);
-      assertReferenceWav(ref);
-      if (controller.signal.aborted) throw Error('已取消');
-      if (!(await deps.transport.checkCompanion(controller.signal, true)))
-        throw Error('本机换声服务没有就绪');
-      const source = await deps.transport.synthesize(text, controller.signal);
-      if (controller.signal.aborted) throw Error('已取消');
-      return deps.transport.convert(source, ref, controller.signal);
+    const result = (async (): Promise<PreparedSpeech> => {
+      const signal = controller.signal;
+      const optionalReference = reference?.id
+        ? (async () => {
+            try {
+              if (!(await deps.transport.checkCompanion(signal, true))) return undefined;
+              const bytes = await deps.loadReference(reference.id);
+              assertReferenceWav(bytes);
+              return bytes;
+            } catch {
+              return undefined;
+            }
+          })()
+        : undefined;
+      const source = await deps.transport.synthesize(text, signal, options.deepSeekVoice);
+      if (signal.aborted) throw Error('已取消');
+      let bytes = source;
+      let notice: string | undefined;
+      if (optionalReference) {
+        const sample = await optionalReference;
+        if (signal.aborted) throw Error('已取消');
+        try {
+          if (!sample) throw Error('参考换声不可用');
+          bytes = await deps.transport.convert(source, sample, signal);
+        } catch {
+          if (signal.aborted) throw Error('已取消');
+          notice = '参考换声不可用，已使用 DeepSeek 声音';
+        }
+      }
+      if (options.localTuning) {
+        try {
+          bytes = await tuneSpeechWav(bytes, options.localTuning, signal);
+        } catch {
+          if (signal.aborted) throw Error('已取消');
+          notice = '本地调音未完成，已保留未调音的声音';
+        }
+      }
+      return { bytes, notice };
     })();
     // A speculative preparation can fail before play consumes it.
     void result.catch(() => {});
@@ -67,15 +97,16 @@ export function createReferenceSpeechDriver(deps: {
         entry = prepare(id, text, options);
       if (!entry) return deps.fallback.play(id, text, options);
       try {
-        const bytes = await entry.result;
+        const { bytes, notice } = await entry.result;
         if (epoch !== generation || entry.controller.signal.aborted) return false;
+        if (notice) deps.onFallback?.(notice);
         const played = await deps.playWav(id, bytes);
         if (epoch !== generation || entry.controller.signal.aborted) return false;
         if (!played) throw Error('播放失败');
         return true;
       } catch {
         if (epoch !== generation || entry.controller.signal.aborted) return false;
-        deps.onFallback?.('参考音色暂不可用，已切换本机声音');
+        deps.onFallback?.('DeepSeek 语音暂不可用，已切换系统离线声音');
         return deps.fallback.play(id, text, options);
       } finally {
         if (cache.get(id) === entry) cache.delete(id);
