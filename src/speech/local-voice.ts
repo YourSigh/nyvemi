@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { bridge, type LocalVoiceState } from '../native/android';
+import { bridge, type LocalVoiceDownloadState, type LocalVoiceState } from '../native/android';
 import { id } from '../domain/models';
 import { assertReferenceWav } from './reference-transport';
 
@@ -87,4 +87,21 @@ export async function prepareBundledLocalVoice(): Promise<LocalVoiceState> {
   if (typeof native.prepareBundledLocalVoice !== 'function')
     throw Error('此版本未附带本机模型，请导入已校验的模型 ZIP。');
   return native.prepareBundledLocalVoice();
+}
+
+export async function localVoiceDownloadState(): Promise<LocalVoiceDownloadState> {
+  const native = bridge();
+  return typeof native.localVoiceDownloadState === 'function'
+    ? native.localVoiceDownloadState()
+    : { phase: 'unconfigured', bytes: 0, size: 0, configured: false };
+}
+export async function downloadLocalVoicePack(): Promise<void> {
+  const native = bridge();
+  if (typeof native.downloadLocalVoicePack !== 'function')
+    throw Error('此版本尚未配置模型下载，请更新或导入已校验的 ZIP。');
+  await native.downloadLocalVoicePack();
+}
+export async function pauseLocalVoiceDownload(): Promise<void> {
+  const native = bridge();
+  if (typeof native.pauseLocalVoiceDownload === 'function') await native.pauseLocalVoiceDownload();
 }

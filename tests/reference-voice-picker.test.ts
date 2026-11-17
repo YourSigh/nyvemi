@@ -8,7 +8,11 @@ const mocks = vi.hoisted(() => ({
   runtime: {} as {
     store: { get: ReturnType<typeof vi.fn> };
     referenceTransport: { synthesize: ReturnType<typeof vi.fn> };
-    voiceReferenceLookup: { peek: ReturnType<typeof vi.fn>; find: ReturnType<typeof vi.fn> };
+    voiceReferenceLookup: {
+      peek: ReturnType<typeof vi.fn>;
+      find: ReturnType<typeof vi.fn>;
+      takeDeferredModel: ReturnType<typeof vi.fn>;
+    };
     referenceVoice: {
       stageCandidate: ReturnType<typeof vi.fn>;
       useCandidate: ReturnType<typeof vi.fn>;
@@ -26,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   cancelPreview: vi.fn(),
   synthesize: vi.fn(),
 }));
+vi.mock('../src/ui/local-voice-download', () => ({ LocalVoiceDownload: 'LocalVoiceDownload' }));
 vi.mock('react-native', () => ({ View: 'View', Text: 'Text' }));
 vi.mock('../src/ui/context', () => ({ useRuntime: () => mocks.runtime }));
 vi.mock('../src/theme/context', () => ({ usePalette: () => ({ ink: 'black', muted: 'gray' }) }));
@@ -76,6 +81,7 @@ beforeEach(() => {
     referenceTransport: { synthesize: mocks.synthesize },
     store: { get: vi.fn(async () => ({ voice: {} })) },
     voiceReferenceLookup: {
+      takeDeferredModel: vi.fn(() => false),
       peek: vi.fn(() => ({ candidates: [candidate('流萤'), candidate('卡芙卡')] })),
       find: vi.fn(async () => ({ candidates: [candidate('流萤')] })),
     },
@@ -137,18 +143,18 @@ it('reads cached candidates without mount search and previews/applies exact sele
   expect(JSON.stringify(f.tree.toJSON())).toContain('尚未试听转换效果');
   await act(async () => f.tree.unmount());
 });
-it('preparing continues the same requested query without another search click', async () => {
-  mocks.state
-    .mockResolvedValueOnce({ available: false, enabled: false, bundled: true })
-    .mockResolvedValueOnce({ available: false, enabled: false, bundled: true });
+it('explicit download completion continues the same deferred query once', async () => {
+  mocks.state.mockResolvedValue({ available: false, enabled: false, bundled: false });
   mocks.runtime.voiceReferenceLookup.peek.mockReturnValue(undefined);
-  const f = await render('流萤');
-  expect(mocks.prepare).not.toHaveBeenCalled();
+  const f = await render('崩铁流萤');
+  expect(mocks.runtime.voiceReferenceLookup.find).not.toHaveBeenCalled();
+  mocks.state.mockResolvedValue({ available: true, enabled: false, bundled: false });
+  mocks.runtime.voiceReferenceLookup.takeDeferredModel.mockReturnValueOnce(true);
   await act(async () => {
-    f.button('准备模型并继续查找').props.onPress();
+    f.tree.root.findAll((n) => n.type === ('LocalVoiceDownload' as never))[0].props.onReady();
   });
-  expect(mocks.prepare).toHaveBeenCalledOnce();
-  expect(mocks.runtime.voiceReferenceLookup.find).toHaveBeenCalledExactlyOnceWith('c', '流萤');
+  expect(mocks.runtime.voiceReferenceLookup.find).toHaveBeenCalledExactlyOnceWith('c', '崩铁流萤');
+  expect(mocks.prepare).not.toHaveBeenCalled();
   await act(async () => f.tree.unmount());
 });
 it('failed reference persistence restores previously disabled engine and reports failure', async () => {

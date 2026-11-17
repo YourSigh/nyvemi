@@ -23,6 +23,23 @@ class NyvemiPublicVoicePolicyTest {
   assertEquals(listOf("ys"),NyvemiPublicVoicePolicy.pages("原神 纳西妲").map{it.game})
   for(q in listOf("https://example.com","notfirefly","流萤/../../",""))assertThrows(IllegalArgumentException::class.java){NyvemiPublicVoicePolicy.pages(q)}
  }
+ @Test fun exactStarRailPrefixes() {
+  val expected=NyvemiPublicVoicePolicy.pages("星铁流萤").single()
+  for(prefix in listOf("崩铁","星铁","星穹铁道","崩坏：星穹铁道","崩坏:星穹铁道","崩坏 星穹铁道","崩坏星穹铁道")) {
+   for(separator in listOf("", " ", "：", ": ")) {
+    val page=NyvemiPublicVoicePolicy.pages(prefix+separator+"流萤").single()
+    assertEquals("流萤",page.name);assertEquals("sr",page.game);assertEquals(expected.url,page.url)
+    assertEquals(NyvemiPublicVoicePolicy.archiveFallback(expected),NyvemiPublicVoicePolicy.archiveFallback(page))
+   }
+   assertThrows(IllegalArgumentException::class.java){NyvemiPublicVoicePolicy.pages(prefix)}
+  }
+  assertEquals("卡芙卡",NyvemiPublicVoicePolicy.pages("崩铁卡芙卡").single().name)
+  assertEquals("流萤",NyvemiPublicVoicePolicy.pages("崩铁 firefly").single().name)
+  // An embedded game word is not stripped, and cannot obtain another role's archive.
+  val different=NyvemiPublicVoicePolicy.pages("我的崩铁流萤")
+  assertTrue(different.all{it.name=="我的崩铁流萤" && NyvemiPublicVoicePolicy.archiveFallback(it)==null})
+  assertNull(NyvemiPublicVoicePolicy.archiveFallback(NyvemiPublicVoicePolicy.pages("崩铁纳西妲").single()))
+ }
  @Test fun liveCapturedFixturesWhenProvided() {
   val root=System.getenv("NYVEMI_BWIKI_FIXTURES") ?: return
   val firefly=NyvemiPublicVoicePolicy.parse(NyvemiPublicVoicePolicy.pages("流萤").first(),java.io.File(root,"bwiki-firefly.html").readText())

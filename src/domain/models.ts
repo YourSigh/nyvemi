@@ -127,6 +127,7 @@ export const MessageSchema = z
     replyDisposition: z.enum(['reply', 'silence']).optional(),
     attachments: z.array(z.string()).max(3).optional(),
     voiceSettings: z.literal(true).optional(),
+    voiceReferenceQuery: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
 export type Message = z.infer<typeof MessageSchema>;

@@ -114,7 +114,53 @@ fixture-driven acceptance, not a paid network-chat or subjective quality test.
 native unit tests and ARM64 debug assembly. No Git push, production installation,
 model upload or extra paid synthesis occurred.
 
-## Bundled ARM64 release
+## Download-on-demand ARM64 release (0.20.19)
+
+The standard release is built with `npm run android:release`, pins ARM64 and
+rejects model/ABI overrides. It does not download or embed weights. The APK check
+rejects bundled ONNX graphs/model ZIPs, Qwen weights and audio/QA fixtures; it
+requires standalone JS, ONNX Runtime and a package below 200,000,000 bytes.
+The existing release configuration still uses its development signing certificate.
+
+The separately distributed, licensed v1 archive remains 122,874,105 bytes with
+SHA-256 `9f6d7822c57371227e70803481c7c8cddcbbc5848f0d9e8234bbe941f3bb64e6`.
+Public download is pinned to ModelScope repository `YourSigh/nyvemi-openvoice-android`,
+revision `0d1ddd2f60fd1bc4cd4bc6ee032fc34f422e8d51`, file
+`openvoice-v2-android-1.zip`. Only `modelscope.cn` and the observed exact CDN
+host `cdn-lfs-cn-1.modelscope.cn` are accepted; temporary redirect URLs are
+not persisted or logged. The anonymous fixed-revision range was verified
+separately before configuring this endpoint.
+
+It contains exactly two exported graphs, the original MIT license and provenance
+notice; no reference recordings, embeddings, API keys or TTS engine. Downloads
+are explicit, resumable and verified before import; valid prior installations
+remain usable and manual file import remains available. No startup auto-download
+or automatic reference authorization/application is introduced.
+
+Production 0.20.19 (version code 64) is 62,325,809 bytes (62.33 MB / 59.44 MiB),
+SHA-256 `378ef31ee6d78a1da10c2d61a42f5c2a6b747513f0987f396c8e106f427deef4`.
+Its DEX contains the pinned public revision and exact allowed CDN hostname;
+APK signature and no-model/no-fixture checks passed. Offline full verification
+passed 608 tests (17 skipped), 23 native tests and ARM64 debug assembly.
+The native transfer has a real loopback HTTP Range pause/resume test, checksum
+rejection and preservation of an existing installed sentinel. This is not a
+substitute for the separate real-phone public-network acceptance.
+
+Real Redmi acceptance (isolated fresh app, 2026-11-17): started with no model;
+cellular anonymous ModelScope -> approved CDN transfer completed four exact
+HTTP ranges, 122,874,105 bytes, and the phone computed the pinned full SHA-256
+before ORT installation. Download completed in about eight seconds. Manual
+pause/resume was not exercised on that fast phone transfer; only the controlled
+HTTP acceptance above covers pause/resume. The same isolated phone test then passed authorized synthetic-reference preview,
+explicit application and post-restart reuse with cached source TTS. This proves
+local conversion using the freshly downloaded model, not a new paid TTS request
+or public-character voice similarity. The installed production app and
+its user data were not overwritten.
+
+The following bundled-package acceptance is retained as historical evidence,
+not the current packaging instructions or download acceptance.
+
+## Historical bundled ARM64 release (0.20.17–0.20.18)
 
 Keep the verified licensed input outside Git, for example
 `artifacts/openvoice/openvoice-v2-android-1.zip` (ignored). `pack.py` generates it

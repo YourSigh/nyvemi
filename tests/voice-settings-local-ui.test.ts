@@ -2,7 +2,7 @@ import { VoiceSettingsScreen } from '../src/ui/voice-settings';
 import { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { expect, it, vi } from 'vitest';
-vi.mock('../src/ui/local-voice-prepare', () => ({ LocalVoicePrepare: 'LocalVoicePrepare' }));
+vi.mock('../src/ui/local-voice-download', () => ({ LocalVoiceDownload: 'LocalVoiceDownload' }));
 const mocks = vi.hoisted(() => {
   const play = vi.fn(async () => true),
     stop = vi.fn(async () => {});

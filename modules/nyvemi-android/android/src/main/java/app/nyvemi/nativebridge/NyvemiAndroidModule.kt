@@ -39,6 +39,7 @@ class NyvemiAndroidModule : Module() {
   private val voiceWav = NyvemiVoiceWav()
   private val qwenSpeech = NyvemiQwenSpeech()
   private val localVoice = NyvemiLocalVoice()
+  private val localVoiceDownload = NyvemiLocalVoiceDownload(localVoice)
   private var publicVoiceReferences: NyvemiPublicVoiceReferences? = null
   @Synchronized private fun publicReferences(): NyvemiPublicVoiceReferences = publicVoiceReferences ?: NyvemiPublicVoiceReferences(context()).also { publicVoiceReferences = it }
   private fun context(): Context = appContext.reactContext ?: throw IllegalStateException("Android context unavailable")
@@ -86,6 +87,9 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("findVoiceReferences") { query: String -> publicReferences().findVoiceReferences(query) }
     AsyncFunction("downloadVoiceReference") { audioUrl: String, sourceUrl: String -> publicReferences().downloadVoiceReference(audioUrl, sourceUrl) }
     AsyncFunction("prepareBundledLocalVoice") { localVoice.prepareBundled(context()) }
+    AsyncFunction("localVoiceDownloadState") { localVoiceDownload.state(context()) }
+    AsyncFunction("downloadLocalVoicePack") { localVoiceDownload.start(context()) }
+    AsyncFunction("pauseLocalVoiceDownload") { localVoiceDownload.pause() }.runOnQueue(Queues.MAIN)
     AsyncFunction("localVoiceState") { localVoice.state(context()) }
     AsyncFunction("importLocalVoicePack") { uri: String -> localVoice.importPack(context(), uri) }
     AsyncFunction("setLocalVoiceEnabled") { enabled: Boolean -> localVoice.setEnabled(context(), enabled) }
@@ -142,7 +146,7 @@ class NyvemiAndroidModule : Module() {
     AsyncFunction("finishVoice") { id: String, cancel: Boolean, promise: expo.modules.kotlin.Promise -> voiceInput.finish(id, cancel, promise) }.runOnQueue(Queues.MAIN)
     AsyncFunction("cancelVoice") { id: String -> voiceInput.cancel(id) }.runOnQueue(Queues.MAIN)
     OnActivityEntersBackground { voiceWav.stop(); themeTransition.finish(); voiceInput.cancel(); speechOutput.stop(); qwenSpeech.release() }
-    OnDestroy { publicVoiceReferences?.close(); publicVoiceReferences = null; localVoice.release(); voiceWav.shutdown(); qwenSpeech.shutdown(); speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
+    OnDestroy { localVoiceDownload.close(); publicVoiceReferences?.close(); publicVoiceReferences = null; localVoice.release(); voiceWav.shutdown(); qwenSpeech.shutdown(); speechOutput.shutdown(); voiceInput.cancel(); themeTransition.finish(); dictation?.resolve(null); dictation = null }
     AsyncFunction("dictate") { promise: expo.modules.kotlin.Promise ->
       val activity = appContext.currentActivity
       if (activity == null || dictation != null) { promise.reject("dictation_unavailable", "请稍后重试语音输入", null); return@AsyncFunction }

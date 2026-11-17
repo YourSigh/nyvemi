@@ -1,29 +1,8 @@
-// Verify the shipped, bundled-only ARM64 OpenVoice release. Never reads credentials.
+// Verify the shipped, download-on-demand ARM64 OpenVoice release. Never reads credentials.
 const fs = require('node:fs');
 const { Buffer } = require('node:buffer');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
 const { execFileSync, spawn } = require('node:child_process');
-const { unzipSync } = require('fflate');
-const ASSET = 'assets/openvoice/openvoice-v2-android-1.zip';
-const PACK_BYTES = 122874105;
-const PACK_SHA = '9f6d7822c57371227e70803481c7c8cddcbbc5848f0d9e8234bbe941f3bb64e6';
-const CONTENTS = {
-  'tone_encoder.onnx': [
-    3257655,
-    '64bd5e39bc92b1265e35eeb73e9e30558de6c54f15c176bff6f9b7543a0a2c91',
-  ],
-  'tone_converter.onnx': [
-    128052947,
-    '19ced6f4232d212e21ebd8562bd10eae7b5731610587dcdb691c1cedcf2f7507',
-  ],
-  'OPENVOICE-LICENSE.txt': [
-    1057,
-    'bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0',
-  ],
-  'MODEL-NOTICE.txt': [1024, '2db6762a90c62bdd743686ba75416eaac317c98c0882015751a1986836adb229'],
-};
-const digest = (data) => createHash('sha256').update(data).digest('hex');
 function requireCheck(ok, message) {
   if (!ok) throw new Error(message);
 }
@@ -67,7 +46,10 @@ async function verify(apk) {
     .trimEnd()
     .split('\n');
   requireCheck(new Set(names).size === names.length, 'APK contains duplicate ZIP entry names');
-  requireCheck(names.includes(ASSET), 'APK lacks the exact bundled OpenVoice asset');
+  requireCheck(
+    !names.some((name) => /\.(?:onnx|onnx_data|zip)$/i.test(name) && name.startsWith('assets/')),
+    'APK must not bundle model graphs or model archives',
+  );
   requireCheck(
     names.includes('assets/index.android.bundle'),
     'APK lacks its standalone JavaScript bundle',
@@ -92,7 +74,7 @@ async function verify(apk) {
       'APK contains a QA/reference fixture',
     );
     if (name.startsWith('assets/openvoice/') && !name.endsWith('/'))
-      requireCheck(name === ASSET, 'Unexpected OpenVoice APK asset');
+      requireCheck(/\.(?:txt|md)$/i.test(name), 'APK must not include OpenVoice model assets');
   }
   requireCheck(
     abis.size === 1 && abis.has('arm64-v8a'),
@@ -109,43 +91,6 @@ async function verify(apk) {
       bundle.toString('latin1'),
     ),
     'APK JavaScript contains a QA fixture marker',
-  );
-  const pack = await readEntry(apk, ASSET, PACK_BYTES);
-  requireCheck(pack.length === PACK_BYTES, 'Bundled model archive byte count mismatch');
-  requireCheck(digest(pack) === PACK_SHA, 'Bundled model archive SHA-256 mismatch');
-  const seen = new Set();
-  const entries = unzipSync(pack, {
-    filter(entry) {
-      requireCheck(
-        Object.hasOwn(CONTENTS, entry.name),
-        'Unexpected entry in bundled model archive',
-      );
-      requireCheck(!seen.has(entry.name), 'Duplicate entry in bundled model archive');
-      seen.add(entry.name);
-      requireCheck(
-        entry.originalSize === CONTENTS[entry.name][0],
-        `Wrong uncompressed size: ${entry.name}`,
-      );
-      requireCheck(
-        entry.compression === 0 || entry.compression === 8,
-        'Unsupported inner archive compression',
-      );
-      return true;
-    },
-  });
-  requireCheck(
-    seen.size === Object.keys(CONTENTS).length,
-    'Bundled model archive is missing required entries',
-  );
-  for (const [name, [bytes, sha]] of Object.entries(CONTENTS)) {
-    requireCheck(
-      entries[name]?.length === bytes && digest(entries[name]) === sha,
-      `Bundled file hash mismatch: ${name}`,
-    );
-    console.log(`PASS ${name}: ${bytes} bytes SHA256 ${sha}`);
-  }
-  console.log(
-    `PASS bundled model: ${PACK_BYTES} bytes (${(PACK_BYTES / 1048576).toFixed(2)} MiB) SHA256 ${PACK_SHA}`,
   );
   console.log(
     `PASS APK: ${size} bytes (${(size / 1048576).toFixed(2)} MiB), ARM64 only, standalone JS and ONNX Runtime present, no Qwen models or WAV/PCM/QA fixture assets`,

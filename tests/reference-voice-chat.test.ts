@@ -134,3 +134,24 @@ it('stages exact source metadata, rejects stale selection, and persists affirmat
   expect(f.save).toHaveBeenCalledOnce();
   expect(f.remove).not.toHaveBeenCalled();
 });
+
+it('routes the exact retry utterance and safe contextual follow-up through voice actions without chat model', async () => {
+  const f = await fixture();
+  const requestVoiceReference = vi.fn(async () => '找到候选，尚未应用参考音色');
+  const chat = new ChatService(f.store, f.provider, new Diagnostics(f.store), {
+    requestVoiceReference,
+    retrieve: async () => [],
+    afterRound: async () => {},
+  });
+  await chat.send(f.character.id, '你重新试试能不能找到崩铁流萤的声音，然后给我换上', () => {});
+  expect(requestVoiceReference).toHaveBeenLastCalledWith(f.character.id, '崩铁流萤', undefined);
+  let history = await chat.history(f.character.id);
+  expect(history.at(-1)).toMatchObject({ voiceSettings: true, voiceReferenceQuery: '崩铁流萤' });
+  await chat.send(f.character.id, '不是你帮我扒一个用吗', () => {});
+  expect(requestVoiceReference).toHaveBeenCalledTimes(2);
+  expect(requestVoiceReference).toHaveBeenLastCalledWith(f.character.id, '崩铁流萤', undefined);
+  history = await chat.history(f.character.id);
+  expect(history.at(-1)).toMatchObject({ voiceSettings: true, voiceReferenceQuery: '崩铁流萤' });
+  expect(f.provider).not.toHaveBeenCalled();
+  expect((await f.store.get('settings', f.character.id))?.voice?.referenceVoice).toBeUndefined();
+});

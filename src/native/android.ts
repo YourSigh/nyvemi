@@ -33,6 +33,21 @@ export interface VoiceReferenceCandidate {
   language: 'zh';
   usage: 'preview';
 }
+export interface LocalVoiceDownloadState {
+  phase:
+    | 'unconfigured'
+    | 'missing'
+    | 'downloading'
+    | 'paused'
+    | 'verifying'
+    | 'installing'
+    | 'ready'
+    | 'error';
+  bytes: number;
+  size: number;
+  configured: boolean;
+  error?: string;
+}
 export interface LocalVoiceState {
   bundled?: boolean;
   available: boolean;
@@ -41,6 +56,9 @@ export interface LocalVoiceState {
 }
 interface AndroidBridge {
   localVoiceState(): Promise<LocalVoiceState>;
+  localVoiceDownloadState(): Promise<LocalVoiceDownloadState>;
+  downloadLocalVoicePack(): Promise<void>;
+  pauseLocalVoiceDownload(): Promise<void>;
   prepareBundledLocalVoice(): Promise<LocalVoiceState>;
   findVoiceReferences(query: string): Promise<VoiceReferenceCandidate[]>;
   downloadVoiceReference(

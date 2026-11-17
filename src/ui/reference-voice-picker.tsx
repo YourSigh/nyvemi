@@ -1,3 +1,4 @@
+import { LocalVoiceDownload } from './local-voice-download';
 import { strictReferencePreview } from '../speech/strict-reference-preview';
 import { tuneSpeechWav } from '../speech/local-tuning';
 import { voiceOptions } from '../speech/preferences';
@@ -5,12 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { bridge, type LocalVoiceState, type VoiceReferenceCandidate } from '../native/android';
 import type { VoiceReference } from '../domain/models';
-import {
-  localVoiceState,
-  localVoiceConversion,
-  prepareBundledLocalVoice,
-  setLocalVoiceEnabled,
-} from '../speech/local-voice';
+import { localVoiceState, localVoiceConversion, setLocalVoiceEnabled } from '../speech/local-voice';
 import { applyLocalReference } from '../speech/apply-local-reference';
 import {
   loadReferenceWav,
@@ -55,6 +51,11 @@ export function ReferenceVoicePicker({
       .then(([state, settings]) => {
         if (!alive || generation.current !== run) return;
         setModel(state);
+        if (state.available && runtime.voiceReferenceLookup.takeDeferredModel(characterId, query)) {
+          void runtime.voiceReferenceLookup.find(characterId, query).then((found) => {
+            if (alive && generation.current === run) setResult(found);
+          });
+        }
         setSelected(
           settings?.voice?.referenceCandidate?.query === query
             ? settings.voice.referenceCandidate
@@ -97,11 +98,10 @@ export function ReferenceVoicePicker({
   };
   const search = () =>
     operate('查找中文参考录音…', async (run) => {
-      let state = await localVoiceState();
-      if (!state.available) state = await prepareBundledLocalVoice();
+      const state = await localVoiceState();
       if (generation.current !== run) return;
       setModel(state);
-      if (!state.available) throw Error('本机模型未准备完成');
+      if (!state.available) throw Error('请先点击下载并安装本机模型');
       const found = await runtime.voiceReferenceLookup.find(characterId, query);
       if (generation.current !== run) return;
       setResult(found);
@@ -221,11 +221,19 @@ export function ReferenceVoicePicker({
       {busy ? <Note>{busy}</Note> : null}
       {note ? <Note>{note}</Note> : null}
       {!model?.available ? (
-        <Button
-          secondary
-          title="准备模型并继续查找"
-          disabled={!!busy || !model?.bundled}
-          onPress={() => void search()}
+        <LocalVoiceDownload
+          onReady={() => {
+            void localVoiceState()
+              .then((state) => {
+                setModel(state);
+                if (
+                  state.available &&
+                  runtime.voiceReferenceLookup.takeDeferredModel(characterId, query)
+                )
+                  void search();
+              })
+              .catch(() => setNote('模型已下载，读取状态失败，请重试查找。'));
+          }}
         />
       ) : null}
       {result.candidates.map((candidate) => (

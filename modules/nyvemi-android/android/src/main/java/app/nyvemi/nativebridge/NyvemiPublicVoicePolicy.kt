@@ -16,9 +16,12 @@ internal object NyvemiPublicVoicePolicy {
   fun pages(query: String): List<Page> {
     var name = query.trim()
     require(name.length in 1..40 && name.none { it.code < 32 }) { "请输入准确的角色名称" }
+    // Only strip one exact, anchored game prefix. Never search/replace inside a role name.
+    val starRailPrefix = listOf("崩坏：星穹铁道", "崩坏:星穹铁道", "崩坏 星穹铁道", "崩坏星穹铁道", "星穹铁道", "崩铁", "星铁")
+      .firstOrNull { name.startsWith(it) }
     val games = when {
       name.startsWith("原神") -> { name = name.removePrefix("原神").trim(' ', '：', ':'); listOf("ys") }
-      name.startsWith("星铁") -> { name = name.removePrefix("星铁").trim(' ', '：', ':'); listOf("sr") }
+      starRailPrefix != null -> { name = name.removePrefix(starRailPrefix).trim(' ', '：', ':'); listOf("sr") }
       else -> listOf("sr", "ys")
     }
     name = aliases[name.lowercase()] ?: name

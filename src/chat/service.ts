@@ -1,5 +1,6 @@
 import {
   requestedVoiceReference,
+  contextualVoiceReference,
   voiceSettingsMessage,
   wantsVoiceSettings,
 } from './voice-settings';
@@ -175,7 +176,10 @@ export class ChatService {
           retry.status !== 'error')
       )
         throw new Error('这条消息不能重试');
-      const latestAt = (await this.store.list('messages', characterId, 1))[0]?.createdAt ?? 0;
+      const recentMessages = await this.store.list('messages', characterId, 20);
+      const latestAt = recentMessages[0]?.createdAt ?? 0;
+      const voiceQuery =
+        requestedVoiceReference(content) ?? contextualVoiceReference(content, recentMessages);
       user = retry;
       user = user
         ? { ...user, status: 'pending' }
@@ -191,8 +195,8 @@ export class ChatService {
           };
       await this.store.put('messages', user);
       onSaved();
-      if (!attachments.length && wantsVoiceSettings(content)) {
-        const query = requestedVoiceReference(content);
+      if (!attachments.length && (voiceQuery || wantsVoiceSettings(content))) {
+        const query = voiceQuery;
         let notice: string | undefined;
         if (query && this.hooks.requestVoiceReference) {
           this.activities.publish(characterId, { phase: 'thinking' });
@@ -204,7 +208,7 @@ export class ChatService {
           }
         }
         if (signal?.aborted) throw new Error('换声请求已取消');
-        const card = voiceSettingsMessage(user, notice);
+        const card = voiceSettingsMessage(user, notice, query);
         user = { ...user, status: 'complete', replyDisposition: 'reply' };
         await this.store.atomic(async (tx) => {
           await tx.put('messages', user!);

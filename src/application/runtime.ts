@@ -290,6 +290,7 @@ async function createRuntime() {
     requestVoiceReference: createLocalVoiceRequest({
       state: localVoiceState,
       find: voiceReferenceLookup.find,
+      deferModel: voiceReferenceLookup.deferModel,
       appliedQuery: async (cid) => (await store.get('settings', cid))?.voice?.referenceVoice?.query,
     }),
     clock: () => bridge().deviceTimeContext(),

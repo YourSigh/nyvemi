@@ -2,10 +2,20 @@ import type { VoiceReferenceCandidate } from '../native/android';
 export type ReferenceLookupResult = { candidates: VoiceReferenceCandidate[]; error?: string };
 /** Scoped to one runtime; a remount reads results rather than re-issuing searches. */
 export function createReferenceLookup(find: (query: string) => Promise<VoiceReferenceCandidate[]>) {
+  const deferred = new Set<string>();
   const results = new Map<string, ReferenceLookupResult>();
   const pending = new Map<string, Promise<ReferenceLookupResult>>();
   const key = (cid: string, query: string) => JSON.stringify([cid, query]);
   return {
+    deferModel(cid: string, query: string) {
+      deferred.add(key(cid, query));
+    },
+    takeDeferredModel(cid: string, query: string) {
+      const k = key(cid, query);
+      const found = deferred.has(k);
+      deferred.delete(k);
+      return found;
+    },
     peek(cid: string, query: string) {
       return results.get(key(cid, query));
     },

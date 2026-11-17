@@ -1,6 +1,10 @@
 import { ReferenceVoicePicker } from './reference-voice-picker';
 import { Icon } from './icons';
-import { requestedVoiceReference, wantsVoiceSettings } from '../chat/voice-settings';
+import {
+  contextualVoiceReference,
+  requestedVoiceReference,
+  wantsVoiceSettings,
+} from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
@@ -350,7 +354,9 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
     };
     try {
       const opening = await runtime.hatching.load(cid);
-      const voiceRequest = !attachments.length && wantsVoiceSettings(text);
+      const voiceRequest =
+        !attachments.length &&
+        (wantsVoiceSettings(text) || !!contextualVoiceReference(text, messages));
       if (opening?.status === 'asking' && !voiceRequest) {
         const next = await runtime.hatching.answer(
           cid,
@@ -603,12 +609,14 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                             </Text>
                           ) : null}
                           {m.voiceSettings ? (
+                            (m.voiceReferenceQuery ??
                             requestedVoiceReference(
                               messages.find((message) => message.id === m.groupId)?.content ?? '',
-                            ) ? (
+                            )) ? (
                               <ReferenceVoicePicker
                                 characterId={cid}
                                 query={
+                                  m.voiceReferenceQuery ??
                                   requestedVoiceReference(
                                     messages.find((message) => message.id === m.groupId)?.content ??
                                       '',
