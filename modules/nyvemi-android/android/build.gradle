@@ -11,6 +11,7 @@ android {
 dependencies {
   testImplementation 'junit:junit:4.13.2'
   implementation 'androidx.core:core-ktx:1.16.0'
+  implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2'
   implementation 'com.facebook.react:react-android'
   implementation 'androidx.work:work-runtime-ktx:2.9.1'
 }
@@ -58,4 +59,10 @@ if (includesQwenAbi) {
   android.sourceSets.main.jniLibs.srcDir new File(qwenWork, 'jni')
   android.sourceSets.main.assets.srcDir qwenAssets
   tasks.named('preBuild').configure { dependsOn buildQwen, stageQwenModel }
+}
+
+// Shared audited PCM/STFT and ONNX pipeline; excludes CLI/test tooling.
+android.sourceSets.main.java {
+  srcDir '../../../tools/openvoice-android'
+  include '**/*.kt', '**/AudioFrontend.java', '**/OpenVoicePipeline.java'
 }

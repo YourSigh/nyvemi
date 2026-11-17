@@ -7,6 +7,11 @@ import { tuneSpeechWav } from './local-tuning';
 type PreparedSpeech = { bytes: Uint8Array; notice?: string };
 export function createReferenceSpeechDriver(deps: {
   transport: ReferenceTransport;
+  localConversion?: {
+    state(): Promise<{ available: boolean; enabled: boolean }>;
+    convert(source: Uint8Array, reference: Uint8Array, signal: AbortSignal): Promise<Uint8Array>;
+    cancel(): Promise<void>;
+  };
   loadReference(id: string): Promise<Uint8Array>;
   playWav(id: string, bytes: Uint8Array): Promise<boolean>;
   fallback: SpeechDriver;
@@ -38,10 +43,15 @@ export function createReferenceSpeechDriver(deps: {
       const optionalReference = reference?.id
         ? (async () => {
             try {
-              if (!(await deps.transport.checkCompanion(signal, true))) return undefined;
+              // Resolve the mode once. Local failure must never send references remotely.
+              const local = await deps.localConversion?.state();
+              if (signal.aborted) return undefined;
+              if (local?.enabled) {
+                if (!local.available) return undefined;
+              } else if (!(await deps.transport.checkCompanion(signal, true))) return undefined;
               const bytes = await deps.loadReference(reference.id);
               assertReferenceWav(bytes);
-              return bytes;
+              return { bytes, local: !!local?.enabled };
             } catch {
               return undefined;
             }
@@ -56,7 +66,15 @@ export function createReferenceSpeechDriver(deps: {
         if (signal.aborted) throw Error('已取消');
         try {
           if (!sample) throw Error('参考换声不可用');
-          bytes = await deps.transport.convert(source, sample, signal);
+          // Mode can change while synthesis is in flight. Recheck before any upload.
+          // Never downgrade a preparation already chosen as local to remote.
+          const latest = await deps.localConversion?.state();
+          if (signal.aborted) throw Error('已取消');
+          const useLocal = sample.local || !!latest?.enabled;
+          if (useLocal && !latest?.available) throw Error('本机换声不可用');
+          bytes = useLocal
+            ? await deps.localConversion!.convert(source, sample.bytes, signal)
+            : await deps.transport.convert(source, sample.bytes, signal);
         } catch {
           if (signal.aborted) throw Error('已取消');
           notice = '参考换声不可用，已使用 DeepSeek 声音';
@@ -114,13 +132,18 @@ export function createReferenceSpeechDriver(deps: {
     },
     async stop() {
       cancel();
-      await Promise.all([deps.fallback.stop(), deps.stopPlayback?.()]);
+      await Promise.all([
+        deps.fallback.stop(),
+        deps.stopPlayback?.(),
+        deps.localConversion?.cancel(),
+      ]);
     },
     async release() {
       cancel();
       await Promise.all([
         deps.fallback.release?.() ?? deps.fallback.stop(),
         deps.releasePlayback?.() ?? deps.stopPlayback?.(),
+        deps.localConversion?.cancel(),
       ]);
     },
   };

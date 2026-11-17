@@ -25,7 +25,17 @@ export interface QwenPackState {
   size: number;
   error?: 'space' | 'network' | 'checksum' | 'import';
 }
+export interface LocalVoiceState {
+  available: boolean;
+  enabled: boolean;
+  detail: string;
+}
 interface AndroidBridge {
+  localVoiceState(): Promise<LocalVoiceState>;
+  importLocalVoicePack(uri: string): Promise<LocalVoiceState>;
+  setLocalVoiceEnabled(enabled: boolean): Promise<LocalVoiceState>;
+  convertLocalVoice(sourceUri: string, referenceUri: string): Promise<string>;
+  cancelLocalVoice(): Promise<void>;
   speechState(): Promise<LocalSpeechState>;
   qwenPackState(): Promise<QwenPackState>;
   downloadQwenPack(): Promise<void>;

@@ -1,3 +1,4 @@
+import { localVoiceConversion } from '../speech/local-voice';
 import { HatchingService } from '../characters/hatching';
 import { recoverRigMetadata } from '../appearance/rig-metadata';
 import { MediaService } from '../media/service';
@@ -273,6 +274,7 @@ async function createRuntime() {
   const voiceDriver = (onFallback?: (message: string) => void) =>
     createReferenceSpeechDriver({
       transport: referenceTransport,
+      localConversion: localVoiceConversion,
       loadReference: loadReferenceWav,
       playWav: playReferenceWav,
       fallback: systemSpeechDriver,

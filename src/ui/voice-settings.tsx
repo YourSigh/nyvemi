@@ -1,3 +1,5 @@
+import { localVoiceState, importLocalVoicePack, setLocalVoiceEnabled } from '../speech/local-voice';
+import type { LocalVoiceState } from '../native/android';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Switch, View, Text } from 'react-native';
 import Slider from '@react-native-community/slider';
@@ -104,6 +106,8 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [connection, setConnection] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voiceNote, setVoiceNote] = useState('');
+  const [localModel, setLocalModel] = useState<LocalVoiceState>();
+  const [modelBusy, setModelBusy] = useState(false);
   const sampleRun = useRef(0);
   const referenceDriver = useMemo(() => runtime.voiceDriver(setVoiceNote), [runtime]);
   const [draft, setDraft] = useState<LocalVoiceTuning>();
@@ -115,6 +119,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     const options = voiceOptions(settings?.voice);
     setConfig(options);
     setDraft(undefined);
+    setLocalModel(await localVoiceState());
   }, [runtime, cid]);
   useFocusEffect(
     useCallback(() => {
@@ -180,6 +185,45 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
     setConnection(false);
     setToken('');
     setVoiceNote('已断开换声服务。普通 DeepSeek 朗读不受影响。');
+  };
+  const importModel = async () => {
+    setModelBusy(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
+        copyToCacheDirectory: false,
+        multiple: false,
+      });
+      if (result.canceled) return;
+      await referenceDriver.stop();
+      const next = await importLocalVoicePack(result.assets[0].uri);
+      setLocalModel(next);
+      setVoiceNote(
+        next.enabled
+          ? '模型包已校验并导入，本机换声仍保持启用。参考录音只留在手机。'
+          : '模型包已校验并导入。请手动开启本机换声；参考录音只留在手机。',
+      );
+    } catch (e) {
+      setVoiceNote(e instanceof Error ? e.message : '模型包导入失败');
+    } finally {
+      setModelBusy(false);
+    }
+  };
+  const toggleLocalModel = async (enabled: boolean) => {
+    setModelBusy(true);
+    try {
+      await referenceDriver.stop();
+      setLocalModel(await setLocalVoiceEnabled(enabled));
+      setVoiceNote(
+        enabled
+          ? '已启用本机换声。换声失败时播放同一次 DeepSeek 原声，不会发送参考录音到远程服务。'
+          : '已关闭本机换声。若配置了远程服务，之后的参考换声会使用该服务。',
+      );
+    } catch (e) {
+      setVoiceNote(e instanceof Error ? e.message : '本机换声设置未保存');
+    } finally {
+      setModelBusy(false);
+    }
   };
   const selectWav = async () => {
     try {
@@ -383,7 +427,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         <Text style={{ color: palette.ink, fontWeight: '600' }}>参考音色</Text>
         <Note>
           {config.referenceVoice
-            ? `当前：${config.referenceVoice.label}。用 DeepSeek 生成语音，再由你配置的换声服务处理；不可用时回退本机声音。`
+            ? `当前：${config.referenceVoice.label}。DeepSeek 生成语音后${localModel?.enabled ? '仅在本机换声' : '由已配置的远程服务换声'}；换声不可用时保留同一次 DeepSeek 原声。`
             : '在聊天里说「我希望你的声音跟某个角色一样」可查找。也可以选择有权使用的 WAV。'}
         </Note>
         {config.referenceCandidate ? (
@@ -433,6 +477,30 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
             />
           </>
         ) : null}
+        <Details title={localModel?.enabled ? '本机换声 · 已启用（实验）' : '本机换声（实验）'}>
+          <Note>
+            单独导入经校验的 OpenVoice V2 模型包，约 125 MiB，不包含在基础安装包中。
+            开启后，参考录音和换声运算留在手机；DeepSeek 朗读仍需要联网。
+            换声失败只播放原声，不自动改用远程换声。音质仍在验证中。
+          </Note>
+          <Note>{localModel?.detail ?? '正在读取本机模型状态…'}</Note>
+          <TextButton
+            title={modelBusy ? '正在处理模型…' : '导入本机模型 ZIP'}
+            disabled={modelBusy || busy || voiceBusy}
+            onPress={() => void importModel()}
+          />
+          <View
+            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <Text style={{ color: palette.ink }}>启用本机参考换声</Text>
+            <Switch
+              accessibilityLabel="启用本机参考换声"
+              value={!!localModel?.enabled}
+              disabled={modelBusy || (!localModel?.available && !localModel?.enabled)}
+              onValueChange={(value) => void toggleLocalModel(value)}
+            />
+          </View>
+        </Details>
         <Details title={connection ? '换声服务 · 已保存' : '连接换声服务'}>
           <Note>
             请使用你信任的服务。换声时会把合成音频和参考音频发送给它，不会发 DeepSeek Key。

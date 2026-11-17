@@ -11,6 +11,14 @@ const mocks = vi.hoisted(() => {
   return {
     play,
     stop,
+    localState: vi.fn(async () => ({ available: true, enabled: false, detail: '模型就绪' })),
+    enableLocal: vi.fn(async (enabled: boolean) => ({
+      available: true,
+      enabled,
+      detail: '模型就绪',
+    })),
+    importLocal: vi.fn(async () => ({ available: true, enabled: false, detail: '模型就绪' })),
+    pick: vi.fn(),
     settings,
     save: vi.fn(async (_s: unknown, _c: unknown, p: object) => ({ ...settings.voice, ...p })),
     runtime: { store: { get: vi.fn(async () => settings) }, voiceDriver: () => ({ play, stop }) },
@@ -18,7 +26,12 @@ const mocks = vi.hoisted(() => {
 });
 vi.mock('react-native', () => ({ View: 'View', Text: 'Text', Switch: 'Switch' }));
 vi.mock('@react-native-community/slider', () => ({ default: 'Slider' }));
-vi.mock('expo-document-picker', () => ({ getDocumentAsync: vi.fn() }));
+vi.mock('expo-document-picker', () => ({ getDocumentAsync: mocks.pick }));
+vi.mock('../src/speech/local-voice', () => ({
+  localVoiceState: mocks.localState,
+  setLocalVoiceEnabled: mocks.enableLocal,
+  importLocalVoicePack: mocks.importLocal,
+}));
 vi.mock('@react-navigation/native', async () => {
   const React = await import('react');
   return { useFocusEffect: (fn: () => void) => React.useEffect(fn, [fn]) };
@@ -103,4 +116,44 @@ it('shows seven local sliders, previews unsaved ordinary DSP without reference, 
   });
   await act(async () => tree.unmount());
   vi.unstubAllGlobals();
+});
+
+it('keeps local model opt-in, streams an import URI, and enables only by toggle', async () => {
+  vi.stubGlobal('__DEV__', false);
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  let tree!: ReactTestRenderer;
+  await act(async () => {
+    tree = create(
+      createElement(VoiceSettingsScreen, { route: { params: { characterId: 'c' } } } as never),
+    );
+  });
+  const toggle = () =>
+    tree.root.findAll(
+      (n) => n.type === ('Switch' as never) && n.props.accessibilityLabel === '启用本机参考换声',
+    )[0];
+  expect(toggle().props.value).toBe(false);
+  expect(mocks.enableLocal).not.toHaveBeenCalled();
+  mocks.pick.mockResolvedValueOnce({
+    canceled: false,
+    assets: [{ uri: 'content://model.zip', name: 'model.zip' }],
+  });
+  await act(async () => {
+    await tree.root
+      .findAll((n) => n.type === ('TextButton' as never) && n.props.title === '导入本机模型 ZIP')[0]
+      .props.onPress();
+  });
+  expect(mocks.pick).toHaveBeenLastCalledWith(
+    expect.objectContaining({ copyToCacheDirectory: false }),
+  );
+  expect(mocks.importLocal).toHaveBeenCalledWith('content://model.zip');
+  expect(mocks.enableLocal).not.toHaveBeenCalled();
+  expect(toggle().props.value).toBe(false);
+  await act(async () => {
+    toggle().props.onValueChange(true);
+  });
+  expect(mocks.enableLocal).toHaveBeenCalledWith(true);
+  expect(toggle().props.value).toBe(true);
+  await act(async () => {
+    tree.unmount();
+  });
 });

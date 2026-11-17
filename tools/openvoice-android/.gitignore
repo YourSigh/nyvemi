@@ -1,0 +1,10 @@
+*.onnx
+*.zip
+*.wav
+*.pcm
+*.f32
+*.i64
+*.class
+*.jar
+*.aar
+__pycache__/

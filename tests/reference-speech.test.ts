@@ -254,3 +254,97 @@ it('abort rejects promptly even if native fetch ignores signal', async () => {
   c.abort();
   await expect(p).rejects.toThrow();
 });
+
+describe('opt-in local reference conversion', () => {
+  function localFixture(enabled = true, available = true) {
+    const source = wav();
+    const converted = wav();
+    converted[44] = 42;
+    const transport = {
+      checkCompanion: vi.fn(async () => true),
+      synthesize: vi.fn(async () => source),
+      convert: vi.fn(async () => converted),
+      resolveReference: vi.fn(),
+      search: vi.fn(),
+    };
+    const localConversion = {
+      state: vi.fn(async () => ({ enabled, available })),
+      convert: vi.fn(async () => converted),
+      cancel: vi.fn(async () => {}),
+    };
+    const playWav = vi.fn(async () => true);
+    const fallback = { play: vi.fn(async () => true), stop: vi.fn(async () => {}) };
+    const driver = createReferenceSpeechDriver({
+      transport,
+      localConversion,
+      loadReference: async () => wav(),
+      playWav,
+      fallback,
+    });
+    return { source, converted, transport, localConversion, playWav, fallback, driver };
+  }
+  it('uses only the on-device converter when enabled', async () => {
+    const f = localFixture();
+    expect(await f.driver.play('a', 'hello', options)).toBe(true);
+    expect(f.localConversion.convert).toHaveBeenCalledOnce();
+    expect(f.playWav).toHaveBeenCalledWith('a', f.converted);
+    expect(f.transport.checkCompanion).not.toHaveBeenCalled();
+    expect(f.transport.convert).not.toHaveBeenCalled();
+    expect(f.transport.synthesize).toHaveBeenCalledOnce();
+  });
+  it.each(['missing', 'failed', 'state-failed'])(
+    'fails closed to the same source on %s, never remote',
+    async (mode) => {
+      const f = localFixture(true, mode !== 'missing');
+      if (mode === 'failed') f.localConversion.convert.mockRejectedValue(Error('failure'));
+      if (mode === 'state-failed') f.localConversion.state.mockRejectedValue(Error('failure'));
+      expect(await f.driver.play('a', 'hello', options)).toBe(true);
+      expect(f.playWav).toHaveBeenCalledWith('a', f.source);
+      expect(f.transport.checkCompanion).not.toHaveBeenCalled();
+      expect(f.transport.convert).not.toHaveBeenCalled();
+      expect(f.fallback.play).not.toHaveBeenCalled();
+      expect(f.transport.synthesize).toHaveBeenCalledOnce();
+    },
+  );
+  it('retains explicit remote mode when local is disabled', async () => {
+    const f = localFixture(false);
+    await f.driver.play('a', 'hello', options);
+    expect(f.transport.convert).toHaveBeenCalledOnce();
+    expect(f.localConversion.convert).not.toHaveBeenCalled();
+  });
+  it('rechecks privacy mode when local is enabled during pending synthesis', async () => {
+    const f = localFixture(false);
+    let finish!: (bytes: ReturnType<typeof wav>) => void;
+    f.transport.synthesize.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = f.driver.play('a', 'hello', options);
+    await vi.waitFor(() => expect(f.transport.checkCompanion).toHaveBeenCalledOnce());
+    f.localConversion.state.mockResolvedValue({ enabled: true, available: true });
+    finish(f.source);
+    expect(await pending).toBe(true);
+    expect(f.transport.convert).not.toHaveBeenCalled();
+    expect(f.localConversion.convert).toHaveBeenCalledOnce();
+  });
+  it('cancels local work and never plays a late converted result', async () => {
+    const f = localFixture();
+    let finish!: (bytes: ReturnType<typeof wav>) => void;
+    f.localConversion.convert.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = f.driver.play('a', 'hello', options);
+    await vi.waitFor(() => expect(f.localConversion.convert).toHaveBeenCalledOnce());
+    await f.driver.stop();
+    finish(f.converted);
+    expect(await pending).toBe(false);
+    expect(f.localConversion.cancel).toHaveBeenCalledOnce();
+    expect(f.playWav).not.toHaveBeenCalled();
+    expect(f.fallback.play).not.toHaveBeenCalled();
+  });
+});
