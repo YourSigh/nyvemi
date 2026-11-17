@@ -1,4 +1,4 @@
-import { LocalVoicePrepare } from './local-voice-prepare';
+import { ReferenceVoicePicker } from './reference-voice-picker';
 import { Icon } from './icons';
 import { requestedVoiceReference, wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
@@ -606,7 +606,15 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                             requestedVoiceReference(
                               messages.find((message) => message.id === m.groupId)?.content ?? '',
                             ) ? (
-                              <LocalVoicePrepare
+                              <ReferenceVoicePicker
+                                characterId={cid}
+                                query={
+                                  requestedVoiceReference(
+                                    messages.find((message) => message.id === m.groupId)?.content ??
+                                      '',
+                                  )!
+                                }
+                                onApplied={() => void refresh()}
                                 onSettings={() =>
                                   navigation.navigate('VoiceSettings', { characterId: cid })
                                 }

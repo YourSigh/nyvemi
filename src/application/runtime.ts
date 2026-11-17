@@ -1,3 +1,4 @@
+import { createReferenceLookup } from '../speech/reference-lookup';
 import { createLocalVoiceRequest } from '../speech/local-voice-request';
 import { localVoiceConversion, localVoiceState } from '../speech/local-voice';
 import { HatchingService } from '../characters/hatching';
@@ -254,6 +255,9 @@ async function createRuntime() {
     allowDevLoopback: __DEV__,
     fetch: nativeFetch as unknown as typeof fetch,
   });
+  const voiceReferenceLookup = createReferenceLookup((query) =>
+    bridge().findVoiceReferences(query),
+  );
   const referenceVoice = createReferenceVoiceService(
     store,
     { save: saveReferenceWav, remove: removeReferenceWav },
@@ -285,8 +289,8 @@ async function createRuntime() {
     agent: (input) => agent.run(input),
     requestVoiceReference: createLocalVoiceRequest({
       state: localVoiceState,
-      hasCompanion: async () => !!(await getVoiceCompanion()),
-      requestReference: referenceVoice.request,
+      find: voiceReferenceLookup.find,
+      appliedQuery: async (cid) => (await store.get('settings', cid))?.voice?.referenceVoice?.query,
     }),
     clock: () => bridge().deviceTimeContext(),
     scheduleRequested: async (user, delayMs) => {
@@ -349,6 +353,7 @@ async function createRuntime() {
     provider,
     saveProvider,
     referenceVoice,
+    voiceReferenceLookup,
     referenceTransport,
     voiceDriver,
     themes: new ThemeService(store, provider, agentWeb),

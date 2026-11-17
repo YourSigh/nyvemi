@@ -1,3 +1,4 @@
+import { applyLocalReference } from '../speech/apply-local-reference';
 import { LocalVoicePrepare } from './local-voice-prepare';
 import { localVoiceState, importLocalVoicePack, setLocalVoiceEnabled } from '../speech/local-voice';
 import type { LocalVoiceState } from '../native/android';
@@ -110,7 +111,14 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
   const [localModel, setLocalModel] = useState<LocalVoiceState>();
   const [modelBusy, setModelBusy] = useState(false);
   const sampleRun = useRef(0);
-  const referenceDriver = useMemo(() => runtime.voiceDriver(setVoiceNote), [runtime]);
+  const referenceDriver = useMemo(
+    () =>
+      runtime.voiceDriver((message) => {
+        setVoiceNote(message);
+        setError(message);
+      }),
+    [runtime],
+  );
   const [draft, setDraft] = useState<LocalVoiceTuning>();
   const savedTuning: LocalVoiceTuning = { ...defaultLocalVoiceTuning, ...config.localTuning };
   const tuning = draft ?? savedTuning;
@@ -237,9 +245,22 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       const { uri, name } = result.assets[0];
       await referenceDriver.stop();
       const bytes = await readPickedReference(uri);
-      await runtime.referenceVoice.importOwn(cid, bytes, name.replace(/\.wav$/i, ''));
+      await applyLocalReference(
+        {
+          state: localVoiceState,
+          enable: setLocalVoiceEnabled,
+          apply: async () =>
+            runtime.referenceVoice.importOwn(cid, bytes, name.replace(/\.wav$/i, '')),
+        },
+        cid,
+        'import-own',
+      );
+      setLocalModel((previous) => ({
+        ...(previous ?? { available: true, detail: '本机模型已就绪' }),
+        enabled: true,
+      }));
       await syncVoice();
-      setVoiceNote('参考音色已保存。');
+      setVoiceNote('已应用参考并启用本机换声；下一句使用此参考，尚未试听转换效果。');
     } catch (e) {
       setVoiceNote(e instanceof Error ? e.message : '没有导入成功');
     }
@@ -250,9 +271,21 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       if (!selected) return;
       await loadReferenceWav(selected.id);
       await referenceDriver.stop();
-      await runtime.referenceVoice.useCandidate(cid);
+      await applyLocalReference(
+        {
+          state: localVoiceState,
+          enable: setLocalVoiceEnabled,
+          apply: runtime.referenceVoice.useCandidate,
+        },
+        cid,
+        selected.id,
+      );
+      setLocalModel((previous) => ({
+        ...(previous ?? { available: true, detail: '本机模型已就绪' }),
+        enabled: true,
+      }));
       await syncVoice();
-      setVoiceNote('参考音色已保存。');
+      setVoiceNote('已应用参考并启用本机换声；下一句使用此参考，尚未试听转换效果。');
     } catch {
       setVoiceNote('无法启用这段参考声音');
     }
@@ -315,7 +348,6 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       const played = await referenceDriver.play(`preview:${Date.now()}`, sample, {
         ...config,
         localTuning: tuning,
-        referenceVoice: undefined,
         enabled: true,
       });
       if (!played && sampleRun.current === run) setError('这次试听未完成，请稍后重试。');
@@ -356,7 +388,8 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
       <Card>
         <Text style={{ color: palette.ink, fontWeight: '600' }}>本地声音微调</Text>
         <Note>
-          DeepSeek 生成语音后在本机调整，不需要换声服务。试听不会保存；点「应用到聊天」后生效。
+          DeepSeek
+          生成语音后在本机调整，不需要换声服务。试听使用当前参考音色与微调；试听不会保存微调，点「应用到聊天」后生效。
         </Note>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {presets.map((preset) => (
@@ -409,7 +442,7 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <View style={{ flex: 1 }}>
             <Button
-              title={busy ? '停止试听' : '普通试听'}
+              title={busy ? '停止试听' : '试听当前声音'}
               secondary
               disabled={savingTuning || voiceBusy}
               onPress={() => void (busy ? stopPreview() : preview())}

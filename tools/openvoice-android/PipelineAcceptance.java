@@ -7,7 +7,21 @@ import org.json.*;
 
 /** Device-only regression: cancel ongoing work, reuse session, compare full CLI output. */
 public final class PipelineAcceptance {
+ public static void segmentationTests(){
+  for(int length:new int[]{1024,220500,220501,441000,661500}){
+   float[] source=new float[length];java.util.Arrays.fill(source,.1f);int[] ends=OpenVoicePipeline.segmentEnds(source);int start=0;
+   for(int end:ends){if(end-start<1024||end-start>220500)throw new AssertionError("Segment bounds");start=end;}
+   if(start!=length)throw new AssertionError("Incomplete coverage");
+   if(length<=220500&&ends.length!=1)throw new AssertionError("Short audio changed");
+  }
+  float[] quiet=new float[441000];java.util.Arrays.fill(quiet,.5f);java.util.Arrays.fill(quiet,170000,171000,0f);
+  int first=OpenVoicePipeline.segmentEnds(quiet)[0];if(first<170220||first>170780)throw new AssertionError("Quiet boundary not selected");
+  for(int bad:new int[]{0,1023,661501}){try{OpenVoicePipeline.segmentEnds(new float[bad]);throw new AssertionError("Expected bound rejection");}catch(IllegalArgumentException expected){}}
+  float[] nonfinite=new float[1024];nonfinite[0]=Float.NaN;try{OpenVoicePipeline.segmentEnds(nonfinite);throw new AssertionError("NaN accepted");}catch(IllegalArgumentException expected){}
+  System.out.println("PASS segmentation bounds, quiet boundary, complete coverage, and invalid input");
+ }
  public static void main(String[] args)throws Exception{
+  segmentationTests();if(args.length==0)return;
   File root=new File(args[0]);
   AudioFrontend.Audio s=AudioFrontend.readWav(Files.readAllBytes(new File(root,"source.wav").toPath()));
   AudioFrontend.Audio r=AudioFrontend.readWav(Files.readAllBytes(new File(root,"reference.wav").toPath()));

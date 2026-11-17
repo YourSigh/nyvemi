@@ -69,10 +69,20 @@ const directory = (cache = false) => {
   return dir;
 };
 
-export function saveReferenceWav(bytes: Uint8Array, label: string): VoiceReference {
+export function saveReferenceWav(
+  bytes: Uint8Array,
+  label: string,
+  metadata?: Partial<
+    Pick<
+      VoiceReference,
+      'query' | 'sourceUrl' | 'audioUrl' | 'language' | 'usage' | 'authorizedByUser'
+    >
+  >,
+): VoiceReference {
   if (bytes.length > maximumWav) throw Error('参考声音不能超过 3 MiB');
   assertReferenceWav(bytes, 30);
   const reference = VoiceReferenceSchema.parse({
+    ...metadata,
     id: id(),
     label:
       label

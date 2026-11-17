@@ -1,3 +1,4 @@
+import type { VoiceReference } from '../src/domain/models';
 import { expect, it, vi } from 'vitest';
 import { CharacterService, defaultAnswers } from '../src/characters/service';
 import { ChatService } from '../src/chat/service';
@@ -34,7 +35,8 @@ async function fixture() {
   );
   let ordinal = 0;
   const remove = vi.fn();
-  const save = vi.fn((_wav: Uint8Array, label: string) => ({
+  const save = vi.fn((_wav: Uint8Array, label: string, metadata?: Partial<VoiceReference>) => ({
+    ...metadata,
     id: `12345678-0000-0000-0000-${String(++ordinal).padStart(12, '0')}`,
     label,
   }));
@@ -100,4 +102,35 @@ it('a trusted prepared reference can activate, abort keeps the saved voice and c
   await service.clear(f.character.id);
   expect((await f.store.get('settings', f.character.id))?.voice?.referenceVoice).toBeUndefined();
   expect(f.remove).toHaveBeenCalledWith(ref?.id);
+});
+
+it('stages exact source metadata, rejects stale selection, and persists affirmative use of same file', async () => {
+  const f = await fixture();
+  const service = createReferenceVoiceService(
+    f.store,
+    { save: f.save, remove: f.remove },
+    vi.fn(),
+    async () => false,
+  );
+  const metadata = {
+    query: '流萤',
+    label: '流萤 中文自我介绍',
+    sourceUrl: 'https://wiki.example/firefly',
+    audioUrl: 'https://audio.example/firefly.wav',
+    language: 'zh' as const,
+    usage: 'preview' as const,
+  };
+  const selected = await service.stageCandidate(
+    f.character.id,
+    new Uint8Array([1, 2, 3]),
+    metadata,
+  );
+  expect((await f.store.get('settings', f.character.id))?.voice?.referenceVoice).toBeUndefined();
+  await expect(service.useCandidate(f.character.id, 'stale')).rejects.toThrow('已改变');
+  expect((await f.store.get('settings', f.character.id))?.voice?.referenceVoice).toBeUndefined();
+  await service.useCandidate(f.character.id, selected.id);
+  const applied = (await f.store.get('settings', f.character.id))?.voice?.referenceVoice;
+  expect(applied).toEqual({ ...metadata, id: selected.id, authorizedByUser: true });
+  expect(f.save).toHaveBeenCalledOnce();
+  expect(f.remove).not.toHaveBeenCalled();
 });

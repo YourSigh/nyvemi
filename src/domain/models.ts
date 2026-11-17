@@ -194,6 +194,12 @@ export const VoiceReferenceSchema = z
   .object({
     id: z.string().regex(/^[a-f0-9-]{36}$/),
     label: z.string().trim().min(1).max(120),
+    query: z.string().trim().min(1).max(40).optional(),
+    sourceUrl: z.string().url().max(2048).optional(),
+    audioUrl: z.string().url().max(2048).optional(),
+    language: z.literal('zh').optional(),
+    usage: z.literal('preview').optional(),
+    authorizedByUser: z.literal(true).optional(),
   })
   .strict();
 export type VoiceReference = z.infer<typeof VoiceReferenceSchema>;

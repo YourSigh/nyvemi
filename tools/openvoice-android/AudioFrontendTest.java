@@ -20,7 +20,16 @@ public final class AudioFrontendTest {
     byte[] bad=mono.clone();bad[20]=3;rejects(()->AudioFrontend.readWav(bad));
     rejects(()->AudioFrontend.readWav(java.util.Arrays.copyOf(mono,mono.length-1)));
     rejects(()->AudioFrontend.resample(new float[48000*30+1],48000));
-    rejects(()->AudioFrontend.resample(new float[1024],8000));
+    rejects(()->AudioFrontend.resample(new float[1024],7999));
+    rejects(()->AudioFrontend.resample(new float[1024],96001));
+    for(int rate:new int[]{8000,11025,12000,12345,32000,88200,96000}){
+      float[] sample=new float[1024];java.util.Arrays.fill(sample,.1f);
+      float[] converted=AudioFrontend.resample(sample,rate);require(converted.length==(int)Math.ceil(1024.0*22050/rate));
+      for(float value:converted)require(Float.isFinite(value));
+      byte[] atRate=AudioFrontend.wav(sample);ByteBuffer header=ByteBuffer.wrap(atRate).order(ByteOrder.LITTLE_ENDIAN);header.putInt(24,rate);header.putInt(28,rate*2);
+      require(AudioFrontend.readWav(atRate).rate==rate);
+    }
+    for(int rate:new int[]{7999,96001}){byte[] badRate=mono.clone();ByteBuffer header=ByteBuffer.wrap(badRate).order(ByteOrder.LITTLE_ENDIAN);header.putInt(24,rate);header.putInt(28,rate*2);rejects(()->AudioFrontend.readWav(badRate));}
     rejects(()->AudioFrontend.spectrogram(new float[384]));
     rejects(()->AudioFrontend.wav(new float[]{Float.NaN}));
     float[] high=new float[48000];for(int i=0;i<high.length;i++)high[i]=(float)Math.sin(2*Math.PI*15000*i/48000);
@@ -31,6 +40,7 @@ public final class AudioFrontendTest {
   }
   public static void main(String[] args)throws Exception {
     edgeTests();
+    if(args.length==0){System.out.println("PASS frontend rate bounds and format edge cases");return;}
     int sr=Integer.parseInt(args[1]);byte[] data=Files.readAllBytes(Paths.get(args[0]));
     ByteBuffer b=ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);float[] input=new float[data.length/2];for(int i=0;i<input.length;i++)input[i]=b.getShort()/32768f;
     float[] y=AudioFrontend.resample(input,sr);AudioFrontend.Spectrum s=AudioFrontend.spectrogram(y);

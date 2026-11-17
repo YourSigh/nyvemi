@@ -63,8 +63,9 @@ Import and enabled preference persist across restarts; importing alone does not
 turn the switch on. The pack is bundled locally in the APK; no online model host or downloader is used.
 
 Use an authorized local PCM16 WAV reference, then explicitly enable local mode.
-Source is limited to 10 seconds per segment; reference to 30 seconds. Supported
-input rates: 16/22.05/24/44.1/48 kHz, mono/stereo. Output is mono 22.05 kHz WAV.
+Source is limited to 30 seconds and internally segmented near eight-second low-energy
+boundaries when longer than ten seconds; reference is limited to 30 seconds. Supported
+input rates: integer 8–96 kHz, PCM16 mono/stereo. Output is mono 22.05 kHz WAV.
 Missing models, unsupported audio, oversized segments or inference failures reuse
 that one DeepSeek synthesis; there is **no automatic reference upload to remote
 conversion while local mode is selected**, and no second synthesis fee. Existing
@@ -132,7 +133,7 @@ no Qwen weights or audio fixtures, and a strict total below 200,000,000 bytes.
 The ordinary asset/credential release check also runs. Current project release
 signing still uses its existing development certificate, not a store-release key.
 
-Measured standard release APK: **185,197,546 bytes (185.20 MB / 176.62 MiB)**,
+Measured standard release APK: **185,230,106 bytes (185.23 MB / 176.65 MiB)**,
 including the bundled model. The Qwen engine license/native libraries remain, but
 its 761 MB weight is absent and its UI stays hidden. This is package size, not
 installed storage: first local preparation adds about 125 MiB private model files,
@@ -153,3 +154,52 @@ restart preserves ready/off. Natural-language recognition (including the exact
 Chinese request), no implicit preparation/search, and one-action component behavior
 are unit/component tested, not an emulator full-chat UI run. `npm run verify` passes
 585 tests (17 skipped), native tests and ARM64 assembly. Redmi/production app untouched.
+
+## 0.20.18 phone-native reference workflow
+
+`NyvemiPublicVoiceReferences` ports the original web parser/decoder workflow onto
+Android: anonymous HTTPS to allowlisted BWIKI pages/CDN, exact character/Chinese
+column validation and bounded downloads; platform MediaCodec normalizes public
+MP3/Ogg recordings to 22.05 kHz PCM16. No Mac endpoint, provider credential, whole
+chat message, cookie, or audio upload is involved in this lookup. A small exact
+same-character Chinese Fandom archive fallback reuses the original web paths;
+it is not a license grant and never replaces a missing voice with another person.
+
+Natural named requests search once and cache candidates. A pending request resumes
+after bundled-model preparation. Candidates retain labels and provenance; raw
+preview, explicit converted audition, and application are separate states.
+Converted audition is a manual action that may incur one ordinary DeepSeek TTS
+request; it uses `previewLocalVoice` without changing enabled state or persistent
+role settings. Failure/cancellation plays no replacement audio. Applying verifies
+the expected candidate ID, records the user's explicit rights assertion, enables
+local conversion and reuses that exact reference on later requests.
+
+The public reference cache is bounded separately from saved user references.
+No external model hosting/downloader or public deployment was added. Old explicit
+remote companion support remains advanced/optional, not a prerequisite for the new
+primary path. Source availability and audio quality must be reported separately
+from converter execution, with real-phone workflow evidence before claiming success.
+
+### 0.20.18 actual Redmi workflow acceptance
+
+An isolated `app.nyvemi.qa.web` build used actual ChatScreen/ChatService named
+requests and actual Android public-source retrieval, not a desktop companion.
+Firefly's exact Chinese Fandom archive and Kafka's Chinese BWIKI clip were found,
+downloaded, decoded to 22.05 kHz and completely played as **raw source auditions**.
+The public actor clips were not applied by the test operator.
+
+A distinctly labelled authorized synthetic candidate then completed strict
+pre-application converted preview (2222 ms conversion; enabled remained false and
+no role reference was applied), explicit same-ID application, force-stop/restart
+persistence, and the real chat playback queue's local conversion (2676 ms). An
+unknown-role request failed clearly without replacing the selected reference;
+a later chat conversion still succeeded (2213 ms). Cached official TTS was used;
+no paid speech request or production-phone overwrite occurred. This does not
+claim subjective actor similarity or a live cloud-LLM conversational test.
+
+The final production ARM64 0.20.18 package is 185,230,106 bytes, SHA-256
+`c52bf9bba3ee391caf2abdb9e70d0de6dc70af6045791962a56a0632ca115531`.
+Asset/credential checks and the model archive/four content checks pass. Final
+TypeScript/lint and 600 tests pass (17 skipped); native policy tests/build pass.
+New long-clip segmentation and all integer 8–96 kHz frontend rates are covered by
+pure tests; long-clip phone inference/seam quality was not separately auditioned.

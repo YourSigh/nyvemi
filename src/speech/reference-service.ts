@@ -8,7 +8,7 @@ type Resolution = {
   usage: 'preview' | 'reference';
 };
 type Files = {
-  save: (bytes: Uint8Array, label: string) => VoiceReference;
+  save: (bytes: Uint8Array, label: string, metadata?: Partial<VoiceReference>) => VoiceReference;
   remove: (id: string) => void;
 };
 
@@ -24,9 +24,10 @@ export function createReferenceVoiceService(
     label: string,
     use: boolean,
     signal?: AbortSignal,
+    metadata?: Partial<VoiceReference>,
   ) {
     if (signal?.aborted) throw Error('换声请求已取消');
-    const reference = files.save(bytes, label);
+    const reference = files.save(bytes, label, metadata);
     try {
       const removed = await store.atomic(async (tx) => {
         const settings = await tx.get('settings', cid);
@@ -72,17 +73,34 @@ export function createReferenceVoiceService(
         : `找到「${reference.label}」的可播放录音，已保存在这个角色的声音设置里。可以先听；它还没有替换当前声音。`;
     },
     importOwn(cid: string, bytes: Uint8Array, label: string) {
-      return put(cid, bytes, label, true);
+      return put(cid, bytes, label, true, undefined, { authorizedByUser: true });
     },
-    async useCandidate(cid: string) {
+    stageCandidate(
+      cid: string,
+      bytes: Uint8Array,
+      metadata: Pick<
+        VoiceReference,
+        'label' | 'query' | 'sourceUrl' | 'audioUrl' | 'language' | 'usage'
+      >,
+    ) {
+      return put(cid, bytes, metadata.label, false, undefined, metadata);
+    },
+    async useCandidate(cid: string, expectedId?: string) {
       const previous = await store.atomic(async (tx) => {
         const settings = await tx.get('settings', cid);
         if (!settings) throw Error('角色不存在');
         const { referenceCandidate, ...voice } = voiceOptions(settings.voice);
         if (!referenceCandidate) throw Error('没有可选的参考声音');
+        if (expectedId && referenceCandidate.id !== expectedId)
+          throw Error('参考声音已改变，请重新试听确认');
         await tx.put('settings', {
           ...settings,
-          voice: { ...voice, referenceVoice: referenceCandidate, enabled: true, playbackSet: true },
+          voice: {
+            ...voice,
+            referenceVoice: { ...referenceCandidate, authorizedByUser: true },
+            enabled: true,
+            playbackSet: true,
+          },
         });
         return voice.referenceVoice?.id !== referenceCandidate.id
           ? voice.referenceVoice

@@ -169,7 +169,9 @@ describe('reference driver', () => {
       expect(f.transport.convert).toHaveBeenCalledTimes(available ? 1 : 0);
       expect(f.playWav).toHaveBeenCalledOnce();
       expect(f.fallback.play).not.toHaveBeenCalled();
-      expect(f.onFallback).toHaveBeenCalledWith('参考换声不可用，已使用 DeepSeek 声音');
+      expect(f.onFallback).toHaveBeenCalledWith(
+        '未完成参考换声：正在播放 DeepSeek 原声，不是转换后的声音',
+      );
     }
   });
   it('when DeepSeek itself fails, uses the system fallback visibly', async () => {

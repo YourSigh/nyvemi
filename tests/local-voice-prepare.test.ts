@@ -64,22 +64,25 @@ it('recognizes simple requested voice but not admiration, negation or hypothetic
   ])
     expect(requestedVoiceReference(text)).toBeUndefined();
 });
-it('missing model request needs no companion and performs no preparation/reference lookup', async () => {
-  const deps = {
-    state: vi.fn(async () => ({ available: false })),
-    hasCompanion: vi.fn(),
-    requestReference: vi.fn(),
-  };
+it('missing model request does not search until preparation', async () => {
+  const deps = { state: vi.fn(async () => ({ available: false })), find: vi.fn() };
   expect(await createLocalVoiceRequest(deps)('c', '流萤')).toContain('现在还没准备');
-  expect(deps.hasCompanion).not.toHaveBeenCalled();
-  expect(deps.requestReference).not.toHaveBeenCalled();
+  expect(deps.find).not.toHaveBeenCalled();
 });
-it('installed model without companion asks for authorized local WAV without applying public voice', async () => {
+it('ready model searches only the extracted requested role exactly once', async () => {
   const deps = {
     state: vi.fn(async () => ({ available: true })),
-    hasCompanion: vi.fn(async () => false),
-    requestReference: vi.fn(),
+    find: vi.fn(async () => ({ candidates: [] })),
   };
-  expect(await createLocalVoiceRequest(deps)('c', '流萤')).toContain('有权使用');
-  expect(deps.requestReference).not.toHaveBeenCalled();
+  await createLocalVoiceRequest(deps)('c', '流萤');
+  expect(deps.find).toHaveBeenCalledExactlyOnceWith('c', '流萤');
+});
+it('same already-applied query avoids repeat lookup', async () => {
+  const deps = {
+    state: vi.fn(async () => ({ available: true, enabled: true })),
+    find: vi.fn(),
+    appliedQuery: async () => '卡芙卡',
+  };
+  expect(await createLocalVoiceRequest(deps)('c', '卡芙卡')).toContain('已应用');
+  expect(deps.find).not.toHaveBeenCalled();
 });

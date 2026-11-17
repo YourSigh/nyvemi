@@ -28,7 +28,7 @@ public final class AudioFrontend {
   private static boolean tag(byte[] b,int i,String s) {
     for(int k=0;k<4;k++)if(b[i+k]!=(byte)s.charAt(k))return false;return true;
   }
-  private static boolean supported(int rate) {return rate==16000||rate==22050||rate==24000||rate==44100||rate==48000;}
+  private static boolean supported(int rate) {return rate>=8000&&rate<=96000;}
   public static Audio readWav(byte[] b) {
     if(b.length<44||b.length>MAX_BYTES||!tag(b,0,"RIFF")||!tag(b,8,"WAVE")||u32(b,4)+8!=b.length)
       throw new IllegalArgumentException("Invalid or oversized RIFF WAV");

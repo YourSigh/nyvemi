@@ -1,17 +1,24 @@
-/** Explicit natural-language request, never an automatic preparation or voice license grant. */
+import type { ReferenceLookupResult } from './reference-lookup';
+/** Called once by an explicit named request. Never prepares or applies voices automatically. */
 export function createLocalVoiceRequest(deps: {
-  state(): Promise<{ available: boolean }>;
-  hasCompanion(): Promise<boolean>;
-  requestReference(cid: string, query: string, signal?: AbortSignal): Promise<string>;
+  state(): Promise<{ available: boolean; enabled?: boolean }>;
+  find(cid: string, query: string): Promise<ReferenceLookupResult>;
+  appliedQuery?(cid: string): Promise<string | undefined>;
 }) {
   return async (cid: string, query: string, signal?: AbortSignal) => {
     const state = await deps.state();
     if (signal?.aborted) throw Error('换声请求已取消');
+    if (state.enabled && (await deps.appliedQuery?.(cid)) === query)
+      return `「${query}」参考音色已应用，本机换声已开启，会复用已确认的同一段录音。`;
     if (!state.available)
-      return `想用「${query}」的声音，可以先准备安装包内的本机换声模型，再导入有权使用的参考录音。现在还没准备，也没有改变原声。`;
-    if (!(await deps.hasCompanion()))
-      return `本机换声模型已就绪。请在声音设置导入有权使用的「${query}」参考 WAV，再开启本机换声；我没有替你选择或启用公开录音。`;
+      return `想用「${query}」的声音，先准备安装包内的本机模型，完成后继续查找同一角色的中文参考录音。现在还没准备，也没有改变原声。`;
+    const result = await deps.find(cid, query);
     if (signal?.aborted) throw Error('换声请求已取消');
-    return deps.requestReference(cid, query, signal);
+    return (
+      result.error ??
+      (result.candidates.length
+        ? `找到「${query}」的中文参考录音。请核对下面的来源并试听原录音；你明确确认有权使用并应用后才会切换。原声尚未改变。`
+        : `没有找到可读取的「${query}」中文参考录音，原声未改变。可以重试或导入自己的 WAV。`)
+    );
   };
 }

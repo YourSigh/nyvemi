@@ -69,7 +69,7 @@ vi.mock('../src/speech/preferences', () => ({
   voiceOptions: (v: unknown) => v,
   updateVoice: mocks.save,
 }));
-it('shows seven local sliders, previews unsaved ordinary DSP without reference, applies explicitly', async () => {
+it('shows seven local sliders, previews unsaved DSP with the current reference, applies explicitly', async () => {
   vi.stubGlobal('__DEV__', false);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let tree!: ReactTestRenderer;
@@ -97,14 +97,14 @@ it('shows seven local sliders, previews unsaved ordinary DSP without reference, 
   const button = (title: string) =>
     tree.root.findAll((n) => n.type === ('Button' as never) && n.props.title === title)[0];
   await act(async () => {
-    button('普通试听').props.onPress();
+    button('试听当前声音').props.onPress();
   });
   expect(mocks.play).toHaveBeenCalledWith(
     expect.any(String),
     expect.any(String),
     expect.objectContaining({
       enabled: true,
-      referenceVoice: undefined,
+      referenceVoice: { id: 'ref', label: 'Reference' },
       localTuning: expect.objectContaining({ pitch: 2 }),
     }),
   );

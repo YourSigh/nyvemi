@@ -77,7 +77,7 @@ export function createReferenceSpeechDriver(deps: {
             : await deps.transport.convert(source, sample.bytes, signal);
         } catch {
           if (signal.aborted) throw Error('已取消');
-          notice = '参考换声不可用，已使用 DeepSeek 声音';
+          notice = '未完成参考换声：正在播放 DeepSeek 原声，不是转换后的声音';
         }
       }
       if (options.localTuning) {

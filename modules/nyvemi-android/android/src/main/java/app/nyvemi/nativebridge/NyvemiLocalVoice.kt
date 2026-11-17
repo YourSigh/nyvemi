@@ -114,20 +114,22 @@ class NyvemiLocalVoice {
     require(f.isFile && f.length() in 44..MAX_WAV) { "录音过大或无效" }
     return f.readBytes()
   }
-  fun convert(ctx: Context, sourceUri: String, referenceUri: String): String {
+  fun convert(ctx: Context, sourceUri: String, referenceUri: String): String = convertInternal(ctx, sourceUri, referenceUri, true)
+  // Explicit preview never persists/temporarily flips the user's global voice preference.
+  fun preview(ctx: Context, sourceUri: String, referenceUri: String): String = convertInternal(ctx, sourceUri, referenceUri, false)
+  private fun convertInternal(ctx: Context, sourceUri: String, referenceUri: String, requireEnabled: Boolean): String {
     val generation=epoch.get()
-    fun active() { check(epoch.get()==generation && prefs(ctx).getBoolean("enabled",false)) { "本地换声已取消" } }
+    fun active() { check(epoch.get()==generation && (!requireEnabled || prefs(ctx).getBoolean("enabled",false))) { "本地换声已取消" } }
     synchronized(lock) {
       active(); check(installed(ctx)) { "本地模型不可用" }
       val source=AudioFrontend.readWav(privateWav(ctx,sourceUri))
       val reference=AudioFrontend.readWav(privateWav(ctx,referenceUri))
-      require(source.samples.size.toLong()<=source.rate.toLong()*10) { "本地换声单段不能超过 10 秒" }
       val samples=AudioFrontend.resample(source.samples,source.rate)
       val ref=AudioFrontend.resample(reference.samples,reference.rate)
       active()
       val engine=pipeline ?: OpenVoicePipeline(File(dir(ctx),"tone_encoder.onnx"),File(dir(ctx),"tone_converter.onnx")).also { pipeline=it }
       active()
-      val output=engine.convert(samples,ref,SecureRandom().nextLong())
+      val output=engine.convertLong(samples,ref,SecureRandom().nextLong())
       active()
       val wav=AudioFrontend.wav(output)
       val file=File(ctx.cacheDir,"openvoice-${UUID.randomUUID()}.wav")

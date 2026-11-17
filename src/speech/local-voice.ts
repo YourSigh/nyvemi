@@ -26,7 +26,12 @@ export async function setLocalVoiceEnabled(enabled: boolean): Promise<LocalVoice
 
 export const localVoiceConversion = {
   state: localVoiceState,
-  async convert(source: Uint8Array, reference: Uint8Array, signal: AbortSignal) {
+  async convert(
+    source: Uint8Array,
+    reference: Uint8Array,
+    signal: AbortSignal,
+    previewOnly = false,
+  ): Promise<Uint8Array> {
     if (signal.aborted) throw Error('已取消');
     assertReferenceWav(source, 30);
     assertReferenceWav(reference, 30);
@@ -39,7 +44,10 @@ export const localVoiceConversion = {
       sourceFile.write(source);
       referenceFile.write(reference);
       if (signal.aborted) throw Error('已取消');
-      const uri = await bridge().convertLocalVoice(sourceFile.uri, referenceFile.uri);
+      const native = bridge();
+      const uri = previewOnly
+        ? await native.previewLocalVoice(sourceFile.uri, referenceFile.uri)
+        : await native.convertLocalVoice(sourceFile.uri, referenceFile.uri);
       const cachePrefix = Paths.cache.uri.replace(/\/$/, '') + '/';
       if (!uri.startsWith(cachePrefix) || /(?:^|\/)\.\.(?:\/|$)|%2e|%2f/i.test(uri))
         throw Error('本机换声返回了无效音频路径');
@@ -60,6 +68,13 @@ export const localVoiceConversion = {
         }
       }
     }
+  },
+  async preview(
+    source: Uint8Array,
+    reference: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    return localVoiceConversion.convert(source, reference, signal, true);
   },
   async cancel() {
     const native = bridge();

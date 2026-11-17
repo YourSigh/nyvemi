@@ -25,6 +25,14 @@ export interface QwenPackState {
   size: number;
   error?: 'space' | 'network' | 'checksum' | 'import';
 }
+export interface VoiceReferenceCandidate {
+  id: string;
+  label: string;
+  sourceUrl: string;
+  audioUrl: string;
+  language: 'zh';
+  usage: 'preview';
+}
 export interface LocalVoiceState {
   bundled?: boolean;
   available: boolean;
@@ -34,9 +42,15 @@ export interface LocalVoiceState {
 interface AndroidBridge {
   localVoiceState(): Promise<LocalVoiceState>;
   prepareBundledLocalVoice(): Promise<LocalVoiceState>;
+  findVoiceReferences(query: string): Promise<VoiceReferenceCandidate[]>;
+  downloadVoiceReference(
+    audioUrl: string,
+    sourceUrl: string,
+  ): Promise<{ uri: string; sampleRate: number }>;
   importLocalVoicePack(uri: string): Promise<LocalVoiceState>;
   setLocalVoiceEnabled(enabled: boolean): Promise<LocalVoiceState>;
   convertLocalVoice(sourceUri: string, referenceUri: string): Promise<string>;
+  previewLocalVoice(sourceUri: string, referenceUri: string): Promise<string>;
   cancelLocalVoice(): Promise<void>;
   speechState(): Promise<LocalSpeechState>;
   qwenPackState(): Promise<QwenPackState>;
