@@ -1,5 +1,6 @@
+import { LocalVoicePrepare } from './local-voice-prepare';
 import { Icon } from './icons';
-import { wantsVoiceSettings } from '../chat/voice-settings';
+import { requestedVoiceReference, wantsVoiceSettings } from '../chat/voice-settings';
 import { SpeechQueue } from '../speech/queue';
 import { updateVoice, voiceOptions, voiceProfile } from '../speech/preferences';
 import { hatchQuestions, type HatchingDraft } from '../characters/hatching';
@@ -602,13 +603,23 @@ export function ChatScreen({ navigation, route }: ScreenProps<'Chat'>) {
                             </Text>
                           ) : null}
                           {m.voiceSettings ? (
-                            <Button
-                              title="打开声音设置"
-                              secondary
-                              onPress={() =>
-                                navigation.navigate('VoiceSettings', { characterId: cid })
-                              }
-                            />
+                            requestedVoiceReference(
+                              messages.find((message) => message.id === m.groupId)?.content ?? '',
+                            ) ? (
+                              <LocalVoicePrepare
+                                onSettings={() =>
+                                  navigation.navigate('VoiceSettings', { characterId: cid })
+                                }
+                              />
+                            ) : (
+                              <Button
+                                secondary
+                                title="打开声音设置"
+                                onPress={() =>
+                                  navigation.navigate('VoiceSettings', { characterId: cid })
+                                }
+                              />
+                            )
                           ) : null}
                         </Bubble>
                         {m.status === 'error' ? (

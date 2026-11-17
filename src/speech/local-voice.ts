@@ -66,3 +66,10 @@ export const localVoiceConversion = {
     if (typeof native.cancelLocalVoice === 'function') await native.cancelLocalVoice();
   },
 };
+
+export async function prepareBundledLocalVoice(): Promise<LocalVoiceState> {
+  const native = bridge();
+  if (typeof native.prepareBundledLocalVoice !== 'function')
+    throw Error('此版本未附带本机模型，请导入已校验的模型 ZIP。');
+  return native.prepareBundledLocalVoice();
+}

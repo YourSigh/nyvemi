@@ -2,8 +2,8 @@
 
 Optional offline **tone conversion**, not a local TTS model. DeepSeek still produces
 speech (and may charge); this converter changes that same cached waveform locally.
-There is no model server, remote conversion request, automatic model download,
-permission change, or model weight in the base APK/repository.
+The standard ARM64 release bundles the verified licensed converter. There is no
+model server, automatic model download, permission change or model weight in Git.
 
 ## Provenance and reproducibility
 
@@ -53,13 +53,14 @@ fresh reuse, finite results and closed-session rejection. Do not commit artifact
 
 ## App behavior and limits
 
-Voice settings has an experimental model ZIP importer and a separate, default-off
-local switch. Import accepts exactly the two known graph names/hashes, bounds
+Voice settings has local preparation for the bundled pack, a manual ZIP fallback,
+and a separate default-off local switch. Import accepts the two known graph names/hashes
+plus the pinned license/notice texts (old two-graph packs remain compatible), bounds
 unpacked data to 140 MiB, rejects duplicate/path/unknown entries, loads both models
 before replacing a working pack, and stores them in app-private files. The tested
-ZIP is 122,872,634 bytes (117.2 MiB), unpacked graphs 131,310,602 bytes (125.2 MiB).
+licensed ZIP is 122,874,105 bytes (117.2 MiB), unpacked graphs 131,310,602 bytes (125.2 MiB).
 Import and enabled preference persist across restarts; importing alone does not
-turn the switch on. No large pack is published or uploaded by this change.
+turn the switch on. The pack is bundled locally in the APK; no online model host or downloader is used.
 
 Use an authorized local PCM16 WAV reference, then explicitly enable local mode.
 Source is limited to 10 seconds per segment; reference to 30 seconds. Supported
@@ -111,3 +112,44 @@ fixture-driven acceptance, not a paid network-chat or subjective quality test.
 `npm run verify` passed: lint, TypeScript, 580 tests (17 intentionally skipped),
 native unit tests and ARM64 debug assembly. No Git push, production installation,
 model upload or extra paid synthesis occurred.
+
+## Bundled ARM64 release
+
+Keep the verified licensed input outside Git, for example
+`artifacts/openvoice/openvoice-v2-android-1.zip` (ignored). `pack.py` generates it
+with fixed metadata and the original MIT license plus provenance notice. Archive
+SHA-256: `9f6d7822c57371227e70803481c7c8cddcbbc5848f0d9e8234bbe941f3bb64e6`.
+
+```sh
+NYVEMI_OPENVOICE_PACK="$PWD/artifacts/openvoice/openvoice-v2-android-1.zip" npm run android:release
+```
+
+The standard release script requires that local input, pins ARM64, stages only the
+validated pack and rejects Qwen model/alternate ABI overrides. It never fetches a
+model. Development builds can omit it and retain manual import. The APK verifier
+requires the exact archive and four inner hashes, standalone JS/ORT, ARM64 only,
+no Qwen weights or audio fixtures, and a strict total below 200,000,000 bytes.
+The ordinary asset/credential release check also runs. Current project release
+signing still uses its existing development certificate, not a store-release key.
+
+Measured standard release APK: **185,197,546 bytes (185.20 MB / 176.62 MiB)**,
+including the bundled model. The Qwen engine license/native libraries remain, but
+its 761 MB weight is absent and its UI stays hidden. This is package size, not
+installed storage: first local preparation adds about 125 MiB private model files,
+in addition to the APK, Android code/native-library storage and app data. Preparation
+streams the ZIP from APK assets, avoiding a second 117 MiB private ZIP copy.
+
+An explicit “想要流萤的声音” request now offers one local preparation action when
+the model is missing, rather than requiring a server. It does not download, change
+the voice, enable conversion or automatically apply an unapproved public sample.
+After preparation the user imports authorized reference audio and enables local
+conversion separately. Existing search is separate and still requires its configured
+service; model installation does not supply character recordings.
+
+Bundled acceptance: isolated ARM64 emulator starts available=false/bundled=true/
+enabled=false; actual `prepareBundledLocalVoice` validates and loads both models in
+3026 ms, then available=true/enabled=false; repeated preparation 8 ms, force-stop/
+restart preserves ready/off. Natural-language recognition (including the exact
+Chinese request), no implicit preparation/search, and one-action component behavior
+are unit/component tested, not an emulator full-chat UI run. `npm run verify` passes
+585 tests (17 skipped), native tests and ARM64 assembly. Redmi/production app untouched.

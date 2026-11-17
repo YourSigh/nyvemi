@@ -1,4 +1,5 @@
-import { localVoiceConversion } from '../speech/local-voice';
+import { createLocalVoiceRequest } from '../speech/local-voice-request';
+import { localVoiceConversion, localVoiceState } from '../speech/local-voice';
 import { HatchingService } from '../characters/hatching';
 import { recoverRigMetadata } from '../appearance/rig-metadata';
 import { MediaService } from '../media/service';
@@ -282,7 +283,11 @@ async function createRuntime() {
     });
   const chat = new ChatService(store, provider, diagnostics, {
     agent: (input) => agent.run(input),
-    requestVoiceReference: referenceVoice.request,
+    requestVoiceReference: createLocalVoiceRequest({
+      state: localVoiceState,
+      hasCompanion: async () => !!(await getVoiceCompanion()),
+      requestReference: referenceVoice.request,
+    }),
     clock: () => bridge().deviceTimeContext(),
     scheduleRequested: async (user, delayMs) => {
       if (AppState.currentState !== 'active') throw new Error('请回到 App 后设置稍后来信');

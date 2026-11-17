@@ -1,0 +1,18 @@
+Nyvemi OpenVoice V2 Android converter pack v1
+
+Derived from official MyShell.ai OpenVoice V2 converter weights (MIT license).
+Original source: https://github.com/myshell-ai/OpenVoice
+Source revision: 74a1d147b17a8c3092dd5430504bd83ef6c7eb23
+Weights: https://huggingface.co/myshell-ai/OpenVoiceV2
+Weights revision: f36e7edfe1684461a8343844af60babc2efbb727
+Original converter/checkpoint.pth SHA-256:
+9652c27e92b6b2a91632590ac9962ef7ae2b712e5c5b7f4c34ec55ee2b37ab9e
+
+Exported by Nyvemi from official weights, not an official MyShell release.
+Two ONNX graphs: tone encoder and tone converter, opset 17.
+Explicit Gaussian noise input permits official tau=0.3 behavior.
+PyTorch 2.15.0, ONNX 1.19.1; validated with ONNX Runtime 1.23.2.
+No speech recordings, personal reference embeddings, TTS engine or credentials.
+Optional OpenVoice watermark stage is not included in these converter graphs.
+Use only reference audio you have rights and consent to use.
+See OPENVOICE-LICENSE.txt for the original copyright and permission notice.

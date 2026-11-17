@@ -5,6 +5,7 @@ import android.net.Uri
 import app.nyvemi.openvoice.AudioFrontend
 import app.nyvemi.openvoice.OpenVoicePipeline
 import java.io.File
+import java.io.InputStream
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.UUID
@@ -14,9 +15,16 @@ import java.util.zip.ZipInputStream
 /** Opt-in, offline converter. Only this audited, self-exported official model pack is accepted. */
 class NyvemiLocalVoice {
   companion object {
+    private const val ASSET = "openvoice/openvoice-v2-android-1.zip"
+    private const val ARCHIVE_BYTES = 122874105L
+    private const val ARCHIVE_SHA = "9f6d7822c57371227e70803481c7c8cddcbbc5848f0d9e8234bbe941f3bb64e6"
     private val hashes = mapOf(
       "tone_encoder.onnx" to "64bd5e39bc92b1265e35eeb73e9e30558de6c54f15c176bff6f9b7543a0a2c91",
       "tone_converter.onnx" to "19ced6f4232d212e21ebd8562bd10eae7b5731610587dcdb691c1cedcf2f7507"
+    )
+    private val metadataHashes = mapOf(
+      "OPENVOICE-LICENSE.txt" to "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0",
+      "MODEL-NOTICE.txt" to "2db6762a90c62bdd743686ba75416eaac317c98c0882015751a1986836adb229"
     )
     private const val MAX_PACK = 140L * 1024 * 1024
     private const val MAX_WAV = 3L * 1024 * 1024
@@ -27,8 +35,22 @@ class NyvemiLocalVoice {
   private fun prefs(ctx: Context) = ctx.getSharedPreferences("local-openvoice", Context.MODE_PRIVATE)
   private fun dir(ctx: Context) = File(ctx.filesDir, "local-openvoice-v1")
   private fun installed(ctx: Context) = hashes.keys.all { File(dir(ctx), it).isFile }
+  private fun bundled(ctx: Context) = try { ctx.assets.list("openvoice")?.contains("openvoice-v2-android-1.zip") == true } catch(_:Exception) { false }
+  fun prepareBundled(ctx: Context): Map<String, Any> {
+    if(installed(ctx)) return state(ctx)
+    check(bundled(ctx)) { "此安装包未附带本机模型，可导入经过校验的 ZIP" }
+    check(ctx.filesDir.usableSpace > 160L*1024*1024) { "可用空间不足，请至少保留 160 MiB" }
+    val hash=MessageDigest.getInstance("SHA-256")
+    var total=0L
+    ctx.assets.open(ASSET).use { input ->
+      val bytes=ByteArray(65536)
+      while(true) { val n=input.read(bytes); if(n<0) break; total+=n; check(total<=ARCHIVE_BYTES); hash.update(bytes,0,n) }
+    }
+    check(total==ARCHIVE_BYTES && hash.digest().joinToString("") { "%02x".format(it.toInt() and 255) }==ARCHIVE_SHA) { "安装包内模型校验失败" }
+    return ctx.assets.open(ASSET).use { importStream(ctx,it) }
+  }
   fun state(ctx: Context): Map<String, Any> = mapOf(
-    "available" to installed(ctx), "enabled" to prefs(ctx).getBoolean("enabled", false),
+    "available" to installed(ctx), "bundled" to bundled(ctx), "enabled" to prefs(ctx).getBoolean("enabled", false),
     "detail" to if (installed(ctx)) "本机 OpenVoice V2 实验版 · CPU · 不上传参考音频" else "未导入经过校验的本地 OpenVoice V2 模型包"
   )
   fun setEnabled(ctx: Context, enabled: Boolean): Map<String, Any> {
@@ -47,6 +69,10 @@ class NyvemiLocalVoice {
   fun importPack(ctx: Context, value: String): Map<String, Any> {
     val uri=Uri.parse(value)
     require(uri.scheme=="content" || uri.scheme=="file") { "请选择本地模型 ZIP" }
+    val input=ctx.contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("模型包无法读取")
+    return input.use { importStream(ctx,it) }
+  }
+  private fun importStream(ctx: Context, input: InputStream): Map<String, Any> {
     cancel()
     synchronized(lock) {
       val stage=File(ctx.filesDir,"local-openvoice-stage-${UUID.randomUUID()}")
@@ -54,20 +80,19 @@ class NyvemiLocalVoice {
       try {
         var total=0L
         val seen=mutableSetOf<String>()
-        val input=ctx.contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("模型包无法读取")
         ZipInputStream(input.buffered()).use { zip ->
           while (true) {
             val e=zip.nextEntry ?: break
-            require(!e.isDirectory && hashes.containsKey(e.name) && seen.add(e.name)) { "模型包内容不受支持" }
+            require(!e.isDirectory && (hashes.containsKey(e.name) || metadataHashes.containsKey(e.name)) && seen.add(e.name)) { "模型包内容不受支持" }
             val out=File(stage,e.name)
             out.outputStream().use { output ->
               val buffer=ByteArray(65536)
               while(true) { val n=zip.read(buffer); if(n<0) break; total+=n; require(total<=MAX_PACK) { "模型包过大" }; output.write(buffer,0,n) }
             }
-            require(digest(out)==hashes[e.name]) { "模型文件校验失败；仅接受已验证的官方权重导出包" }
+            require(digest(out)==(hashes[e.name] ?: metadataHashes[e.name])) { "模型文件校验失败；仅接受已验证的官方权重导出包" }
           }
         }
-        require(seen==hashes.keys) { "模型包不完整" }
+        require(seen.containsAll(hashes.keys)) { "模型包不完整" }
         // Check actual runtime loading before replacing an existing working pack.
         OpenVoicePipeline(File(stage,"tone_encoder.onnx"),File(stage,"tone_converter.onnx")).close()
         pipeline?.close(); pipeline=null

@@ -81,6 +81,7 @@ class NyvemiAndroidModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("NyvemiAndroid")
+    AsyncFunction("prepareBundledLocalVoice") { localVoice.prepareBundled(context()) }
     AsyncFunction("localVoiceState") { localVoice.state(context()) }
     AsyncFunction("importLocalVoicePack") { uri: String -> localVoice.importPack(context(), uri) }
     AsyncFunction("setLocalVoiceEnabled") { enabled: Boolean -> localVoice.setEnabled(context(), enabled) }

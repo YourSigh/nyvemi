@@ -66,3 +66,17 @@ android.sourceSets.main.java {
   srcDir '../../../tools/openvoice-android'
   include '**/*.kt', '**/AudioFrontend.java', '**/OpenVoicePipeline.java'
 }
+
+// Release packaging supplies a verified local archive; never downloads model weights.
+def openVoicePack = providers.gradleProperty('nyvemiOpenVoicePack').map { rootProject.file(it) }
+def openVoiceAssets = layout.buildDirectory.dir('openvoice-assets').get().asFile
+def stageOpenVoicePack = tasks.register('stageOpenVoicePack', Exec) {
+  def stageScript = file('../../../tools/openvoice-android/stage-pack.sh')
+  inputs.file stageScript
+  if (openVoicePack.isPresent()) inputs.file openVoicePack
+  inputs.property('packPath', openVoicePack.map { it.absolutePath }.getOrElse(''))
+  outputs.dir openVoiceAssets
+  commandLine 'bash', stageScript, openVoiceAssets, openVoicePack.map { it.absolutePath }.getOrElse('')
+}
+android.sourceSets.main.assets.srcDir openVoiceAssets
+tasks.named('preBuild').configure { dependsOn stageOpenVoicePack }

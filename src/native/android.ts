@@ -26,12 +26,14 @@ export interface QwenPackState {
   error?: 'space' | 'network' | 'checksum' | 'import';
 }
 export interface LocalVoiceState {
+  bundled?: boolean;
   available: boolean;
   enabled: boolean;
   detail: string;
 }
 interface AndroidBridge {
   localVoiceState(): Promise<LocalVoiceState>;
+  prepareBundledLocalVoice(): Promise<LocalVoiceState>;
   importLocalVoicePack(uri: string): Promise<LocalVoiceState>;
   setLocalVoiceEnabled(enabled: boolean): Promise<LocalVoiceState>;
   convertLocalVoice(sourceUri: string, referenceUri: string): Promise<string>;

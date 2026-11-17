@@ -1,3 +1,4 @@
+import { LocalVoicePrepare } from './local-voice-prepare';
 import { localVoiceState, importLocalVoicePack, setLocalVoiceEnabled } from '../speech/local-voice';
 import type { LocalVoiceState } from '../native/android';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -479,10 +480,17 @@ export function VoiceSettingsScreen({ route }: ScreenProps<'VoiceSettings'>) {
         ) : null}
         <Details title={localModel?.enabled ? '本机换声 · 已启用（实验）' : '本机换声（实验）'}>
           <Note>
-            单独导入经校验的 OpenVoice V2 模型包，约 125 MiB，不包含在基础安装包中。
+            ARM64 安装包附带经校验的 OpenVoice V2 模型，无需联网下载。首次使用需准备到手机私有目录。
             开启后，参考录音和换声运算留在手机；DeepSeek 朗读仍需要联网。
             换声失败只播放原声，不自动改用远程换声。音质仍在验证中。
           </Note>
+          <LocalVoicePrepare
+            onReady={() => {
+              void localVoiceState()
+                .then(setLocalModel)
+                .catch(() => {});
+            }}
+          />
           <Note>{localModel?.detail ?? '正在读取本机模型状态…'}</Note>
           <TextButton
             title={modelBusy ? '正在处理模型…' : '导入本机模型 ZIP'}

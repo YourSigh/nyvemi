@@ -15,7 +15,12 @@ for name, digest in HASHES.items():
     actual = hashlib.sha256((a.models / name).read_bytes()).hexdigest()
     if actual != digest:
         raise SystemExit(f'Unverified graph {name}: {actual}; do not bypass native validation')
+files = {name: a.models / name for name in HASHES}
+files.update({name: Path(__file__).parent / name for name in ['OPENVOICE-LICENSE.txt', 'MODEL-NOTICE.txt']})
 with zipfile.ZipFile(a.output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=3) as z:
-    for name in HASHES:
-        z.write(a.models / name, name)
+    for name, path in sorted(files.items()):
+        info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        info.external_attr = 0o100644 << 16
+        z.writestr(info, path.read_bytes(), compresslevel=3)
 print(f'{a.output.stat().st_size} bytes; importing does not enable local mode')
